@@ -19,6 +19,7 @@
 - [日常操作设计](docs/daily-operations.md)：统一交接表单、人员名单、更正与简单提醒。
 - [邮件与通知设计](docs/email-design.md)：已验证的 Gmail API 通道、通知事件、失败处理和私有配置边界。
 - [账号与访问流程](docs/account-design.md)：已确认的注册验证、管理员审核、密码找回和首次管理员初始化流程，以及待定实现参数。
+- [最小数据关系](docs/data-model.md)：设备、单据、分配、附件和账号之间的关系，以及时间和一致性边界。
 - [页面与打印线框稿](docs/wireframes.md)：历史参考，不继续制作样稿；规则以统一业务规则为准。
 - [技术选型提案](docs/technical-proposal.md)：候选平台比较与推荐组合，待用户决定。
 - [待确认事项](docs/open-questions.md)：正式实现前需要明确的问题。
