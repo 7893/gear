@@ -11,6 +11,7 @@
 ## 文档
 
 - [需求与范围](docs/requirements.md)：已确认需求与建议边界。
+- [第一版范围与验收](docs/acceptance.md)：已确认范围、业务闭环和非功能验收场景，尚未执行。
 - [业务流程](docs/workflows.md)：领入、分发、动态调配、退回和签收闭环。
 - [设计草案](docs/design.md)：页面、数据和状态的初步设计。
 - [页面、字段与单据](docs/screens-and-forms.md)：具体页面、录入字段、打印模板及验收场景草案。
