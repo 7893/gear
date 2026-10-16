@@ -15,6 +15,7 @@
 - [设计草案](docs/design.md)：页面、数据和状态的初步设计。
 - [页面、字段与单据](docs/screens-and-forms.md)：具体页面、录入字段、打印模板及验收场景草案。
 - [日常操作设计](docs/daily-operations.md)：统一交接表单、人员名单、更正与简单提醒。
+- [页面与打印线框稿](docs/wireframes.md)：台账、交接表单、签字归档及 A4 单据的文字样稿。
 - [技术选型提案](docs/technical-proposal.md)：候选平台比较与推荐组合，待用户决定。
 - [待确认事项](docs/open-questions.md)：正式实现前需要明确的问题。
 
