@@ -1,0 +1,40 @@
+# Local environment configuration; sanitized examples may be committed.
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Private notes, real deployment configuration, and credentials.
+/.private/
+/docs/private/
+/local/
+/secrets/
+/credentials/
+client_secret*.json
+google-oauth-client*.json
+google-mail-token*.json
+application_default_credentials.json
+service-account*.json
+service_account*.json
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Real operational data, signed documents, exports, and backups.
+/data/
+/uploads/
+/exports/
+/backups/
+/logs/
+*.log
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.backup
+*.sql.gz
+
+# Local operating-system files.
+.DS_Store
+Thumbs.db
