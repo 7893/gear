@@ -2,6 +2,8 @@
 
 状态：待用户决定，未实施。查证日期：2026-10-16。
 
+后续单项决策：整体技术栈继续暂缓，邮件通道已另行选定自有域名 Google 邮箱及 Gmail API，并完成独立发信验证。该部分以[邮件与通知设计](email-design.md)为准；其余推荐仍待决定。
+
 ## 最新约束：需重新验证下述推荐
 
 用户已明确 Supabase 仅免费版、Oracle Cloud 仅永久免费资源，Google Cloud 和 Cloudflare 可少量付费。此约束取代下文早期“先不考虑费用”的比较前提；下述组合暂不定案。
@@ -16,7 +18,7 @@
 - 不依赖 Supabase 付费自定义域名功能：[官方说明](https://supabase.com/docs/guides/platform/custom-domains)。
 - Cloudflare 常规服务不等于其中国大陆网络服务；China Network 是 Enterprise 的单独订阅，不纳入当前小额付费方案：[官方说明](https://developers.cloudflare.com/china-network/)。
 
-尚未获得大陆测试网络、域名或具体区域条件，未进行连通性实测；不承诺单凭域名配置即可达标。
+尚未完成大陆测试网络与具体部署区域的连通性实测；真实域名和环境参数不写入公开文档，不承诺单凭域名配置即可达标。
 
 ## 决策依据
 
@@ -36,7 +38,7 @@
 | 服务端集成 | Supabase Edge Functions | 受保护的管理操作、发信与识别调用 |
 | 提醒任务 | Supabase Cron | 定时扫描到期记录及处理待发通知 |
 | 注册防滥用 | Cloudflare Turnstile | 配合限流，不替代角色和审核检查 |
-| 邮件 | Cloudflare Email Service，条件性推荐 | Auth 接 SMTP，业务通知调用发送 API；需验证 Beta 可用性及投递 |
+| 邮件 | 自有域名 Google 邮箱 + Gmail API，已单独选定 | 独立授权、刷新及同域收件已验证；正式运行环境和认证邮件接入仍需验证 |
 | 独立备份目标 | Cloudflare R2 私有桶 | 与主数据分平台，不再为备份单独引入 Oracle |
 | 识别 | 二维码优先，云端文字识别补充 | 根据样本验证选择服务，不与业务流程绑定 |
 
@@ -65,9 +67,9 @@ Supabase 原生提供 [Edge Functions](https://supabase.com/docs/guides/function
 
 这是工程取舍，不代表其他平台能力不足。Oracle 免费 MySQL 的私有子网、固定一天备份见[官方说明](https://docs.oracle.com/en-us/iaas/mysql-database/doc/creating-always-free-db-system.html)，ADB 闲置停止与回收见[官方说明](https://docs.oracle.com/en-us/iaas/autonomous-database-serverless/doc/autonomous-always-free.html)。
 
-## 两项待验证选择
+## 邮件与识别的后续验证
 
-邮件：Cloudflare Email Sending 当前标记 Beta，要求配置 Cloudflare DNS 域名。采用前核验账户可用性、Supabase SMTP 接入与实际投递。Supabase 默认邮件服务不作为正式发送通道。参考 [Cloudflare 发信](https://developers.cloudflare.com/email-service/get-started/send-emails/)、[Supabase SMTP](https://supabase.com/docs/guides/auth/auth-smtp)。若未通过验证，在允许的供应商中另评估邮件通道，不宣称链路已验证。
+邮件：已选择 Gmail API，早期 Cloudflare 发信推荐不再作为当前方案。API 发信验证不等于托管认证服务的 SMTP 接入已打通；最终选择认证产品时，必须确认其自定义邮件发送方式能否调用该通道。外部投递、来信转发和正式服务端授权仍待验证，详见[邮件设计](email-design.md)。
 
 识别：先解析自制单据二维码；失败后用文字识别匹配单号。使用实际脱敏样本比较 Workers AI 与 Google Cloud Vision，关注单号准确率、错误匹配、模糊拍照和 PDF 多页处理。Cloudflare 达标就保留两平台组合，不达标再将 Google 作为必要的第三方服务。暂未测试，不承诺准确率。参考 [Workers AI](https://developers.cloudflare.com/workers-ai/models/)、[Cloud Vision](https://cloud.google.com/vision/pricing)。识别失败仍允许人工关联。
 
@@ -83,4 +85,4 @@ Supabase 原生提供 [Edge Functions](https://supabase.com/docs/guides/function
 
 ## 当前状态
 
-替代[最初提案](technical-proposal-v1.md)，保留历史。没有创建资源、部署服务、测试账号、发送邮件或运行应用测试。技术方向由用户决定；开源许可证尚未确定。
+替代[最初提案](technical-proposal-v1.md)，保留历史。本提案初稿时尚未部署或发信；后续已经用户逐项授权完成 Gmail API 启用、独立邮箱授权及一封同域测试邮件，收件已确认。尚无应用代码、部署服务或应用测试，整体技术方向仍待决定；开源许可证尚未确定。真实环境信息与凭据不纳入本文。
