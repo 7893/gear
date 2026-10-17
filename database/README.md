@@ -29,4 +29,4 @@ python3 database/tests/check_accounts.py
 
 ## 密码找回资格迁移
 
-迁移 `202610180003_recovery.sql` 本地已验证、尚未应用到云端。它新增仅服务端可执行的只读资格函数，不修改成员、密码、表或共享 Auth 配置。迁移按同样的事务顺序执行，已有同名函数时安全失败；`check_accounts.py` 已覆盖该迁移及最小授权。上线顺序与边界见[密码找回接入](../docs/recovery-implementation.md)。
+迁移 `202610180003_recovery.sql` 已经授权应用到云端并核对最小权限。它新增仅服务端可执行的只读资格函数，不修改成员、密码、表或共享 Auth 配置。迁移按同样的事务顺序执行，已有同名函数时安全失败；`check_accounts.py` 已覆盖该迁移及最小授权。上线顺序与边界见[密码找回接入](../docs/recovery-implementation.md)。
