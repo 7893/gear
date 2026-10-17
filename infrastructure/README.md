@@ -1,6 +1,21 @@
 # 网络接入与证书工具
 
-此目录包含基础设施工具，设备管理应用尚未实现。真实域名、IP、账号、资源标识及凭据只在私有配置中保存，公开仓库不包含部署后的真实值。
+此目录包含基础设施工具与最小静态联通测试页，设备管理应用尚未实现。真实域名、IP、账号、资源标识及凭据只在私有配置中保存，公开仓库不包含部署后的真实值。
+
+## 静态联通测试页
+
+[smoke-page](smoke-page/package.json) 使用 TypeScript 与 Vite，只有页面脚本、后端健康检查和 Supabase 连接三项状态，以及重新检测按钮。Supabase 检查只读取 `/auth/v1/settings`，不注册账号、不查询设备或写入业务数据。
+
+```sh
+pnpm -C infrastructure/smoke-page install --frozen-lockfile
+pnpm -C infrastructure/smoke-page run check
+```
+
+检查包括 ESLint、Prettier、独立 TypeScript 类型检查与构建；CI 执行同一命令。构建后，在已忽略的 `dist/runtime-config.json` 中通过私有部署环境注入 `apiUrl` 和 `publishableKey`，只接受 HTTPS API 地址与 `sb_publishable_` 公钥；不得放入服务端密钥。实际运行配置不提交，浏览器仍能查看运行时使用的公开地址和公钥。
+
+发布时将 `dist/` 的内容放入独立网站目录，保留现有文件，先上传哈希资源与运行配置，最后替换首页，并刷新对应 CDN 入口缓存。当前已按此方式部署测试页，旧首页副本与部署摘要保存在仓库外；没有修改其他站点或共享数据库。
+
+真实浏览器验证使用 Playwright 的 Chromium；安装对应浏览器后，从私有环境注入 `SMOKE_BASE_URL` 并运行 `pnpm -C infrastructure/smoke-page run test:live`。该命令检查实际 HTTPS 页面、CloudFront 响应、两项后端请求、重新检测与脚本异常，不模拟请求、不忽略证书错误。当前开发机实测通过；不代表大陆访问或业务流程验收完成，CI 不运行生产联通测试。
 
 ## 后端网关
 
@@ -28,7 +43,7 @@ pnpm -C infrastructure/gateway run check
 
 [Nginx 模板](origin/nginx.conf.template)只对设备簿的独立源站生效，实际域名、目录与回源校验值从私有环境注入；渲染时只替换模板中明确列出的部署变量，保留 Nginx 的 `$uri` 等运行时变量。修改后先执行配置检查，通过后再按授权重载。
 
-首页声明重新验证，未来构建出的带内容哈希静态资源允许长期缓存；当前 CloudFront Free 套餐使用托管 CachingOptimized 策略，最低 TTL 为一秒，首页在边缘最多可能额外保留一秒。后端接口单独转发且禁止缓存。回源时保留独立源站 Host，源站拒绝没有校验头的请求，证书文件保存在专用目录。当前网站仅为部署占位内容，后续发布才替换成应用构建产物。
+首页声明重新验证，带内容哈希的静态资源允许长期缓存；当前 CloudFront Free 套餐使用托管 CachingOptimized 策略，最低 TTL 为一秒，首页在边缘最多可能额外保留一秒。后端接口单独转发且禁止缓存。回源时保留独立源站 Host，源站拒绝没有校验头的请求，证书文件保存在专用目录。当前网站为联通测试页，后续发布才替换成设备管理应用。
 
 ## Google 证书续期
 

@@ -6,13 +6,13 @@
 
 ## 当前阶段
 
-业务设计与基础设施接入阶段，已有仓库验证和接入网关代码，设备管理应用尚未编写。前端已配置 Google Cloud DNS、CloudFront 和独立 Nginx 回源站点，目前仅显示部署占位内容；后端已部署 Cloudflare 网关连接亚太 Supabase，业务 schema、附件桶和业务函数尚未创建。大陆完整访问与业务闭环仍待实测。优先免费、复用资源和减少维护，不再制作样稿，现有线框仅保留历史参考。
+业务设计与基础设施接入阶段，已有仓库验证、接入网关和最小 TypeScript 静态测试页，设备管理应用尚未编写。前端已配置 Google Cloud DNS、CloudFront 和独立 Nginx 回源站点，测试页已部署；后端已部署 Cloudflare 网关连接亚太 Supabase。已通过真实 Chromium 浏览器验证页面加载、后端健康检查、Supabase 只读设置查询和重新检测，业务 schema、附件桶和业务函数尚未创建。大陆完整访问与业务闭环仍待实测。优先免费、复用资源和减少维护，不再制作样稿，现有线框仅保留历史参考。
 
 已确认使用 TypeScript 编写前端及所需的 Supabase Edge Functions，数据库结构、约束与事务使用 SQL。前端当前推荐 Vue 3 + Vite，搭配 Element Plus 与 Vue Router；具体组合和依赖版本在初始化前定案，详见[技术记录](docs/technical-proposal.md#开发语言与前端方案)。
 
 前端客户端 HTTPS 证书已由 Google Trust Services 签发并导入 AWS ACM，供 CloudFront 使用；独立回源站点同样使用 Google 证书，已设置专用自动续期任务。后端域名使用 Cloudflare 自动管理的证书，详见[证书方案](docs/technical-proposal.md#客户端-https-证书与续期)。
 
-公开 GitHub 仓库已建立，本地通过 `origin` 关联；部署地址等参数保存在仓库 Actions Secrets，真实 `.env` 和凭据不提交。已添加仓库验证工作流，检查文档、配置模板、凭据泄漏和提交规则；自动部署尚未配置，开源许可证待选择。
+公开 GitHub 仓库已建立，本地通过 `origin` 关联；部署地址等参数保存在仓库 Actions Secrets，真实 `.env` 和凭据不提交。已添加仓库验证工作流，检查文档、配置模板、凭据泄漏、提交规则、网关和静态测试页；自动部署尚未配置，开源许可证待选择。
 
 ## 文档
 

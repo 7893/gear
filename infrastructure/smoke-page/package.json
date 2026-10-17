@@ -1,0 +1,23 @@
+{
+  "name": "gear-smoke-page",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.8.1",
+  "scripts": {
+    "lint": "eslint src scripts",
+    "format:check": "prettier --check index.html src scripts package.json tsconfig.json tsconfig.browser-check.json eslint.config.mjs",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.browser-check.json",
+    "build": "vite build",
+    "check": "pnpm run lint && pnpm run format:check && pnpm run typecheck && pnpm run build",
+    "test:live": "node scripts/check-live.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "24.19.2",
+    "eslint": "10.8.0",
+    "prettier": "3.9.6",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.2",
+    "vite": "8.3.4"
+  }
+}

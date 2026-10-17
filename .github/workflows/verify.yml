@@ -63,3 +63,26 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Lint, format, type-check, test and build gateway
         run: pnpm run check
+
+  smoke-page:
+    name: Static page checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: infrastructure/smoke-page
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '26.10.0'
+      - name: Install pinned package manager
+        run: npm install --global pnpm@12.8.1
+      - name: Install locked page dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Lint, format, type-check and build page
+        run: pnpm run check
