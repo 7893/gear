@@ -4,12 +4,12 @@
 
 ## 当前工作流
 
-[Verify](../.github/workflows/verify.yml) 在推送 `main`、提交或更新 PR 时运行，也支持手动运行。同一分支的新运行取消旧运行，单次最长十分钟。
+[Verify](../.github/workflows/verify.yml) 在推送 `main`、提交或更新 PR 时运行，也支持手动运行。PR 的新运行取消旧运行，主分支不打断正在执行的运行；每个检查任务最长十分钟，待启用的发布任务最长二十分钟。
 
 | 检查 | 当前范围 |
 | --- | --- |
 | 工作流语法 | actionlint 检查 Actions YAML、表达式及可用的 shell 静态检查 |
-| 验证工具回归 | Python 标准库测试，覆盖私有路径、配置值、失效链接、中文锚点及提交范围 |
+| 验证工具回归 | Python 标准库测试，覆盖私有路径、配置值、失效链接、中文锚点、提交范围、部署来源与参数边界、私密文件保护及网关版本选择 |
 | 文档与公开配置 | 已跟踪常规文件、末尾换行、Markdown 行内本地链接与 ATX 标题锚点、配置模板空值及变量名唯一性 |
 | 私有文件 | 拒绝跟踪 `.env`、私有记录目录、常见凭据文件与数据附件目录；不读取未跟踪文件 |
 | 凭据扫描 | Gitleaks 默认规则扫描已获取的完整 Git 历史，输出脱敏，不上传扫描报告 |
@@ -21,7 +21,7 @@ PR 检查实际贡献提交，排除 GitHub 临时合并提交；普通推送检
 
 文档检查不联网验证外链，当前解析范围是 Markdown 行内链接和 `#` 标题，不代替完整 Markdown 渲染器。凭据扫描不能识别所有真实邮箱、IP、域名和资源编号；提交前仍需人工检查暂存内容，并在本地对照私有配置检查真实值。不要为了云端扫描而向 PR 暴露真实配置或凭据。
 
-工作流使用 GitHub 托管的临时 Ubuntu runner，只有仓库内容只读权限，不引用任何部署 Secrets。使用普通 `pull_request` 事件，第三方 Action 固定完整提交 SHA，下载的验证工具固定版本与 SHA-256。依赖升级时同时核对官方发行来源和校验值。
+工作流使用 GitHub 托管的临时 Ubuntu runner，三个 CI 检查任务只有仓库内容只读权限，不引用部署 Secrets。使用普通 `pull_request` 事件，第三方 Action 固定完整提交 SHA，下载的验证工具固定版本与 SHA-256。待启用的发布任务单独使用 OIDC 与专用部署 Secrets，只允许可信主分支进入；配置及授权边界见[自动发布方案](deployment.md)。依赖升级时同时核对官方发行来源和校验值。
 
 参考：[GitHub Actions 安全约定](https://docs.github.com/en/actions/reference/security/secure-use)、[提交签名验证字段](https://docs.github.com/en/rest/commits/commits#get-a-commit)、[Gitleaks](https://github.com/gitleaks/gitleaks)、[actionlint](https://github.com/rhysd/actionlint)。
 
@@ -60,4 +60,4 @@ git diff --cached --check
 
 本地复用已有 Node、pnpm、Python 等运行环境及包缓存；当前项目仍需独立配置和锁定开发依赖，不引用其他项目的安装目录。ESLint、Prettier、Vitest 与 Playwright 是当前建议工具，版本与命令在应用初始化时统一；已有其他项目的安装不能视为本项目已配置或测试通过。
 
-自动部署、分支保护和发布审批不属于当前验证工作流。部署工作流后续根据明确的目标和写操作授权单独配置；CI 通过不会触发服务器、DNS、CDN 或 Supabase 更改。
+自动发布任务已准备但尚未启用，专用权限与 Secrets 待授权配置；当前 CI 通过不会触发服务器、DNS、CDN 或 Supabase 更改。启用后只发布静态页及既有网关版本、刷新指定 CDN 缓存并验证，不执行数据库迁移。分支保护与发布审批策略不因添加工作流自动生效，当前不能记录 CD 验收通过。

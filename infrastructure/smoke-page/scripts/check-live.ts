@@ -39,6 +39,16 @@ try {
     { timeout: 15000 },
   );
   await expect(page.locator("#checked-at")).toContainText("UTC");
+  if (process.env.SMOKE_EXPECTED_REVISION) {
+    const revision = await page.evaluate(async () => {
+      const response = await fetch("/runtime-config.json", {
+        cache: "no-store",
+      });
+      const config = (await response.json()) as { release?: string };
+      return config.release;
+    });
+    assert.equal(revision, process.env.SMOKE_EXPECTED_REVISION);
+  }
   await page.getByRole("button", { name: "重新检测" }).click();
   await expect(page.locator("#retry")).toBeEnabled({ timeout: 15000 });
   await expect(page.locator("#gateway-status")).toHaveAttribute(

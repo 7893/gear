@@ -1,0 +1,38 @@
+# 自动发布流程与启用方案
+
+当前最小 TypeScript 页面已手动部署，开发机真实浏览器验证通过。自动发布脚本和工作流已准备，`CD_ENABLED` 尚未启用，专用部署权限尚未配置，不能视为 CD 已跑通。业务实现暂停，本轮只完善交付流程。
+
+## 目标流程
+
+提交到主分支后，先完成仓库、网关和静态页三项 CI 检查，再发布既有网关版本、上传网站文件、刷新 CloudFront 入口缓存，最后使用真实 Chromium 检查页面和跨域后端连接。任一环节失败，工作流标红并停止后续步骤。
+
+工作流只允许 `main` 的推送或手动运行进入发布任务，且要求仓库变量 `CD_ENABLED=true`。PR 只检查，不能发布或获取部署 Secrets。主分支运行不自动取消正在执行的发布，避免新提交打断文件上传；发布目标与 CI 使用同一提交。
+
+[发布脚本](../scripts/deploy.py)重新构建该提交的生产产物，构建进程只接收必要配置，不继承部署密钥。网站运行配置由私有环境注入，包含 API origin、Supabase publishable key 和发布提交标识。浏览器验证除现有连接检查外，还核对该提交标识，避免把旧页面的成功当作本次发布成功。
+
+## 待授权的配置
+
+以下外部更改尚未执行，按用户逐项授权后实施：
+
+| 位置 | 拟新增配置 | 权限边界 |
+| --- | --- | --- |
+| 部署主机 | 专用无 sudo 账号与独立 SSH 密钥；现有项目目录交给该账号写入 | 公钥强制执行 `rrsync -wo -no-del`，限定项目目录、禁止删除，不允许交互命令和转发；不修改其他站点 |
+| AWS | GitHub OIDC 身份提供方与专用角色 | 信任精确的仓库身份及 `production` 环境；仅允许目标 CloudFront 分发的 `CreateInvalidation`、`GetInvalidation`，不配置长期 AWS 密钥 |
+| GitHub | `production` 环境限主分支、专用 Secrets、启用变量 | 配置齐备后才启用自动发布，部署凭据只进入发布步骤 |
+| Cloudflare | 既有网关的专用 API token | 优先使用单 Worker 的 Editor 权限；日常发布仅上传版本和切换流量，不更改 DNS、路由或自定义域名 |
+
+精确的 AWS 信任策略、资源权限及服务器配置清单保存在仓库外的私有授权方案中，公开文档不记录真实账号、域名、地址或资源编号。现有 Cloudflare 凭据不能读取令牌权限管理接口，专用 token 的创建能力尚未确认；若不能代建，需管理员在控制台创建后通过私有文件提供，不在聊天或公开文档粘贴。
+
+GitHub 的 OIDC subject 格式须从仓库接口核对；当前仓库启用不可变身份，不能直接套用只有仓库名称的旧示例。环境分支规则与 AWS 精确 subject 一起限制发布来源。[GitHub 官方说明](https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-aws)。
+
+Cloudflare 已支持只授予指定既有 Worker 的 Editor 权限；修改域名连接需要额外权限。本方案使用 `cf workers versions create` 和 `cf workers deployments create` 发布版本，保留已经配置好的域名连接，不调用触发器部署。[权限说明](https://developers.cloudflare.com/workers/authorization/workers/)、[版本发布说明](https://developers.cloudflare.com/cf/projects/#upload-a-version)。
+
+## 配置与故障处理
+
+所需 Secret 名称见[工作流](../.github/workflows/verify.yml)的发布步骤；本地文件引用名称见[环境模板](../.env.example)。SSH 私钥和主机公钥校验记录只保存在私有文件与 GitHub Secrets，不复用日常开发机的 SSH 私钥。主机公钥通过已有可信 SSH 连接核对，CI 开启严格校验，不能在运行时盲目信任 `ssh-keyscan` 的结果。
+
+发布前检查 AWS 临时身份和受限上传通道。网站先上传静态资源及运行配置，最后替换首页，保留旧哈希资源和 `robots.txt`；不全量删除网站目录，不重载 Nginx。网关上传的新版本按提交说明匹配后，才切换到该版本。CDN 只刷新 `/`、`/index.html`、`/runtime-config.json`，等待完成后再运行浏览器验证。公开日志只显示步骤结果，不打印实际地址、资源标识、工具原始响应或凭据。
+
+前后端发布不是跨平台事务：部分发布成功后后续步骤仍可能失败，标红不会自动撤销已经完成的更新。当前回退方式为签名还原对应提交后重新发布；只有流程获授权并完成一次真实自动运行后，才能记录 CD 验收通过。
+
+本流程不授予 Supabase 管理权限，不创建业务 schema、桶或函数，不修改共享 Auth 设置，不执行数据库迁移。后续业务后端发布和迁移需按共享项目隔离要求另行接入，不能把当前网络测试视为其验收。Browser Integrity Check 兼容规则继续保持未授权、未实施；真实浏览器连接不受当前脚本客户端的拦截问题影响。
