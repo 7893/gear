@@ -4,6 +4,7 @@ import { Webhook } from "standardwebhooks";
 import {
   createHandler,
   renderEmails,
+  renderMime,
   type MailEnvironment,
 } from "../handler.ts";
 import { renderGearCodeEmail, renderGearNotification } from "../templates.ts";
@@ -28,6 +29,63 @@ const payload = {
     redirect_to: "https://app.example.invalid/",
   },
 };
+
+test("Chinese MIME subject and body round-trip without broken characters or overlong lines", () => {
+  const subjects = [
+    renderGearCodeEmail("signup", "000042").subject,
+    renderGearCodeEmail("recovery", "000042").subject,
+    "【设备簿】中文标题，含生僻字𠮷和标点。".repeat(12),
+  ];
+  const text =
+    "中文通知：请输入验证码 000042。\n".repeat(60) + "末行\r单独换行\r\n结尾";
+  for (const subject of subjects) {
+    const mime = renderMime(
+      { to: "person@example.invalid", subject, text },
+      env.GEAR_MAIL_FROM,
+    );
+    assert.doesNotMatch(mime, /(?<!\r)\n|\r(?!\n)/);
+    const [headers, body] = mime.split("\r\n\r\n");
+    assert.match(headers, /Content-Type: text\/plain; charset=UTF-8/);
+    assert.match(headers, /Content-Transfer-Encoding: base64/);
+    const subjectHeader = headers.match(
+      /Subject: ([\s\S]*?)\r\nMIME-Version:/,
+    )?.[1];
+    assert.ok(subjectHeader);
+    const words = [...subjectHeader.matchAll(/=\?UTF-8\?B\?([^?]+)\?=/g)];
+    assert.ok(words.length > 0);
+    const decodedSubject = words
+      .map(([word, value]) => {
+        assert.ok(word.length <= 75);
+        return new TextDecoder("utf-8", { fatal: true }).decode(
+          Buffer.from(value, "base64"),
+        );
+      })
+      .join("");
+    assert.equal(decodedSubject, subject);
+    for (const line of ("Subject: " + subjectHeader).split("\r\n"))
+      assert.ok(line.length <= 76);
+    for (const line of body.trimEnd().split("\r\n"))
+      assert.ok(line.length <= 76);
+    assert.equal(
+      new TextDecoder("utf-8", { fatal: true }).decode(
+        Buffer.from(body, "base64"),
+      ),
+      text.replace(/\r\n|\r|\n/g, "\r\n"),
+    );
+  }
+  assert.throws(
+    () =>
+      renderMime(
+        {
+          to: "person@example.invalid",
+          subject: "标题\r\nBcc: other@example.invalid",
+          text: "正文",
+        },
+        env.GEAR_MAIL_FROM,
+      ),
+    /invalid_subject/,
+  );
+});
 function signed(value: unknown = payload, timestamp = new Date()): Request {
   const body = JSON.stringify(value);
   const id = "example-event";

@@ -143,16 +143,43 @@ function base64(value: string): string {
     ).join(""),
   );
 }
-function mime(mail: Mail, from: string): string {
+function encodedSubject(subject: string): string {
+  if (!subject || /[\r\n]/.test(subject)) throw new Error("invalid_subject");
+  const words: string[] = [];
+  let chunk = "";
+  let length = 0;
+  for (const character of subject) {
+    const size = new TextEncoder().encode(character).length;
+    // Keep the first header line (including "Subject: ") below 76 bytes.
+    // Encode whole Unicode characters so each encoded-word decodes on its own.
+    if (length + size > 39) {
+      words.push(`=?UTF-8?B?${base64(chunk)}?=`);
+      chunk = "";
+      length = 0;
+    }
+    chunk += character;
+    length += size;
+  }
+  words.push(`=?UTF-8?B?${base64(chunk)}?=`);
+  return words.join("\r\n ");
+}
+
+export function renderMime(mail: Mail, from: string): string {
+  const text = mail.text.replace(/\r\n|\r|\n/g, "\r\n");
+  const body =
+    base64(text)
+      .match(/.{1,76}/g)
+      ?.join("\r\n") || "";
   return [
     `From: <${address(from)}>`,
     `To: <${address(mail.to)}>`,
-    `Subject: =?UTF-8?B?${base64(mail.subject)}?=`,
+    `Subject: ${encodedSubject(mail.subject)}`,
     "MIME-Version: 1.0",
     "Content-Type: text/plain; charset=UTF-8",
     "Content-Transfer-Encoding: base64",
     "",
-    base64(mail.text),
+    body,
+    "",
   ].join("\r\n");
 }
 
@@ -244,7 +271,7 @@ export function createHandler(
         };
       }
       for (const mail of messages) {
-        const raw = base64(mime(mail, env.GEAR_MAIL_FROM))
+        const raw = base64(renderMime(mail, env.GEAR_MAIL_FROM))
           .replace(/\+/g, "-")
           .replace(/\//g, "_")
           .replace(/=+$/, "");
