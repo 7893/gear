@@ -1,6 +1,6 @@
 # 认证邮件适配器
 
-状态：本地代码及模拟提供方测试已完成，尚未部署、配置机密、启用共享 Hook 或发送真实邮件。该函数用于 Supabase Send Email Hook，经已有 Gmail OAuth 发信，不接收普通浏览器发件请求。
+状态：本地代码及模拟提供方测试已完成，函数已部署，六项机密及共享 Hook 经授权配置。真实 Edge Runtime 已验证签名保护，Gmail OAuth 刷新成功；本阶段尚未发送真实认证邮件。该函数用于 Supabase Send Email Hook，经已有 Gmail OAuth 发信，不接收普通浏览器发件请求。
 
 ## 验证与配置
 
@@ -30,6 +30,6 @@ pnpm -C supabase/functions/gear-auth-mail run check
 
 OAuth 与提交邮件共用 4.5 秒请求期限；实例内短暂缓存访问令牌，不持久化或输出。Google 接受提交才返回成功，这不证明已投递。超时返回受控失败且不在函数内再次发送；Supabase 或调用方的重试仍可能导致重复邮件，当前不承诺跨实例恰好一次投递，也不新增用于存储认证凭证的业务表。
 
-启用前必须单独批准全项目发信影响、机密注入和实际测试。默认不随网站 CD 发布，也未给现有 CI 提供 Gmail 凭据。实施差异见[账号接入记录](../../../docs/account-implementation.md)。
+本次启用已获单独授权；未来更改共享发信配置仍需相应授权。函数不随网站 CD 发布，现有 CI 不持有 Gmail 凭据。实施差异见[账号接入记录](../../../docs/account-implementation.md)。
 
 参考：[Supabase Send Email Hook](https://supabase.com/docs/guides/auth/auth-hooks/send-email-hook)、[Gmail API messages.send](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/send)。
