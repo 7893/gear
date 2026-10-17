@@ -15,7 +15,7 @@ pnpm -C infrastructure/smoke-page run check
 
 发布时将 `dist/` 的内容放入独立网站目录，保留现有文件，先上传哈希资源与运行配置，最后替换首页，并刷新对应 CDN 入口缓存。当前已按此方式部署测试页，旧首页副本与部署摘要保存在仓库外；没有修改其他站点或共享数据库。
 
-真实浏览器验证使用 Playwright 的 Chromium；安装对应浏览器后，从私有环境注入 `SMOKE_BASE_URL` 并运行 `pnpm -C infrastructure/smoke-page run test:live`。该命令检查实际 HTTPS 页面、CloudFront 响应、两项后端请求、重新检测与脚本异常，不模拟请求、不忽略证书错误。当前开发机实测通过；不代表大陆访问或业务流程验收完成，CI 不运行生产联通测试。
+真实浏览器验证使用 Playwright 的 Chromium；安装对应浏览器后，从私有环境注入 `SMOKE_BASE_URL` 并运行 `pnpm -C infrastructure/smoke-page run test:live`。该命令检查实际 HTTPS 页面、CloudFront 响应、两项后端请求、重新检测与脚本异常，不模拟请求、不忽略证书错误。开发机及首次 GitHub 自动发布均已实测通过；设置 `SMOKE_EXPECTED_REVISION` 时还核对运行配置中的发布提交。三个 CI 检查任务不访问生产，只有获准的主分支发布任务执行线上验证；大陆访问及业务验收另行进行。
 
 ## 后端网关
 
@@ -37,7 +37,7 @@ pnpm -C infrastructure/gateway run check
 - 当前不代理 Realtime、断点续传和跨桶复制操作。业务 schema、桶、函数及共享 Auth 的回调尚未实施，网关健康并不代表完整业务可用。
 - 日志不记录授权头、请求体或上游地址，查询参数脱敏；运行日志与追踪启用但不持久化。
 
-生产部署前须设置 `CLOUDFLARE_ACCOUNT_ID`、`CLOUDFLARE_GATEWAY_NAME` 和 `BACKEND_DNS_NAME`，生成包含实际域名的本地构建，先运行 `cf deploy --dry-run --prebuilt` 核对，再按授权发布。生成的 `.cloudflare/` 和本地 `.dev.vars` 已忽略，禁止提交；仓库 CI 不持有部署凭据，也不自动发布。
+首次接入或更改域名连接前须设置 `CLOUDFLARE_ACCOUNT_ID`、`CLOUDFLARE_GATEWAY_NAME` 和 `BACKEND_DNS_NAME`，生成包含实际域名的本地构建，先运行 `cf deploy --dry-run --prebuilt` 核对，再按授权发布。日常 GitHub 发布仅执行版本上传和流量切换，保留既有域名连接，具体步骤见[自动发布流程](../docs/deployment.md)。生成的 `.cloudflare/` 和本地 `.dev.vars` 已忽略，禁止提交；三个 CI 检查任务不持有部署凭据，独立的主分支发布任务按授权读取 Secrets。
 
 ## 独立源站
 

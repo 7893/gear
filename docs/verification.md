@@ -21,7 +21,7 @@ PR 检查实际贡献提交，排除 GitHub 临时合并提交；普通推送检
 
 文档检查不联网验证外链，当前解析范围是 Markdown 行内链接和 `#` 标题，不代替完整 Markdown 渲染器。凭据扫描不能识别所有真实邮箱、IP、域名和资源编号；提交前仍需人工检查暂存内容，并在本地对照私有配置检查真实值。不要为了云端扫描而向 PR 暴露真实配置或凭据。
 
-工作流使用 GitHub 托管的临时 Ubuntu runner，三个 CI 检查任务只有仓库内容只读权限，不引用部署 Secrets。使用普通 `pull_request` 事件，第三方 Action 固定完整提交 SHA，下载的验证工具固定版本与 SHA-256。待启用的发布任务单独使用 OIDC 与专用部署 Secrets，只允许可信主分支进入；配置及授权边界见[自动发布方案](deployment.md)。依赖升级时同时核对官方发行来源和校验值。
+工作流使用 GitHub 托管的临时 Ubuntu runner，三个 CI 检查任务只有仓库内容只读权限，不引用部署 Secrets。使用普通 `pull_request` 事件，第三方 Action 固定完整提交 SHA，下载的验证工具固定版本与 SHA-256。已启用的发布任务单独使用 OIDC 与部署 Secrets，只允许可信主分支进入；配置及授权边界见[自动发布流程](deployment.md)。依赖升级时同时核对官方发行来源和校验值。
 
 参考：[GitHub Actions 安全约定](https://docs.github.com/en/actions/reference/security/secure-use)、[提交签名验证字段](https://docs.github.com/en/rest/commits/commits#get-a-commit)、[Gitleaks](https://github.com/gitleaks/gitleaks)、[actionlint](https://github.com/rhysd/actionlint)。
 
@@ -47,6 +47,8 @@ git diff --cached --check
 
 静态测试页已在开发机用真实 Chromium 浏览器完成一次线上验证：HTTPS 页面经 CloudFront 返回 200，跨域后端健康检查及 Supabase Auth 设置只读查询均返回 200，重新检测成功且无页面脚本异常。测试使用默认浏览器行为，未修改 Browser Integrity Check、证书验证或共享业务数据；原始运行记录保存在仓库外。这覆盖网络接入与脚本运行，不覆盖登录、业务数据、附件、邮件或大陆网络。
 
+随后已通过 GitHub 的首次完整自动发布：三个 CI 任务成功，发布任务完成 AWS OIDC 认证、受限 SSH 上传预检、网关版本发布、静态文件上传、CDN 刷新等待及 Chromium 实测。浏览器还核对运行配置中的提交标识与本次发布一致，避免把旧版本的成功当作本次发布成功。
+
 ## 应用代码阶段
 
 应用语言已确认为 TypeScript，前端当前推荐 Vue 3 + Vite，具体组合见[技术记录](technical-proposal.md#开发语言与前端方案)。框架定案并初始化应用后，将以下检查接到同一工作流，使用锁定依赖和虚构测试数据，验证失败时整次检查失败：
@@ -60,4 +62,4 @@ git diff --cached --check
 
 本地复用已有 Node、pnpm、Python 等运行环境及包缓存；当前项目仍需独立配置和锁定开发依赖，不引用其他项目的安装目录。ESLint、Prettier、Vitest 与 Playwright 是当前建议工具，版本与命令在应用初始化时统一；已有其他项目的安装不能视为本项目已配置或测试通过。
 
-自动发布任务已准备但尚未启用，专用权限与 Secrets 待授权配置；当前 CI 通过不会触发服务器、DNS、CDN 或 Supabase 更改。启用后只发布静态页及既有网关版本、刷新指定 CDN 缓存并验证，不执行数据库迁移。分支保护与发布审批策略不因添加工作流自动生效，当前不能记录 CD 验收通过。
+自动发布已按授权启用，只对主分支发布静态页与既有网关版本、刷新指定 CDN 缓存并验证，不执行数据库迁移或 DNS 更改；PR 仍只检查。GitHub 生产环境已限定 `main`，这不等于已经启用仓库主分支保护或人工发布审批。当前 CD 接入验收已通过，设备管理业务验收仍待实现后执行。

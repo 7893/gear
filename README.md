@@ -12,7 +12,7 @@
 
 前端客户端 HTTPS 证书已由 Google Trust Services 签发并导入 AWS ACM，供 CloudFront 使用；独立回源站点同样使用 Google 证书，已设置专用自动续期任务。后端域名使用 Cloudflare 自动管理的证书，详见[证书方案](docs/technical-proposal.md#客户端-https-证书与续期)。
 
-公开 GitHub 仓库已建立，本地通过 `origin` 关联；部署地址等参数保存在仓库 Actions Secrets，真实 `.env` 和凭据不提交。已添加仓库验证工作流，检查文档、配置模板、凭据泄漏、提交规则、网关和静态测试页；自动发布任务已准备但尚未启用，专用权限配置待授权，开源许可证待选择。
+公开 GitHub 仓库已建立，本地通过 `origin` 关联；部署地址等参数保存在仓库 Actions Secrets，真实 `.env` 和凭据不提交。仓库工作流检查文档、配置模板、凭据泄漏、提交规则、网关和静态测试页；主分支检查通过后自动发布网关与网站、刷新 CDN，并以真实浏览器验证，首次完整自动发布已通过。部署凭据与权限已按授权配置，开源许可证待选择。
 
 ## 文档
 
@@ -29,7 +29,7 @@
 - [页面与打印线框稿](docs/wireframes.md)：历史参考，不继续制作样稿；规则以统一业务规则为准。
 - [技术选型与部署记录](docs/technical-proposal.md)：已确定分工、已检查资源、私有环境变量和未完成事项。
 - [开发验证约定](docs/verification.md)：当前 CI 检查、本地运行方法及应用代码阶段的验证要求。
-- [自动发布方案](docs/deployment.md)：准备中的 CI 到发布与浏览器验证流程、专用权限及启用边界。
+- [自动发布流程](docs/deployment.md)：已接通的 CI、发布、CDN 刷新和浏览器验证，以及凭据和回退边界。
 - [基础设施工具](infrastructure/README.md)：后端网关的检查方法、配置边界及证书续期工具。
 - [待确认事项](docs/open-questions.md)：正式实现前需要明确的问题。
 
