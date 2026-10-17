@@ -25,7 +25,7 @@ pnpm -C web run dev
 | `/#/members` | 管理员审核、角色和停用处理 |
 | `/#/diagnostics` | 保留的页面、网关和 Auth 只读连接检测 |
 
-采用 hash 路由复用现有 Nginx 和 CloudFront，无需更改源站路由规则。设备簿注册使用六位纯数字验证码；注册后进入验证页并保留邮箱，邮箱不进入 URL，不需要跨浏览器的 PKCE 校验值。旧版 PKCE 回调的清理和交换仅保留兼容处理，不接收 URL fragment 中的隐式登录令牌。六位调整的共享配置授权及上线状态见[实施记录](../docs/account-implementation.md#六位验证码调整)。
+采用 hash 路由复用现有 Nginx 和 CloudFront，无需更改源站路由规则。设备簿注册使用六位纯数字验证码；注册后进入验证页并保留邮箱，邮箱不进入 URL，不需要跨浏览器的 PKCE 校验值。旧版 PKCE 回调的清理和交换仅保留兼容处理，不接收 URL fragment 中的隐式登录令牌。六位长度配置已获授权应用，页面按既有 CI/CD 发布；实际验收状态见[实施记录](../docs/account-implementation.md#六位验证码调整)。
 
 ## 权限边界
 
