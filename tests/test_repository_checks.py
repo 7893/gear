@@ -10,11 +10,11 @@ from scripts.check_repository import heading_ids, link_errors, private_path, tem
 
 class PublicationChecks(unittest.TestCase):
     def test_private_files_cannot_be_committed(self):
-        for name in ['.env', '.env.local', 'docs/private/notes.md', 'uploads/signed.pdf',
+        for name in ['.env', '.env.local', '.dev.vars', '.dev.vars.local', 'docs/private/notes.md', 'uploads/signed.pdf',
                      'service-account.json', 'google-mail-token.json', 'signing.key']:
             with self.subTest(name=name):
                 self.assertTrue(private_path(name))
-        for name in ['.env.example', '.env.test.example', 'docs/email-design.md']:
+        for name in ['.env.example', '.env.test.example', '.dev.vars.example', 'docs/email-design.md']:
             self.assertFalse(private_path(name))
 
     def test_template_rejects_values_and_duplicates_without_echoing_them(self):

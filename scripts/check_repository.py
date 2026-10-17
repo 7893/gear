@@ -16,7 +16,7 @@ PRIVATE_SUFFIXES = {'.pem', '.key', '.p12', '.pfx', '.db', '.sqlite',
 def private_path(name):
     path = PurePosixPath(name)
     return (bool(set(path.parts[:-1]) & PRIVATE_DIRS)
-            or (path.name.startswith('.env') and not path.name.endswith('.example'))
+            or (path.name.startswith(('.env', '.dev.vars')) and not path.name.endswith('.example'))
             or path.suffix in PRIVATE_SUFFIXES
             or bool(re.match(r'(client_secret|google-oauth-client|google-mail-token|'
                              r'service[-_]account|application_default_credentials).*\.json$',
@@ -109,7 +109,7 @@ def main():
         files[name] = content
         if not content.endswith('\n'):
             errors.append(f'{name}: missing final newline')
-        if path.name.startswith('.env') and path.name.endswith('.example'):
+        if path.name.startswith(('.env', '.dev.vars')) and path.name.endswith('.example'):
             errors.extend(f'{name}: {error}' for error in template_errors(content))
     for name, content in files.items():
         if name.endswith('.md'):

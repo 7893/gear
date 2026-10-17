@@ -42,3 +42,11 @@ Thumbs.db
 # Local verification tooling.
 __pycache__/
 *.py[cod]
+
+# Gateway dependencies, generated configuration and private local bindings.
+node_modules/
+.cloudflare/
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+dist/

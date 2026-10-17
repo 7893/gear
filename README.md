@@ -6,11 +6,11 @@
 
 ## 当前阶段
 
-业务与部署设计阶段，尚未编写应用代码。当前分工为开发机开发、现有美国主机与 Nginx 托管前端、CloudFront 分发前端、亚太 Supabase 承担账号及业务后端；具体接入仍待实施和验证。优先免费、复用资源和减少维护，不再制作样稿，现有线框仅保留历史参考。
+业务设计与基础设施接入阶段，已有仓库验证和接入网关代码，设备管理应用尚未编写。前端已配置 Google Cloud DNS、CloudFront 和独立 Nginx 回源站点，目前仅显示部署占位内容；后端已部署 Cloudflare 网关连接亚太 Supabase，业务 schema、附件桶和业务函数尚未创建。大陆完整访问与业务闭环仍待实测。优先免费、复用资源和减少维护，不再制作样稿，现有线框仅保留历史参考。
 
 已确认使用 TypeScript 编写前端及所需的 Supabase Edge Functions，数据库结构、约束与事务使用 SQL。前端当前推荐 Vue 3 + Vite，搭配 Element Plus 与 Vue Router；具体组合和依赖版本在初始化前定案，详见[技术记录](docs/technical-proposal.md#开发语言与前端方案)。
 
-客户端 HTTPS 证书已确定由 Google Trust Services 签发，通过 Google Public CA 的 ACME 流程申请，再导入 AWS ACM 供 CloudFront 使用；申请、接入与自动续期尚未实施，详见[证书方案](docs/technical-proposal.md#客户端-https-证书与续期)。
+前端客户端 HTTPS 证书已由 Google Trust Services 签发并导入 AWS ACM，供 CloudFront 使用；独立回源站点同样使用 Google 证书，已设置专用自动续期任务。后端域名使用 Cloudflare 自动管理的证书，详见[证书方案](docs/technical-proposal.md#客户端-https-证书与续期)。
 
 公开 GitHub 仓库已建立，本地通过 `origin` 关联；部署地址等参数保存在仓库 Actions Secrets，真实 `.env` 和凭据不提交。已添加仓库验证工作流，检查文档、配置模板、凭据泄漏和提交规则；自动部署尚未配置，开源许可证待选择。
 
@@ -29,13 +29,14 @@
 - [页面与打印线框稿](docs/wireframes.md)：历史参考，不继续制作样稿；规则以统一业务规则为准。
 - [技术选型与部署记录](docs/technical-proposal.md)：已确定分工、已检查资源、私有环境变量和未完成事项。
 - [开发验证约定](docs/verification.md)：当前 CI 检查、本地运行方法及应用代码阶段的验证要求。
+- [基础设施工具](infrastructure/README.md)：后端网关的检查方法、配置边界及证书续期工具。
 - [待确认事项](docs/open-questions.md)：正式实现前需要明确的问题。
 
 ## 协作约定
 
 - 优先简单实用，围绕经办人的日常操作设计。
 - 区分已确认需求、设计建议和待确认事项，不把建议视为已定案。
-- 现阶段整理设计文档与仓库验证工具，不编写应用代码。
+- 当前维护设计文档、仓库验证和网络接入工具；设备管理应用的初始化与业务实现尚未开始。
 - Git 提交必须签名，提交信息使用不超过 7 个单词的英文。
 - 公开文档、源码、配置模板和示例只使用虚构信息；邮箱和域名示例使用 `example.com` 等保留示例域名，不记录真实邮箱、域名、账号、云资源标识、源站 IP、CDN 分配地址或其他部署访问地址。
 - 部署地址通过环境变量注入；本地真实值放在已忽略的 `.env`，权限设为仅当前用户读写。远程仓库已关联，已配置的部署参数使用 Actions Secrets 管理，不写入工作流、提交信息、日志或截图。环境变量名见 [.env.example](.env.example)，未知值留空，不根据示例猜测真实配置。前端运行时使用的公开地址仍可被浏览器查看，不能作为身份凭据。
