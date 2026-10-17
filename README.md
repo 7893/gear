@@ -8,6 +8,8 @@
 
 业务与部署设计阶段，尚未编写应用代码。当前分工为开发机开发、现有美国主机与 Nginx 托管前端、CloudFront 分发前端、亚太 Supabase 承担账号及业务后端；具体接入仍待实施和验证。优先免费、复用资源和减少维护，不再制作样稿，现有线框仅保留历史参考。
 
+已确认使用 TypeScript 编写前端及所需的 Supabase Edge Functions，数据库结构、约束与事务使用 SQL。前端当前推荐 Vue 3 + Vite，搭配 Element Plus 与 Vue Router；具体组合和依赖版本在初始化前定案，详见[技术记录](docs/technical-proposal.md#开发语言与前端方案)。
+
 公开 GitHub 仓库已建立，本地通过 `origin` 关联；部署地址等参数保存在仓库 Actions Secrets，真实 `.env` 和凭据不提交。已添加仓库验证工作流，检查文档、配置模板、凭据泄漏和提交规则；自动部署尚未配置，开源许可证待选择。
 
 ## 文档
