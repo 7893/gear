@@ -18,6 +18,7 @@
 | 开发 | 开发机 | 文档、代码、调试和构建；主机别名及地址只在私有配置中记录 |
 | 前端部署 | 现有美国主机上的 Nginx | 已建立独立目录 `/var/www/gear`；后续配置独立站点并上传构建文件，保留现有其他站点 |
 | 前端分发 | AWS CloudFront Free | 分发网站文件，提供 HTTPS 和边缘缓存；可复用已检查的停用分发 |
+| 客户端 HTTPS 证书 | Google Trust Services / Google Public CA，导入 AWS ACM | Google 签发，ACM 托管并供 CloudFront 使用；申请与自动续期尚未实施 |
 | 前端 DNS | Google Cloud DNS | 继续管理原有域名，网站入口最终指向 CloudFront |
 | 后台入口 | 另一自有域名下的子域名，由 Cloudflare 管理 DNS | 具体子域名及代理实现待确定；免费 Worker 仅作为转发网关候选，业务仍由 Supabase 处理 |
 | 账号 | Supabase Auth | 邮箱密码、验证、会话和找回密码；管理员审核与业务角色由应用实现 |
@@ -58,6 +59,26 @@
 
 参考：[CloudFront 内容分发](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/HowCloudFrontWorks.html)、[Supabase 区域](https://supabase.com/docs/guides/platform/regions)、[函数区域](https://supabase.com/docs/guides/functions/regional-invocation)、[自定义域名](https://supabase.com/docs/guides/platform/custom-domains)。
 
+### 客户端 HTTPS 证书与续期
+
+已确认浏览器访问网站时使用 Google Trust Services 签发的服务器证书，采用 Google Public CA 的 ACME 流程申请。CloudFront 继续承担网站分发，AWS ACM 托管导入的证书。本决定替代此前建议直接申请 AWS 签发证书的做法，尚未发生证书申请、导入或绑定操作。
+
+| 环节 | 方案与边界 |
+| --- | --- |
+| 签发 | Google Public CA，官方说明证书申请免费；使用支持外部账号绑定 EAB 的 ACME 客户端 |
+| 域名验证 | 计划使用 Google Cloud DNS 配合 ACME DNS-01 验证；验证 TXT 记录与网站入口 CNAME 分开管理 |
+| CDN 托管 | 将叶证书、匹配私钥和中间证书链导入 AWS ACM 的 `us-east-1` 区域，绑定目标 CloudFront 分发 |
+| 续期 | ACME 自动续签后，重新导入本应用专用的同一 ACM 证书资源，保留 ARN 与 CloudFront 绑定；ACM 不负责导入证书的托管续期 |
+| 源站 HTTPS | CloudFront 到 Nginx 的证书单独核对回源域名；客户端证书选择不等于源站证书已配置 |
+
+- 首次接入创建设备簿专用的 ACM 证书资源，不覆盖既有其他业务的证书；只有后续续期才更新这个专用资源。当前私有配置中的既有证书标识只是已检查对象，不代表设备簿目标证书。
+- 证书须覆盖目标网站域名，并在 CloudFront 中正确绑定该域名。仅域名解析指向 CloudFront 不代表证书或 HTTPS 已生效。
+- 自动续期需覆盖 DNS 验证、签发、证书与私钥匹配检查、重新导入、分发生效及浏览器实际证书验证；监测到期与续期失败，不能只凭 ACME 进程成功判断整个链路成功。
+- ACME 客户端、续期执行位置、执行频率与最小权限凭据尚待实施评审。创建 EAB 凭据、启用 API、修改 DNS、导入证书、绑定分发及配置定时任务等写操作仍须逐项授权；当前仓库 CI 不承担这些写操作。
+- 证书私钥、ACME 账号密钥、EAB 秘密及 DNS 写入凭据保存在仓库外的受限私有环境；真实域名、证书 ARN、验证记录值及必要文件路径仅记录在本地私有配置中。公开模板、文档、源码和日志不包含这些真实值，不把私钥复制进前端或常规构建产物。
+
+参考：[Google Public CA 与 ACME](https://cloud.google.com/certificate-manager/docs/public-ca-tutorial)、[CloudFront 证书要求](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cnames-and-https-requirements.html)、[ACM 导入与续期](https://docs.aws.amazon.com/acm/latest/userguide/import-certificate.html)。
+
 ## 4. 已检查的现有资源
 
 - 美国主机的 SSH IPv4 与出口地址已核对一致；检测到一个稳定公网 IPv6，IPv6 出口地址也一致。Nginx 正在运行，已有静态目录、HTTPS 与 IPv6 监听；尚无设备簿独立站点。
@@ -66,6 +87,7 @@
 - 停用分发关联有效 FREE 套餐，启用 IPv6；分发无地域限制，检查到的 WAF 地域规则未涉及中国。现有 CloudFront 证书不覆盖目标网站域名。
 - 现有源站证书也不覆盖目标网站域名；回源证书是否调整取决于最终回源域名。不能把现有其他站点的 HTTPS 视为设备簿证书已配置。
 - Google Cloud DNS 的公共区域与权威名称服务器已核对；目标网站的 A、AAAA 记录仅完成私密变更计划，尚未写入。后续 CloudFront 网站入口应使用 CNAME；若需要源站 A、AAAA，应使用另外确定的源站名称。
+- 本轮只读复核：目标网站在 Cloud DNS 中没有 A、AAAA 或 CNAME，公共 DNS 查询也没有对应答案；候选 CloudFront 分发仍停用且未绑定目标域名。已附证书有效但不覆盖目标域名，在 ACM 的 `us-east-1` 区域未找到匹配目标域名的证书；Nginx 未引用设备簿域名或部署目录，目录仍为空。上述复核未修改云端或服务器配置。
 - 已通过只读接口核对现有 Supabase 项目处于亚太地区且健康运行，包含其他业务结构和已部署函数。检查了系统目录、策略、桶、Auth 与函数元数据，未读取业务记录、执行已有业务函数或修改设置。用户随后确认共用；隔离规则及设备簿接入尚未实施。
 - 基础设施检查后仅按单独授权建立上述独立目录，没有新增 Nginx 站点、重载服务、启用分发、申请证书或修改 DNS。真实地址、资源标识及检查详情仅在私有环境保存。
 
@@ -121,6 +143,7 @@
 - [.env.example](../.env.example) 只列变量名和空值。主机地址、前端域名、CDN 分配地址、云项目与资源标识、Supabase 参数均只进入本地私有 `.env`；未知值留空。
 - 已确认复用现有 Supabase 项目；`.env` 同时记录待创建的 schema、附件桶和函数命名前缀。隔离实现和云端写入尚未授权执行，不自动建立表、策略或业务数据。管理令牌和云账号凭据不复制为应用运行密钥。
 - 邮件 OAuth 客户端文件与令牌文件继续保存在仓库外，`.env` 仅记录文件位置。SSH 密钥和云 CLI 凭据继续使用现有私有凭据存储。
+- 证书私钥、ACME 账号及 EAB 秘密同样保存在仓库外，不写入 `.env.example` 或常规 CI；设备簿目标证书尚未申请，不把已有证书标识当作已完成配置。
 - `SUPABASE_SECRET_KEY` 和回源校验值只能在服务端使用；前端运行时所需的公开地址和 publishable key 可被浏览器查看，公开可见不等于可获得业务权限。
 - 已建立公开 GitHub 仓库并关联 `origin`，仓库标识只记录在私有 `.env` 的 `GITHUB_REPOSITORY`。已使用 Actions Secrets 保存 SSH 部署参数、源站 IPv4/IPv6、前端/CDN 地址与分发标识、DNS 项目标识及 Supabase 地址、项目标识和 publishable key，并核对机密名称清单。
 - SSH 私钥、邮件令牌、Supabase 管理密钥及云管理凭据继续保存在原有私有环境。已添加仅验证仓库的 Actions 工作流，不读取部署 Secrets，不启用自动部署。后续自动部署按实际需要配置最小权限凭据，不直接导入整份本地 `.env`。
@@ -128,6 +151,6 @@
 
 ## 9. 尚未完成
 
-前端框架与组件组合定案、后台完整子域名与代理细节、共用 Supabase 的隔离实现及接入、共享 Auth 邮件和密码流程的影响确认、独立 Nginx 站点、目标域名证书、CloudFront 重配与启用、DNS 写入、自动部署所需最小权限凭据、应用代码、手动导出工具及大陆全流程验收均待完成。TypeScript 开发语言、共用现有项目和公开远程仓库的选择已确定，不再作为待选项；参数和业务待办见[待确认事项](open-questions.md)。
+前端框架与组件组合定案、后台完整子域名与代理细节、共用 Supabase 的隔离实现及接入、共享 Auth 邮件和密码流程的影响确认、独立 Nginx 站点、Google 证书申请及导入与自动续期、CloudFront 重配与启用、DNS 写入、自动部署所需最小权限凭据、应用代码、手动导出工具及大陆全流程验收均待完成。客户端证书由 Google 签发、TypeScript 开发语言、共用现有项目和公开远程仓库的选择已确定，不再作为待选项；参数和业务待办见[待确认事项](open-questions.md)。
 
 历史说明：早期 Cloudflare 托管前端、R2 保存日常附件和自动备份的推荐已由本次选择替代；此前比较保留在 Git 历史与[最初提案](technical-proposal-v1.md)中，不作为当前实施要求。

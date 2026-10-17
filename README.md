@@ -10,6 +10,8 @@
 
 已确认使用 TypeScript 编写前端及所需的 Supabase Edge Functions，数据库结构、约束与事务使用 SQL。前端当前推荐 Vue 3 + Vite，搭配 Element Plus 与 Vue Router；具体组合和依赖版本在初始化前定案，详见[技术记录](docs/technical-proposal.md#开发语言与前端方案)。
 
+客户端 HTTPS 证书已确定由 Google Trust Services 签发，通过 Google Public CA 的 ACME 流程申请，再导入 AWS ACM 供 CloudFront 使用；申请、接入与自动续期尚未实施，详见[证书方案](docs/technical-proposal.md#客户端-https-证书与续期)。
+
 公开 GitHub 仓库已建立，本地通过 `origin` 关联；部署地址等参数保存在仓库 Actions Secrets，真实 `.env` 和凭据不提交。已添加仓库验证工作流，检查文档、配置模板、凭据泄漏和提交规则；自动部署尚未配置，开源许可证待选择。
 
 ## 文档
