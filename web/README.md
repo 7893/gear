@@ -1,0 +1,34 @@
+# 设备簿前端
+
+Vue 3、Vite、Vue Router 与 TypeScript，使用官方 Supabase JavaScript SDK 接入账号。页面采用简单表单和本地样式，不加载第三方字体或组件 CDN。
+
+```sh
+pnpm -C web install --frozen-lockfile
+pnpm -C web run check
+pnpm -C web run dev
+```
+
+`check` 包含 ESLint、Prettier、Vue/TypeScript 检查、Playwright 浏览器测试及正式构建。浏览器测试使用本地服务器和虚构 Auth/RPC 响应，不连接共享项目；首次运行需安装相应 Chromium。数据库事务另在隔离 PostgreSQL 中验证，这两类测试不代表真实发信和完整 Supabase Auth 集成已经通过。
+
+## 配置与路由
+
+构建产物不包含部署地址。运行时从 `/runtime-config.json` 读取 `apiUrl`、`publishableKey`、`release`、`accountsEnabled`；实际文件由已获授权的发布流程注入并忽略。只有公开 publishable key 可进入浏览器，管理密钥和发件令牌不进入本目录。
+
+`accountsEnabled` 只有明确的 `true` 才开启账号服务。当前共享认证配置尚未获准接入，线上默认关闭；关闭时不创建 Auth 客户端，不发送登录、注册或会话刷新请求。GitHub 发布步骤通过仓库变量 `GEAR_ACCOUNTS_ENABLED` 控制此项，不能以切换此变量替代共享配置审批和实际验收。
+
+| 路由 | 内容 |
+| --- | --- |
+| `/#/` | 账号状态、验证后提交使用申请 |
+| `/#/login` | 邮箱密码登录 |
+| `/#/register` | 注册；已有共享身份应直接登录 |
+| `/#/verify` | 注册邮箱验证码及重发 |
+| `/#/members` | 管理员审核、角色和停用处理 |
+| `/#/diagnostics` | 保留的页面、网关和 Auth 只读连接检测 |
+
+采用 hash 路由复用现有 Nginx 和 CloudFront，无需更改源站路由规则。确认链接回到根路径，PKCE 授权码在页面挂载前从地址中移除并交换会话；也支持输入邮件验证码。不同浏览器无法共享 PKCE 校验值时，可重新登录或使用验证码，不接收 URL fragment 中的隐式登录令牌。
+
+## 权限边界
+
+会话使用应用专属存储键，退出使用 `scope: local`。服务端按当前成员及邮箱验证状态授权；浏览器不能通过修改 metadata、表单角色或页面状态取得权限。刷新权限时先清除旧成员资料，失败或降级不继续显示旧管理列表；提交审核仍由数据库再次检查权限、版本和请求幂等键。
+
+注册页面建议至少 12 字符；共享 Auth 当前服务端最短长度仍是原有 6 字符，尚未更改全项目密码策略。页面参数不能替代服务端限制。密码找回、密码修改与账号级会话影响留待后续单独接入；本版没有开放这些操作入口。

@@ -1,0 +1,33 @@
+{
+  "name": "gear-web",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.8.1",
+  "scripts": {
+    "lint": "eslint src scripts tests vite.config.ts playwright.config.ts",
+    "format:check": "prettier --check index.html src scripts tests package.json tsconfig.json tsconfig.browser-check.json eslint.config.mjs vite.config.ts playwright.config.ts",
+    "typecheck": "vue-tsc -p tsconfig.json && tsc -p tsconfig.browser-check.json",
+    "build": "vite build",
+    "check": "pnpm run lint && pnpm run format:check && pnpm run typecheck && pnpm run test && pnpm run build",
+    "test:live": "node scripts/check-live.ts",
+    "dev": "vite --host 127.0.0.1",
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "24.19.2",
+    "@vitejs/plugin-vue": "6.0.10",
+    "eslint": "10.8.0",
+    "eslint-plugin-vue": "10.11.1",
+    "prettier": "3.9.6",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.2",
+    "vite": "8.3.4",
+    "vue-tsc": "3.3.13"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.118.0",
+    "vue": "3.5.44",
+    "vue-router": "5.4.0"
+  }
+}

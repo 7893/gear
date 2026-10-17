@@ -21,7 +21,9 @@ try {
       calls.push({ path, status: response.status() });
   });
 
-  const response = await page.goto(base, { waitUntil: "networkidle" });
+  const response = await page.goto(new URL("/#/diagnostics", base).toString(), {
+    waitUntil: "networkidle",
+  });
   assert.equal(response?.status(), 200);
   assert.match(response?.headers()["via"] || "", /cloudfront/i);
   await expect(page.locator("#page-status")).toHaveAttribute(

@@ -130,3 +130,52 @@ test("streams uploads into the dedicated bucket without following redirects", as
     stub.mock.restore();
   }
 });
+
+test("verification resend is forwarded and logout only revokes the current session", async () => {
+  const paths: string[] = [];
+  const stub = mock.method(globalThis, "fetch", async (request) => {
+    const url = new URL(request.url);
+    paths.push(url.pathname);
+    if (url.pathname.endsWith("/logout"))
+      assert.equal(url.searchParams.get("scope"), "local");
+    return Response.json({});
+  });
+  try {
+    for (const path of ["/auth/v1/resend", "/auth/v1/logout?scope=global"]) {
+      const response = await gateway.fetch(
+        new Request("https://api.example.com" + path, {
+          method: "POST",
+          headers: { apikey: "fictional" },
+          body: "{}",
+        }),
+        env,
+      );
+      assert.equal(response.status, 200);
+    }
+    assert.deepEqual(paths, ["/auth/v1/resend", "/auth/v1/logout"]);
+  } finally {
+    stub.mock.restore();
+  }
+});
+
+test("email verification links work without placing an API key in the URL", async () => {
+  const stub = mock.method(globalThis, "fetch", async (request) => {
+    assert.equal(new URL(request.url).pathname, "/auth/v1/verify");
+    assert.equal(request.headers.get("apikey"), null);
+    return new Response(null, {
+      status: 302,
+      headers: { Location: env.FRONTEND_ORIGIN + "/?code=example" },
+    });
+  });
+  try {
+    const response = await gateway.fetch(
+      new Request(
+        "https://api.example.com/auth/v1/verify?token=example&type=signup",
+      ),
+      env,
+    );
+    assert.equal(response.status, 302);
+  } finally {
+    stub.mock.restore();
+  }
+});

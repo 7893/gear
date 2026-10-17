@@ -22,6 +22,7 @@ const AUTH_PATHS = new Set([
   "/auth/v1/signup",
   "/auth/v1/recover",
   "/auth/v1/verify",
+  "/auth/v1/resend",
   "/auth/v1/settings",
 ]);
 
@@ -86,7 +87,10 @@ export default {
       );
     }
     if (!allowedPath(url.pathname, env)) return error("not_found", 404);
-    if (!request.headers.get("apikey")) return error("api_key_required", 401);
+    const emailVerificationLink =
+      url.pathname === "/auth/v1/verify" && request.method === "GET";
+    if (!emailVerificationLink && !request.headers.get("apikey"))
+      return error("api_key_required", 401);
 
     for (const key of ["Accept-Profile", "Content-Profile"]) {
       const value = request.headers.get(key);
@@ -106,6 +110,9 @@ export default {
     const upstream = new URL(env.SUPABASE_URL);
     upstream.pathname = url.pathname;
     upstream.search = url.search;
+    // This shared Auth identity may have sessions in unrelated applications.
+    if (url.pathname === "/auth/v1/logout")
+      upstream.searchParams.set("scope", "local");
     try {
       const upstreamRequest = new Request(new Request(upstream, request), {
         headers: forwarded,

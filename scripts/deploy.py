@@ -15,7 +15,7 @@ import time
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
-PAGE = ROOT / 'infrastructure/smoke-page'
+PAGE = ROOT / 'web'
 GATEWAY = ROOT / 'infrastructure/gateway'
 REQUIRED = (
     'DEPLOY_HOST', 'DEPLOY_PORT', 'CI_DEPLOY_USER', 'DEPLOY_SSH_KEY',
@@ -66,8 +66,10 @@ def public_files(directory):
                 or path.suffix.lower() in ('.pem', '.key', '.p12', '.pfx')):
             raise ValueError('Unsafe file in browser output')
         if path.is_file():
-            if b'sb_secret_' in path.read_bytes():
-                raise ValueError('Server secret prefix found in browser output')
+            # The official SDK contains the bare prefix as a validation rule.
+            # Reject complete key-shaped values without rejecting that SDK code.
+            if re.search(rb'sb_secret_[A-Za-z0-9_-]+', path.read_bytes()):
+                raise ValueError('Server secret value found in browser output')
             files.append(path)
     if not (directory / 'index.html').is_file():
         raise ValueError('Browser output has no index')
@@ -153,6 +155,7 @@ def deploy(env):
         'apiUrl': https_origin(env['PUBLIC_API_URL']),
         'publishableKey': env['SUPABASE_PUBLISHABLE_KEY'],
         'release': env['GITHUB_SHA'],
+        'accountsEnabled': env.get('GEAR_ACCOUNTS_ENABLED') == 'true',
     }) + '\n')
     files = public_files(dist)
     # Verify AWS trust before making any publication changes.

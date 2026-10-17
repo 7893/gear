@@ -1,21 +1,21 @@
 # 网络接入与证书工具
 
-此目录包含基础设施工具与最小静态联通测试页，设备管理应用尚未实现。真实域名、IP、账号、资源标识及凭据只在私有配置中保存，公开仓库不包含部署后的真实值。
+此目录包含基础设施工具；前端源码在独立的 `web` 目录，设备管理应用尚未实现。真实域名、IP、账号、资源标识及凭据只在私有配置中保存，公开仓库不包含部署后的真实值。
 
 ## 静态联通测试页
 
-[smoke-page](smoke-page/package.json) 使用 TypeScript 与 Vite，只有页面脚本、后端健康检查和 Supabase 连接三项状态，以及重新检测按钮。Supabase 检查只读取 `/auth/v1/settings`，不注册账号、不查询设备或写入业务数据。
+[web](../web/README.md) 已采用 Vue 3 + Vite 实现账号页面，原联通测试保留在 `/#/diagnostics`，仍包含页面脚本、后端健康检查、Supabase 连接和重新检测。Supabase 检查只读取 `/auth/v1/settings`，不注册账号、不查询设备或写入业务数据。
 
 ```sh
-pnpm -C infrastructure/smoke-page install --frozen-lockfile
-pnpm -C infrastructure/smoke-page run check
+pnpm -C web install --frozen-lockfile
+pnpm -C web run check
 ```
 
 检查包括 ESLint、Prettier、独立 TypeScript 类型检查与构建；CI 执行同一命令。构建后，在已忽略的 `dist/runtime-config.json` 中通过私有部署环境注入 `apiUrl` 和 `publishableKey`，只接受 HTTPS API 地址与 `sb_publishable_` 公钥；不得放入服务端密钥。实际运行配置不提交，浏览器仍能查看运行时使用的公开地址和公钥。
 
 发布时将 `dist/` 的内容放入独立网站目录，保留现有文件，先上传哈希资源与运行配置，最后替换首页，并刷新对应 CDN 入口缓存。当前已按此方式部署测试页，旧首页副本与部署摘要保存在仓库外；没有修改其他站点或共享数据库。
 
-真实浏览器验证使用 Playwright 的 Chromium；安装对应浏览器后，从私有环境注入 `SMOKE_BASE_URL` 并运行 `pnpm -C infrastructure/smoke-page run test:live`。该命令检查实际 HTTPS 页面、CloudFront 响应、两项后端请求、重新检测与脚本异常，不模拟请求、不忽略证书错误。开发机及首次 GitHub 自动发布均已实测通过；设置 `SMOKE_EXPECTED_REVISION` 时还核对运行配置中的发布提交。三个 CI 检查任务不访问生产，只有获准的主分支发布任务执行线上验证；大陆访问及业务验收另行进行。
+真实浏览器验证使用 Playwright 的 Chromium；安装对应浏览器后，从私有环境注入 `SMOKE_BASE_URL` 并运行 `pnpm -C web run test:live`。该命令检查实际 HTTPS 页面、CloudFront 响应、两项后端请求、重新检测与脚本异常，不模拟请求、不忽略证书错误。开发机及首次 GitHub 自动发布均已实测通过；设置 `SMOKE_EXPECTED_REVISION` 时还核对运行配置中的发布提交。五个 CI 检查任务不访问生产，只有获准的主分支发布任务执行线上验证；大陆访问及业务验收另行进行。
 
 ## 后端网关
 
@@ -26,18 +26,18 @@ pnpm -C infrastructure/gateway install --frozen-lockfile
 pnpm -C infrastructure/gateway run check
 ```
 
-检查包含 ESLint、Prettier、由 `cf workers types` 生成绑定类型后的 TypeScript 检查、六项行为测试及正式构建。依赖版本和允许执行的依赖构建脚本已固定，复用本地包缓存，不引用其他项目的安装目录。
+检查包含 ESLint、Prettier、由 `cf workers types` 生成绑定类型后的 TypeScript 检查、八项行为测试及正式构建。依赖版本和允许执行的依赖构建脚本已固定，复用本地包缓存，不引用其他项目的安装目录。
 
-运行时绑定包括 `SUPABASE_URL`、`FRONTEND_ORIGIN`、`GEAR_DB_SCHEMA`、`GEAR_STORAGE_BUCKET` 和 `GEAR_FUNCTION_PREFIX`，通过仓库外的专用文件交给 `cf deploy --secrets-file`。不向网关注入 Supabase 管理密钥，调用者仍提供自身 API key 和用户授权令牌。
+运行时绑定包括 `SUPABASE_URL`、`FRONTEND_ORIGIN`、`GEAR_DB_SCHEMA`、`GEAR_STORAGE_BUCKET` 和 `GEAR_FUNCTION_PREFIX`，通过仓库外的专用文件交给 `cf deploy --secrets-file`。不向网关注入 Supabase 管理密钥，SDK 调用者仍提供自身 API key 和用户授权令牌；浏览器打开的一次性验证链接仅对 GET `/auth/v1/verify` 免 API key，验证交由 Auth 完成，链接中不放公钥。退出强制 `scope=local`，避免撤销其他应用会话。
 
 - 数据库请求强制使用设备簿 schema，并拒绝指定其他 schema。
 - 文件操作限定专属桶，函数调用限定命名前缀；认证只转发明确列出的用户接口，拒绝管理员接口。
 - 跨域请求只允许配置的前端 Origin；该限制不能替代数据库 RLS 和用户身份授权。
 - 请求和响应体流式转发，禁用接口缓存，不主动跟随上游重定向；未知路径默认拒绝。
-- 当前不代理 Realtime、断点续传和跨桶复制操作。业务 schema、桶、函数及共享 Auth 的回调尚未实施，网关健康并不代表完整业务可用。
+- 当前不代理 Realtime、断点续传和跨桶复制操作。业务 schema 和账号 RPC 已建立；附件桶、设备流转 RPC 及共享 Auth 的回调仍待接入，网关健康并不代表完整业务可用。
 - 日志不记录授权头、请求体或上游地址，查询参数脱敏；运行日志与追踪启用但不持久化。
 
-首次接入或更改域名连接前须设置 `CLOUDFLARE_ACCOUNT_ID`、`CLOUDFLARE_GATEWAY_NAME` 和 `BACKEND_DNS_NAME`，生成包含实际域名的本地构建，先运行 `cf deploy --dry-run --prebuilt` 核对，再按授权发布。日常 GitHub 发布仅执行版本上传和流量切换，保留既有域名连接，具体步骤见[自动发布流程](../docs/deployment.md)。生成的 `.cloudflare/` 和本地 `.dev.vars` 已忽略，禁止提交；三个 CI 检查任务不持有部署凭据，独立的主分支发布任务按授权读取 Secrets。
+首次接入或更改域名连接前须设置 `CLOUDFLARE_ACCOUNT_ID`、`CLOUDFLARE_GATEWAY_NAME` 和 `BACKEND_DNS_NAME`，生成包含实际域名的本地构建，先运行 `cf deploy --dry-run --prebuilt` 核对，再按授权发布。日常 GitHub 发布仅执行版本上传和流量切换，保留既有域名连接，具体步骤见[自动发布流程](../docs/deployment.md)。生成的 `.cloudflare/` 和本地 `.dev.vars` 已忽略，禁止提交；五个 CI 检查任务不持有部署凭据，独立的主分支发布任务按授权读取 Secrets。
 
 ## 独立源站
 

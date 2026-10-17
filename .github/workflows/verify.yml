@@ -70,7 +70,7 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: infrastructure/smoke-page
+        working-directory: web
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -84,7 +84,9 @@ jobs:
         run: npm install --global pnpm@12.8.1
       - name: Install locked page dependencies
         run: pnpm install --frozen-lockfile
-      - name: Lint, format, type-check and build page
+      - name: Install browser for isolated UI tests
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Lint, format, type-check, test and build page
         run: pnpm run check
 
   database:
@@ -97,13 +99,38 @@ jobs:
         with:
           persist-credentials: false
       - name: Verify schema in disposable database
-        run: python3 database/tests/check_schema.py
+        run: |
+          python3 database/tests/check_schema.py
+          python3 database/tests/check_accounts.py
         env:
           PG_BINDIR: /usr/lib/postgresql/16/bin
 
+  auth-mail:
+    name: Authentication mail checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: supabase/functions/gear-auth-mail
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '26.10.0'
+      - name: Install pinned package manager
+        run: npm install --global pnpm@12.8.1
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify mail adapter with fictional webhook and provider responses
+        run: pnpm run check
+
   deploy:
     name: Deploy and verify
-    needs: [repository, gateway, smoke-page, database]
+    needs: [repository, gateway, smoke-page, database, auth-mail]
     if: >-
       github.ref == 'refs/heads/main' &&
       github.event_name != 'pull_request' &&
@@ -128,12 +155,13 @@ jobs:
       - name: Install locked dependencies
         run: |
           pnpm -C infrastructure/gateway install --frozen-lockfile
-          pnpm -C infrastructure/smoke-page install --frozen-lockfile
+          pnpm -C web install --frozen-lockfile
       - name: Install browser
-        run: pnpm -C infrastructure/smoke-page exec playwright install --with-deps chromium
+        run: pnpm -C web exec playwright install --with-deps chromium
       - name: Publish and verify complete connection
         run: python3 scripts/deploy.py
         env:
+          GEAR_ACCOUNTS_ENABLED: ${{ vars.GEAR_ACCOUNTS_ENABLED }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
           CI_DEPLOY_USER: ${{ secrets.CI_DEPLOY_USER }}

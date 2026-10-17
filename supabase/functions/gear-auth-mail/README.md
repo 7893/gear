@@ -1,0 +1,35 @@
+# 认证邮件适配器
+
+状态：本地代码及模拟提供方测试已完成，尚未部署、配置机密、启用共享 Hook 或发送真实邮件。该函数用于 Supabase Send Email Hook，经已有 Gmail OAuth 发信，不接收普通浏览器发件请求。
+
+## 验证与配置
+
+```sh
+pnpm -C supabase/functions/gear-auth-mail install --frozen-lockfile
+pnpm -C supabase/functions/gear-auth-mail run check
+```
+
+测试采用虚构签名和模拟 OAuth/Gmail 响应；覆盖签名篡改、过期、大小限制、UTF-8 MIME、固定请求主机、邮箱更换时双验证码映射、认证类型与安全通知、发送结果不明时不在函数内重试。Node 检查不代替部署后的 Supabase Edge Runtime 验证。
+
+需要六项私有运行配置：
+
+- `GEAR_AUTH_WEBHOOK_SECRET`：Supabase Hook 的 Standard Webhooks 签名秘密。
+- `GEAR_AUTH_PUBLIC_URL`：邮件链接使用的 HTTPS 认证 API origin。
+- `GEAR_GMAIL_CLIENT_ID`、`GEAR_GMAIL_CLIENT_SECRET`、`GEAR_GMAIL_REFRESH_TOKEN`：既有 Gmail OAuth 授权。
+- `GEAR_MAIL_FROM`：与已授权 Gmail 发件身份一致的邮箱。
+
+这些值只能通过服务端机密注入。Supabase 的函数机密属于项目级，因此使用 `GEAR_` 前缀，并在写入前检查同名项，不能覆盖其他业务变量。公开模板只列空变量名，凭据来源继续由项目私有记录引用。
+
+`supabase/config.toml` 为本函数关闭平台 JWT 校验，以接收 Auth 发出的签名 HTTP 请求；函数内部必须校验 Standard Webhooks 原始报文签名及时间戳。仅对该函数生效，不修改已有函数。无签名、篡改或过期请求在访问 Google 前拒绝。报文按实际字节限制，原始报文、验证码、链接、收件人和令牌均不写日志。
+
+## 发送与共享影响
+
+支持注册、邀请、登录链接、密码恢复、重新认证、邮箱变更和七类安全通知。验证码和验证链接只保存在受保护的 Auth 流程和邮件中，不写入普通业务待发表。链接经认证网关转到 Supabase，保留 Auth 指定的实际回调，不把其他应用的回调换成设备簿。
+
+所有内容使用通用认证文字；一旦启用此 Hook，整个共享项目会改用所配置的 Gmail 身份和此处文字发送认证邮件，现有自定义模板不会由 Hook 自动继承。更换邮箱时按官方兼容字段映射分别发送到新旧邮箱，邮箱更改通知发送给原邮箱；部分发送成功而后续失败无法撤回。解除登录身份的通知受上游 Hook 报文限制：当前没有独立收件邮箱字段，只能发送给报文中的当前账号邮箱，不能保证与原 SMTP 的被解除身份邮箱一致。启用前须核对其他应用是否依赖此通知。
+
+OAuth 与提交邮件共用 4.5 秒请求期限；实例内短暂缓存访问令牌，不持久化或输出。Google 接受提交才返回成功，这不证明已投递。超时返回受控失败且不在函数内再次发送；Supabase 或调用方的重试仍可能导致重复邮件，当前不承诺跨实例恰好一次投递，也不新增用于存储认证凭证的业务表。
+
+启用前必须单独批准全项目发信影响、机密注入和实际测试。默认不随网站 CD 发布，也未给现有 CI 提供 Gmail 凭据。实施差异见[账号接入记录](../../../docs/account-implementation.md)。
+
+参考：[Supabase Send Email Hook](https://supabase.com/docs/guides/auth/auth-hooks/send-email-hook)、[Gmail API messages.send](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/send)。

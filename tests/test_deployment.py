@@ -47,6 +47,9 @@ class DeploymentBoundaries(unittest.TestCase):
             root = Path(temporary)
             (root / 'index.html').write_text('example\n')
             self.assertEqual(len(deploy.public_files(root)), 1)
+            (root / 'sdk.js').write_text('const prefix = "sb_secret_";')
+            self.assertEqual(len(deploy.public_files(root)), 2)
+            (root / 'sdk.js').unlink()
             for name, value in (('.env', 'example'), ('identity.key', 'example'),
                                 ('bundle.js', 'sb_secret_example')):
                 path = root / name

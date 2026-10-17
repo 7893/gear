@@ -1,0 +1,7 @@
+# Local project label only. Real remote project references stay in private configuration.
+project_id = "gear"
+
+[functions.gear-auth-mail]
+verify_jwt = false
+entrypoint = "./functions/gear-auth-mail/index.ts"
+import_map = "./functions/gear-auth-mail/deno.json"
