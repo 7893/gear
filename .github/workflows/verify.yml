@@ -102,6 +102,7 @@ jobs:
         run: |
           python3 database/tests/check_schema.py
           python3 database/tests/check_accounts.py
+          python3 database/tests/check_notifications.py
         env:
           PG_BINDIR: /usr/lib/postgresql/16/bin
 

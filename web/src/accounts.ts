@@ -234,6 +234,33 @@ export async function listMembers(): Promise<Member[]> {
   if (error) throw error;
   return data as Member[];
 }
+export type NotificationStatus = {
+  enabled: boolean;
+  counts: Partial<
+    Record<
+      | "pending"
+      | "processing"
+      | "submitted"
+      | "failed"
+      | "unknown"
+      | "cancelled",
+      number
+    >
+  >;
+  recent: {
+    id: string;
+    notification_type: "application_pending" | "application_result";
+    status: keyof NotificationStatus["counts"];
+    attempt_count: number;
+    error_code: string | null;
+    updated_at: string;
+  }[];
+};
+export async function getNotificationStatus(): Promise<NotificationStatus> {
+  const { data, error } = await service().rpc("notification_status");
+  if (error) throw error;
+  return data as NotificationStatus;
+}
 export async function setMemberAccess(
   member: Member,
   status: MemberStatus,

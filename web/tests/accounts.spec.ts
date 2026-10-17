@@ -132,6 +132,24 @@ async function fixture(page: Page, enabled = true, recoveryEnabled = false) {
       listReads++;
       return route.fulfill({ json: members });
     }
+    if (path.endsWith("/notification_status")) {
+      return route.fulfill({
+        json: {
+          enabled: false,
+          counts: { failed: 1, unknown: 1 },
+          recent: [
+            {
+              id: "example-notification",
+              notification_type: "application_result",
+              status: "unknown",
+              attempt_count: 1,
+              error_code: "submission_unknown",
+              updated_at: "2030-01-01T00:00:00Z",
+            },
+          ],
+        },
+      });
+    }
     if (path.endsWith("/set_member_access")) {
       const body = request.postDataJSON() as Record<string, unknown>;
       actions.push(body);
@@ -286,6 +304,10 @@ test("administrator approves with an idempotent fixed RPC and clears revoked acc
   await expect(
     page.getByRole("heading", { name: "Example applicant", exact: true }),
   ).toBeVisible();
+  const mailStatus = page.getByRole("region", { name: "审核邮件通知" });
+  await expect(mailStatus).toContainText("审核通知尚未开启。");
+  await expect(mailStatus).toContainText("发送结果不明");
+  await expect(mailStatus).toContainText("系统不会自动重发");
   await page.getByRole("button", { name: "批准申请" }).click();
   await expect(page.getByText("账号处理已保存。")).toBeVisible();
   expect(state.actions).toHaveLength(1);
@@ -308,6 +330,37 @@ test("administrator approves with an idempotent fixed RPC and clears revoked acc
     page.getByText("仅管理员可以查看和处理使用申请。"),
   ).toBeVisible();
   await expect(page.getByText(email, { exact: true })).toHaveCount(0);
+  await expect(mailStatus).toHaveCount(0);
+});
+
+test("notification diagnostics failure does not block review or reveal provider errors", async ({
+  page,
+}) => {
+  const state = await fixture(page);
+  state.setMembership({
+    ...pending,
+    id: userId,
+    display_name: "Example admin",
+    status: "active",
+    role: "admin",
+  });
+  await page.route(api + "/rest/v1/rpc/notification_status", (route) =>
+    route.fulfill({
+      status: 503,
+      json: { message: "private provider diagnostic must not appear" },
+    }),
+  );
+  await login(page);
+  await page.getByRole("link", { name: "账号管理", exact: true }).click();
+  await expect(
+    page.getByText("通知状态暂时无法读取，请稍后刷新。"),
+  ).toBeVisible();
+  await expect(
+    page.getByText("private provider diagnostic must not appear"),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "批准申请" }).click();
+  await expect(page.getByText("账号处理已保存。")).toBeVisible();
+  expect(state.actions).toHaveLength(1);
 });
 
 test("failed permission refresh removes old privileged data and redacts server errors", async ({

@@ -8,6 +8,8 @@ import {
   safeError,
   roleLabels,
   statusLabels,
+  getNotificationStatus,
+  type NotificationStatus,
   type Member,
   type MemberStatus,
   type Role,
@@ -17,6 +19,28 @@ const loading = ref(false);
 const busyId = ref("");
 const error = ref("");
 const notice = ref("");
+const notifications = ref<NotificationStatus | null>(null);
+const notificationError = ref("");
+const mailStates = {
+  pending: "待发送",
+  processing: "处理中",
+  submitted: "已提交邮件服务",
+  failed: "发送失败",
+  unknown: "发送结果不明",
+  cancelled: "已取消",
+};
+const mailProblems: Record<string, string> = {
+  oauth_temporary: "授权服务暂时不可用，将有限重试",
+  mail_authorization: "发信授权不可用，请联系部署维护者",
+  provider_rate_limit: "邮件服务限流，将延后有限重试",
+  provider_unauthorized: "发信凭据未获接受，将有限重试",
+  provider_rejected: "邮件服务拒绝，请联系部署维护者",
+  submission_unknown: "可能已经发送，系统不会自动重发",
+  lease_expired: "处理超时，可能已经发送，系统不会自动重发",
+  invalid_message: "通知内容异常，请联系部署维护者",
+  before_enablement: "启用前的历史通知不补发",
+  obsolete: "当前状态已改变，无需发送",
+};
 const choices = ref<Record<string, { role: Role; reason: string }>>({});
 const retries = new Map<string, string>();
 let generation = 0;
@@ -31,6 +55,9 @@ async function load() {
   members.value = [];
   loading.value = true;
   error.value = "";
+  notifications.value = null;
+  notificationError.value = "";
+  void loadNotifications(current);
   try {
     const result = await listMembers();
     if (current !== generation || !isAdmin.value) return;
@@ -47,6 +74,15 @@ async function load() {
     if (current === generation) loading.value = false;
   }
 }
+async function loadNotifications(current: number) {
+  try {
+    const result = await getNotificationStatus();
+    if (current === generation && isAdmin.value) notifications.value = result;
+  } catch {
+    if (current === generation && isAdmin.value)
+      notificationError.value = "通知状态暂时无法读取，请稍后刷新。";
+  }
+}
 watch(
   isAdmin,
   (value) => {
@@ -55,6 +91,8 @@ watch(
       generation++;
       members.value = [];
       choices.value = {};
+      notifications.value = null;
+      notificationError.value = "";
       loading.value = false;
     }
   },
@@ -196,6 +234,47 @@ async function review(member: Member, status: MemberStatus) {
         </button>
       </div>
     </form>
+    <section aria-label="审核邮件通知">
+      <h2>审核邮件通知</h2>
+      <p v-if="notificationError" class="notice error" role="alert">
+        {{ notificationError }}
+      </p>
+      <template v-if="notifications">
+        <p>
+          {{
+            notifications.enabled ? "审核通知已开启。" : "审核通知尚未开启。"
+          }}邮件失败不影响已保存的审核结果。
+        </p>
+        <p class="muted">
+          邮件服务接受提交不代表已经送达。失败或结果不明的记录请联系部署维护者；达到重试上限后不会继续重试。
+        </p>
+        <p
+          v-if="notifications.counts.failed || notifications.counts.unknown"
+          class="notice error"
+          role="alert"
+        >
+          有通知发送失败或结果不明，请查看下面的记录。
+        </p>
+        <p>
+          <span v-for="(label, status) in mailStates" :key="status"
+            >{{ label }}：{{ notifications.counts[status] || 0 }}　</span
+          >
+        </p>
+        <ul v-if="notifications.recent.length">
+          <li v-for="item in notifications.recent" :key="item.id">
+            {{
+              item.notification_type === "application_pending"
+                ? "新申请提醒"
+                : "审核结果通知"
+            }}：{{ mailStates[item.status] }}，已尝试
+            {{ item.attempt_count }} 次<span v-if="item.error_code"
+              >；{{ mailProblems[item.error_code] || "需要维护者检查" }}</span
+            >
+          </li>
+        </ul>
+        <p v-else>暂无审核通知记录。</p>
+      </template>
+    </section>
   </section>
   <section v-else class="card narrow">
     <h1>账号管理</h1>
