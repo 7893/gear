@@ -1,0 +1,40 @@
+name: Verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository:
+    name: Repository checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install pinned verification tools
+        run: bash scripts/install-ci-tools.sh "$RUNNER_TEMP/gear-ci-tools"
+      - name: Validate workflow syntax
+        run: '"$RUNNER_TEMP/gear-ci-tools/actionlint"'
+      - name: Test repository validators
+        run: python3 -m unittest discover -s tests -v
+      - name: Validate public repository files
+        run: python3 scripts/check_repository.py
+      - name: Scan Git history for credentials
+        run: '"$RUNNER_TEMP/gear-ci-tools/gitleaks" git --redact --no-banner --log-opts="--all"'
+      - name: Verify contributor commits
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/check_commits.py
