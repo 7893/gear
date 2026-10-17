@@ -162,7 +162,7 @@
 - 证书私钥、ACME 账号及 EAB 秘密保存在仓库外，不写入 `.env.example` 或常规 CI；目标证书已申请，专用证书标识与既有证书标识分别私密记录。
 - `SUPABASE_SECRET_KEY` 和回源校验值只能在服务端使用；前端运行时所需的公开地址和 publishable key 可被浏览器查看，公开可见不等于可获得业务权限。
 - 已建立公开 GitHub 仓库并关联 `origin`，仓库标识只记录在私有 `.env` 的 `GITHUB_REPOSITORY`。已使用 Actions Secrets 保存 SSH 部署参数、源站 IPv4/IPv6、前端/CDN 地址与分发标识、DNS 项目标识及 Supabase 地址、项目标识和 publishable key，并核对机密名称清单。
-- 日常 SSH 私钥、邮件令牌、Supabase 管理密钥及云管理凭据继续保存在原有私有环境。三个 Actions 检查任务不读取部署 Secrets；另已准备默认关闭的发布任务，拟使用专用受限上传密钥、AWS OIDC 与指定 Worker 的 Editor token，待单独授权后配置并启用，不直接导入整份本地 `.env`。
+- 日常 SSH 私钥、邮件令牌、Supabase 管理密钥及云管理凭据继续保存在原有私有环境。三个 Actions 检查任务不读取部署 Secrets；另已准备默认关闭的发布任务，拟使用专用受限上传密钥和 AWS OIDC，服务器访问授权与 AWS 角色待明确批准。Cloudflare 按用户决定复用本地开发令牌，已保存到项目级私有凭据目录并同步仓库 Secrets，保留其原有权限；凭据目录和 `.env` 均忽略，不直接导入整份本地 `.env`。
 - 提交前同时检查忽略规则、暂存内容和私密值泄漏。`.gitignore` 不清除已跟踪内容或历史提交中的信息。
 
 ## 9. 尚未完成

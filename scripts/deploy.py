@@ -130,7 +130,7 @@ def assume_role(env):
 def private_files():
     previous = os.umask(0o077)
     try:
-        with tempfile.TemporaryDirectory(prefix='gear-deploy-') as directory:
+        with tempfile.TemporaryDirectory(prefix='gear-publish-') as directory:
             yield Path(directory)
     finally:
         os.umask(previous)

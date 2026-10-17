@@ -1,6 +1,6 @@
 # 自动发布流程与启用方案
 
-当前最小 TypeScript 页面已手动部署，开发机真实浏览器验证通过。自动发布脚本和工作流已准备，`CD_ENABLED` 尚未启用，专用部署权限尚未配置，不能视为 CD 已跑通。业务实现暂停，本轮只完善交付流程。
+当前最小 TypeScript 页面已手动部署，开发机真实浏览器验证通过。自动发布脚本和工作流已准备，用户已指定复用本地 Cloudflare 开发令牌，并授权凭据存入项目私有配置及 GitHub Secrets。`CD_ENABLED` 尚未启用，服务器访问授权与 AWS 临时身份尚未配置，不能视为 CD 已跑通。业务实现暂停，本轮只完善交付流程。
 
 ## 目标流程
 
@@ -19,17 +19,20 @@
 | 部署主机 | 专用无 sudo 账号与独立 SSH 密钥；现有项目目录交给该账号写入 | 公钥强制执行 `rrsync -wo -no-del`，限定项目目录、禁止删除，不允许交互命令和转发；不修改其他站点 |
 | AWS | GitHub OIDC 身份提供方与专用角色 | 信任精确的仓库身份及 `production` 环境；仅允许目标 CloudFront 分发的 `CreateInvalidation`、`GetInvalidation`，不配置长期 AWS 密钥 |
 | GitHub | `production` 环境限主分支、专用 Secrets、启用变量 | 配置齐备后才启用自动发布，部署凭据只进入发布步骤 |
-| Cloudflare | 既有网关的专用 API token | 优先使用单 Worker 的 Editor 权限；日常发布仅上传版本和切换流量，不更改 DNS、路由或自定义域名 |
 
-精确的 AWS 信任策略、资源权限及服务器配置清单保存在仓库外的私有授权方案中，公开文档不记录真实账号、域名、地址或资源编号。现有 Cloudflare 凭据不能读取令牌权限管理接口，专用 token 的创建能力尚未确认；若不能代建，需管理员在控制台创建后通过私有文件提供，不在聊天或公开文档粘贴。
+其中 GitHub 凭据存储已获授权；创建服务器账号、增加 SSH 授权、AWS OIDC 和角色以及启用自动发布仍待明确批准。精确的 AWS 信任策略、资源权限及服务器配置清单保存在仓库外的私有授权方案中，公开文档不记录真实账号、域名、地址或资源编号。
+
+Cloudflare 按用户决定复用现有本地开发令牌，不创建新令牌，不修改原令牌权限。其副本保存在项目已忽略的 `.private/credentials/`，由 `.env` 的 `CLOUDFLARE_API_TOKEN_FILE` 引用；仓库使用同名 `CLOUDFLARE_API_TOKEN` Secret。现有令牌权限范围继承原配置，不能把本项目脚本只更新一个网关等同于令牌本身只拥有该网关权限。
 
 GitHub 的 OIDC subject 格式须从仓库接口核对；当前仓库启用不可变身份，不能直接套用只有仓库名称的旧示例。环境分支规则与 AWS 精确 subject 一起限制发布来源。[GitHub 官方说明](https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-aws)。
 
-Cloudflare 已支持只授予指定既有 Worker 的 Editor 权限；修改域名连接需要额外权限。本方案使用 `cf workers versions create` 和 `cf workers deployments create` 发布版本，保留已经配置好的域名连接，不调用触发器部署。[权限说明](https://developers.cloudflare.com/workers/authorization/workers/)、[版本发布说明](https://developers.cloudflare.com/cf/projects/#upload-a-version)。
+Cloudflare 支持只授予指定既有 Worker 的 Editor 权限，可在以后需要收紧凭据时另行配置；当前依照用户决定使用开发令牌。本方案仍使用 `cf workers versions create` 和 `cf workers deployments create` 发布版本，保留已经配置好的域名连接，不调用触发器部署。[权限说明](https://developers.cloudflare.com/workers/authorization/workers/)、[版本发布说明](https://developers.cloudflare.com/cf/projects/#upload-a-version)。
 
 ## 配置与故障处理
 
 所需 Secret 名称见[工作流](../.github/workflows/verify.yml)的发布步骤；本地文件引用名称见[环境模板](../.env.example)。SSH 私钥和主机公钥校验记录只保存在私有文件与 GitHub Secrets，不复用日常开发机的 SSH 私钥。主机公钥通过已有可信 SSH 连接核对，CI 开启严格校验，不能在运行时盲目信任 `ssh-keyscan` 的结果。
+
+项目级凭据目录权限为 `700`，令牌、专用 SSH 私钥、主机公钥记录及私有清单文件权限为 `600`，全部由 `.private/` 忽略规则覆盖。`.env` 保持 `600` 并记录凭据文件路径；私有清单记录来源、用途、GitHub Secret 名称及是否已启用，不把尚未安装的 SSH 公钥写成已授权。部署所需凭据同步至仓库 Secrets，现有云管理员凭据及邮件授权文件继续通过私有路径引用，不混入部署工作流。
 
 发布前检查 AWS 临时身份和受限上传通道。网站先上传静态资源及运行配置，最后替换首页，保留旧哈希资源和 `robots.txt`；不全量删除网站目录，不重载 Nginx。网关上传的新版本按提交说明匹配后，才切换到该版本。CDN 只刷新 `/`、`/index.html`、`/runtime-config.json`，等待完成后再运行浏览器验证。公开日志只显示步骤结果，不打印实际地址、资源标识、工具原始响应或凭据。
 

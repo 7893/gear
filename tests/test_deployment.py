@@ -15,7 +15,7 @@ class DeploymentBoundaries(unittest.TestCase):
         env = {name: 'example' for name in deploy.REQUIRED}
         env.update(
             GITHUB_REF='refs/heads/main', GITHUB_EVENT_NAME='push', GITHUB_SHA='a' * 40,
-            DEPLOY_HOST='192.0.2.10', DEPLOY_PORT='22', CI_DEPLOY_USER='gear-deploy',
+            DEPLOY_HOST='192.0.2.10', DEPLOY_PORT='22', CI_DEPLOY_USER='example-deploy',
             PUBLIC_APP_URL='https://app.example.com', PUBLIC_API_URL='https://api.example.com',
             SUPABASE_URL='https://backend.example.com',
             SUPABASE_PUBLISHABLE_KEY='sb_publishable_example',
