@@ -14,7 +14,7 @@ pnpm -C web run dev
 
 构建产物不包含部署地址。运行时从 `/runtime-config.json` 读取 `apiUrl`、`publishableKey`、`release`、`accountsEnabled`；实际文件由已获授权的发布流程注入并忽略。只有公开 publishable key 可进入浏览器，管理密钥和发件令牌不进入本目录。
 
-`accountsEnabled` 只有明确的 `true` 才开启账号服务。当前共享认证配置尚未获准接入，线上默认关闭；关闭时不创建 Auth 客户端，不发送登录、注册或会话刷新请求。GitHub 发布步骤通过仓库变量 `GEAR_ACCOUNTS_ENABLED` 控制此项，不能以切换此变量替代共享配置审批和实际验收。
+`accountsEnabled` 只有明确的 `true` 才开启账号服务。当前共享认证配置尚未获准接入，线上默认关闭；关闭时不创建 Auth 客户端，不发送登录、注册或会话刷新请求。GitHub 发布步骤通过仓库变量 `GEAR_ACCOUNTS_ENABLED` 控制此项：共享配置获准并检查通过后，开放入口供指定管理员本人注册、验证，再由部署者初始化权限并完成真实流程验收；不能以切换此变量替代共享配置审批或验收。
 
 | 路由 | 内容 |
 | --- | --- |

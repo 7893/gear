@@ -87,7 +87,7 @@ def last_admin_race(db):
     call(db, remaining, 'list_members')
 
 
-def bootstrap():
+def bootstrap(with_application=False):
     with disposable_database() as db:
         db.run("""
             CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN; CREATE ROLE service_role NOLOGIN BYPASSRLS;
@@ -103,6 +103,7 @@ def bootstrap():
             db.run(migration.read_text())
         for name in ['admin', 'operator']:
             db.run(f"INSERT INTO auth.users VALUES ('{IDS[name]}','{name}@example.invalid',now())")
+        pending = call(db, 'admin', 'apply_for_access', "'Example pending admin'") if with_application else None
         db.env.pop('GEAR_ADMIN_EMAIL', None)
         db.env.pop('GEAR_ADMIN_DISPLAY_NAME', None)
         db.run((ROOT / 'database/bootstrap_admin.sql').read_text(), fail='GEAR_ADMIN_EMAIL is required')
@@ -111,6 +112,8 @@ def bootstrap():
         initialized = json.loads(db.run((ROOT / 'database/bootstrap_admin.sql').read_text()))
         repeated = json.loads(db.run(f"SELECT gear_private.bootstrap_admin('{IDS['admin']}','Different name')"))
         assert initialized == repeated and initialized['role'] == 'admin'
+        if pending:
+            assert initialized['id'] == pending['id'] and initialized['version'] == 2
         assert db.run("SELECT count(*) FROM gear.events WHERE actor_source='bootstrap'") == '1'
         db.run(f"SELECT gear_private.bootstrap_admin('{IDS['operator']}','Another admin')", fail='bootstrap_not_allowed')
         assert call(db, 'admin', 'get_my_membership')['membership']['role'] == 'admin'
@@ -129,6 +132,7 @@ def main():
         assert db.run("SELECT count(*) FROM gear.app_settings WHERE NOT outbound_mail_enabled") == '1'
         assert db.run('SELECT id FROM unrelated.sentinel') == '7'
     bootstrap()
+    bootstrap(with_application=True)
     print('PASS owner-only, idempotent bootstrap')
     print(json.dumps({'account_rpc_checks': 'passed', 'production_access': False}))
 
