@@ -53,6 +53,10 @@ test("preflight allows only the configured frontend", async () => {
     env,
   );
   assert.equal(response.status, 204);
+  assert.match(
+    response.headers.get("Access-Control-Expose-Headers") || "",
+    /x-supabase-api-version/,
+  );
   assert.equal(
     response.headers.get("Access-Control-Allow-Origin"),
     env.FRONTEND_ORIGIN,

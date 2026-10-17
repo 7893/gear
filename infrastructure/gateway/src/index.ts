@@ -59,7 +59,7 @@ function responseHeaders(origin: string | null, env: Env): Headers {
     headers.set("Access-Control-Allow-Headers", REQUEST_HEADERS.join(", "));
     headers.set(
       "Access-Control-Expose-Headers",
-      "content-range, range, etag, location, x-total-count",
+      "content-range, range, etag, location, x-total-count, x-supabase-api-version",
     );
     headers.set("Access-Control-Max-Age", "600");
   }

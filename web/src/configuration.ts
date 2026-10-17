@@ -2,6 +2,7 @@ export type RuntimeConfig = {
   apiUrl: string;
   publishableKey: string;
   accountsEnabled: boolean;
+  recoveryEnabled: boolean;
 };
 
 export async function configuration(): Promise<RuntimeConfig> {
@@ -32,5 +33,6 @@ export async function configuration(): Promise<RuntimeConfig> {
     apiUrl: url.origin,
     publishableKey: value.publishableKey,
     accountsEnabled: value.accountsEnabled === true,
+    recoveryEnabled: value.recoveryEnabled === true,
   };
 }

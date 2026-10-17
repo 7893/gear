@@ -156,6 +156,7 @@ def deploy(env):
         'publishableKey': env['SUPABASE_PUBLISHABLE_KEY'],
         'release': env['GITHUB_SHA'],
         'accountsEnabled': env.get('GEAR_ACCOUNTS_ENABLED') == 'true',
+        'recoveryEnabled': env.get('GEAR_RECOVERY_ENABLED') == 'true',
     }) + '\n')
     files = public_files(dist)
     # Verify AWS trust before making any publication changes.

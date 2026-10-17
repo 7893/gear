@@ -125,6 +125,18 @@ def main():
         migration = ROOT / 'database/migrations/202610170002_accounts.sql'
         db.run(migration.read_text())
         db.run(migration.read_text(), fail='already exists')
+        recovery = ROOT / 'database/migrations/202610180003_recovery.sql'
+        db.run(recovery.read_text())
+        db.run(recovery.read_text(), fail='already exists')
+        for name in ['admin', 'operator', 'viewer', 'pending', 'other', 'disabled', 'unverified']:
+            expected = 't' if name in ['admin', 'operator', 'viewer'] else 'f'
+            assert db.run(f"SET ROLE service_role; SELECT gear.can_recover_password('{IDS[name]}')") == expected
+            db.as_user(name, f"SELECT gear.can_recover_password('{IDS[name]}')", fail='permission denied')
+        db.run(f"SET ROLE anon; SELECT gear.can_recover_password('{IDS['admin']}')", fail='permission denied')
+        db.run('SET ROLE service_role; SELECT * FROM gear.members', fail='permission denied')
+        assert db.run('SELECT count(*) FROM gear.events') == '0'
+        assert db.run('SELECT count(*) FROM gear.notification_outbox') == '0'
+        print('PASS server-only recovery eligibility excludes pending, disabled and unverified identities')
         application_and_permissions(db)
         print('PASS application, review, idempotence and immediate permissions')
         last_admin_race(db)

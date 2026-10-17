@@ -9,9 +9,16 @@ export type MailEnvironment = Record<
   | "GEAR_GMAIL_REFRESH_TOKEN"
   | "GEAR_MAIL_FROM",
   string
->;
+> &
+  Partial<
+    Record<
+      "GEAR_AUTH_APP_URL" | "SUPABASE_URL" | "SUPABASE_SERVICE_ROLE_KEY",
+      string
+    >
+  >;
 type Payload = {
   user: {
+    id?: string;
     email: string;
     new_email?: string;
     user_metadata?: { gear_application_name?: unknown };
@@ -56,7 +63,27 @@ function address(value: unknown): string {
   return value;
 }
 
-export function renderEmails(payload: Payload, publicUrl: string): Mail[] {
+function isGearRecovery(payload: Payload, appUrl?: string): boolean {
+  if (payload.email_data?.email_action_type !== "recovery" || !appUrl)
+    return false;
+  const origin = new URL(appUrl);
+  if (
+    origin.protocol !== "https:" ||
+    origin.username ||
+    origin.password ||
+    origin.pathname !== "/" ||
+    origin.search ||
+    origin.hash
+  )
+    throw new Error("invalid_app_origin");
+  return payload.email_data.redirect_to === origin.origin + "/";
+}
+
+export function renderEmails(
+  payload: Payload,
+  publicUrl: string,
+  appUrl?: string,
+): Mail[] {
   const data = payload.email_data;
   const action = data?.email_action_type;
   const to = address(payload.user?.email);
@@ -75,14 +102,15 @@ export function renderEmails(payload: Payload, publicUrl: string): Mail[] {
   const gearSignup =
     action === "signup" &&
     typeof payload.user.user_metadata?.gear_application_name === "string";
+  const gearRecovery = isGearRecovery(payload, appUrl);
   const make = (recipient: string, token?: string, hash?: string): Mail => {
     if (token !== undefined && !/^[0-9]{6,10}$/.test(token))
       throw new Error("invalid_token");
-    if (gearSignup) {
+    if (gearSignup || gearRecovery) {
       if (!token || !/^[0-9]{6}$/.test(token)) throw new Error("invalid_token");
       return {
         to: address(recipient),
-        ...renderGearCodeEmail("signup", token),
+        ...renderGearCodeEmail(gearRecovery ? "recovery" : "signup", token),
       };
     }
     const lines = [
@@ -195,7 +223,16 @@ export function createHandler(
         { status, headers: { "Cache-Control": "no-store" } },
       );
     if (request.method !== "POST") return response(405, "method_not_allowed");
-    if (Object.values(env).some((value) => !value))
+    if (
+      [
+        env.GEAR_AUTH_WEBHOOK_SECRET,
+        env.GEAR_AUTH_PUBLIC_URL,
+        env.GEAR_GMAIL_CLIENT_ID,
+        env.GEAR_GMAIL_CLIENT_SECRET,
+        env.GEAR_GMAIL_REFRESH_TOKEN,
+        env.GEAR_MAIL_FROM,
+      ].some((value) => !value)
+    )
       return response(503, "mail_not_configured");
     const reader = request.body?.getReader();
     const chunks: Uint8Array[] = [];
@@ -238,8 +275,14 @@ export function createHandler(
       return response(401, "invalid_webhook");
     }
     let messages: Mail[];
+    let gearRecovery = false;
     try {
-      messages = renderEmails(payload, env.GEAR_AUTH_PUBLIC_URL);
+      gearRecovery = isGearRecovery(payload, env.GEAR_AUTH_APP_URL);
+      messages = renderEmails(
+        payload,
+        env.GEAR_AUTH_PUBLIC_URL,
+        env.GEAR_AUTH_APP_URL,
+      );
       address(env.GEAR_MAIL_FROM);
     } catch {
       return response(400, "invalid_mail_request");
@@ -247,6 +290,45 @@ export function createHandler(
     // One deadline across OAuth and delivery. No local retry after an uncertain send.
     const signal = AbortSignal.timeout(4500);
     try {
+      if (gearRecovery) {
+        if (
+          !env.SUPABASE_URL ||
+          !env.SUPABASE_SERVICE_ROLE_KEY ||
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+            payload.user.id || "",
+          )
+        )
+          throw new Error("recovery_not_configured");
+        const origin = new URL(env.SUPABASE_URL);
+        if (
+          origin.protocol !== "https:" ||
+          origin.username ||
+          origin.password ||
+          origin.pathname !== "/" ||
+          origin.search ||
+          origin.hash
+        )
+          throw new Error("invalid_backend_origin");
+        const eligibility = await fetcher(
+          new URL("/rest/v1/rpc/can_recover_password", origin),
+          {
+            method: "POST",
+            redirect: "error",
+            signal,
+            headers: {
+              apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+              Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY,
+              "Content-Type": "application/json",
+              "Content-Profile": "gear",
+            },
+            body: JSON.stringify({ identity_id: payload.user.id }),
+          },
+        );
+        if (!eligibility.ok) throw new Error("eligibility_failed");
+        const allowed = await eligibility.json();
+        if (allowed === false) return response(200);
+        if (allowed !== true) throw new Error("invalid_eligibility_result");
+      }
       if (!cachedToken || cachedToken.expires <= Date.now()) {
         const result = await fetcher("https://oauth2.googleapis.com/token", {
           method: "POST",

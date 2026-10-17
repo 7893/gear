@@ -146,6 +146,11 @@ async function resend() {
       </button>
     </form>
     <div class="links">
+      <RouterLink
+        v-if="mode === 'login' && account.recoveryEnabled"
+        to="/recover"
+        >忘记密码</RouterLink
+      >
       <RouterLink v-if="mode !== 'login'" to="/login"
         >已有账号，去登录</RouterLink
       ><RouterLink v-if="mode === 'login'" to="/register">申请使用</RouterLink>

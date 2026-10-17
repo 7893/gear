@@ -388,3 +388,103 @@ test("unknown actions and uncertain delivery never trigger a local resend or lea
     /provider diagnostic|example-secret/,
   );
 });
+
+test("Gear recovery uses a six-digit template only for its configured callback", () => {
+  const recovery = {
+    ...payload,
+    user: {
+      ...payload.user,
+      id: "00000000-0000-4000-8000-000000000001",
+      user_metadata: { gear_application_name: "Example" },
+    },
+    email_data: { ...payload.email_data, email_action_type: "recovery" },
+  };
+  const [mail] = renderEmails(
+    recovery,
+    env.GEAR_AUTH_PUBLIC_URL,
+    "https://app.example.invalid/",
+  );
+  assert.match(mail.subject, /找回登录密码/);
+  assert.match(mail.text, /验证码：123456/);
+  assert.doesNotMatch(mail.text, /https?:|a{64}/);
+  const [other] = renderEmails(
+    {
+      ...recovery,
+      email_data: {
+        ...recovery.email_data,
+        redirect_to: "https://other.example.invalid/",
+      },
+    },
+    env.GEAR_AUTH_PUBLIC_URL,
+    "https://app.example.invalid/",
+  );
+  assert.match(other.text, /验证链接/);
+});
+
+test("recovery checks server-only eligibility before Google and hides ineligible accounts", async () => {
+  const configured: MailEnvironment = {
+    ...env,
+    GEAR_AUTH_APP_URL: "https://app.example.invalid/",
+    SUPABASE_URL: "https://backend.example.invalid",
+    SUPABASE_SERVICE_ROLE_KEY: "example-service-key",
+  };
+  const recovery = {
+    ...payload,
+    user: { ...payload.user, id: "00000000-0000-4000-8000-000000000001" },
+    email_data: { ...payload.email_data, email_action_type: "recovery" },
+  };
+  for (const allowed of [false, true]) {
+    const hosts: string[] = [];
+    const handler = createHandler(configured, async (input, init) => {
+      const url = new URL(String(input));
+      hosts.push(url.hostname);
+      if (url.hostname === "backend.example.invalid") {
+        assert.equal(url.pathname, "/rest/v1/rpc/can_recover_password");
+        assert.equal(
+          new Headers(init?.headers).get("Authorization"),
+          "Bearer example-service-key",
+        );
+        assert.deepEqual(JSON.parse(String(init?.body)), {
+          identity_id: recovery.user.id,
+        });
+        assert.equal(init?.redirect, "error");
+        return Response.json(allowed);
+      }
+      if (url.hostname === "oauth2.googleapis.com")
+        return Response.json({ access_token: "example-access" });
+      assert.equal(url.hostname, "gmail.googleapis.com");
+      assert.equal(
+        new Headers(init?.headers).get("Authorization"),
+        "Bearer example-access",
+      );
+      const raw = Buffer.from(
+        JSON.parse(String(init?.body)).raw,
+        "base64url",
+      ).toString();
+      const body = Buffer.from(raw.split("\r\n\r\n")[1], "base64").toString();
+      assert.match(body, /找回登录密码/);
+      assert.doesNotMatch(body, /https?:|example-service-key/);
+      return Response.json({ id: "example-submission" });
+    });
+    assert.equal((await handler(signed(recovery))).status, 200);
+    assert.deepEqual(
+      hosts,
+      allowed
+        ? [
+            "backend.example.invalid",
+            "oauth2.googleapis.com",
+            "gmail.googleapis.com",
+          ]
+        : ["backend.example.invalid"],
+    );
+  }
+  const failed = createHandler(configured, async () =>
+    Response.json(
+      { message: "example-service-key diagnostic" },
+      { status: 503 },
+    ),
+  );
+  const response = await failed(signed(recovery));
+  assert.equal(response.status, 503);
+  assert.doesNotMatch(await response.text(), /example-service-key|diagnostic/);
+});

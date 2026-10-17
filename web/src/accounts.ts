@@ -24,6 +24,7 @@ export type Member = Membership & {
 };
 export const account = reactive({
   enabled: false,
+  recoveryEnabled: false,
   initializing: true,
   loading: false,
   signedIn: false,
@@ -56,6 +57,11 @@ const messages: Record<string, string> = {
   invalid_transition: "当前状态不能执行此操作，请刷新后重试。",
   reason_required: "请填写处理原因。",
   invalid_verification_code: "请输入六位纯数字验证码。",
+  recovery_unavailable: "暂时无法完成密码找回，请稍后重试或联系管理员。",
+  recovery_required: "请重新申请并验证找回密码验证码。",
+  invalid_new_password: "新密码长度应为 12 至 128 个字符。",
+  password_mismatch: "两次输入的新密码不一致。",
+  shared_password_confirmation_required: "请先确认共享账号密码变更的影响。",
 };
 export function safeError(error: unknown): string {
   const message =
@@ -72,6 +78,8 @@ export function safeError(error: unknown): string {
   if (["otp_expired", "otp_disabled"].includes(code))
     return "验证码已失效，请重新发送。";
   if (code === "email_not_confirmed") return "请先验证邮箱，再登录。";
+  if (code === "same_password") return "新密码需要与原密码不同。";
+  if (code === "weak_password") return "新密码不符合要求，请使用更强的密码。";
   return "操作未完成，请稍后重试；若问题持续，请联系管理员。";
 }
 function service(): ReturnType<typeof makeClient> {
@@ -139,6 +147,7 @@ export async function initializeAccounts(): Promise<void> {
   try {
     const config = await configuration();
     account.enabled = config.accountsEnabled;
+    account.recoveryEnabled = config.recoveryEnabled;
     if (!account.enabled) return;
     client = makeClient(config.apiUrl, config.publishableKey);
     if (code) {

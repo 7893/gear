@@ -46,11 +46,14 @@ function session() {
   };
 }
 
-async function fixture(page: Page, enabled = true) {
+async function fixture(page: Page, enabled = true, recoveryEnabled = false) {
   let membership: Membership | null = null;
   let profileFailure = false;
   let registeredName: string | undefined;
   let listReads = 0;
+  let verificationFailure = false;
+  const verificationBodies: Record<string, unknown>[] = [];
+  const passwordUpdates: Record<string, unknown>[] = [];
   const actions: Record<string, unknown>[] = [];
   const authPaths: string[] = [];
   const members = [
@@ -62,6 +65,7 @@ async function fixture(page: Page, enabled = true) {
         apiUrl: api,
         publishableKey: "sb_publishable_example",
         accountsEnabled: enabled,
+        recoveryEnabled,
       },
     }),
   );
@@ -71,10 +75,31 @@ async function fixture(page: Page, enabled = true) {
     const path = url.pathname;
     if (path.startsWith("/auth/")) authPaths.push(path);
     if (path === "/auth/v1/token" || path === "/auth/v1/verify") {
+      if (path === "/auth/v1/verify") {
+        verificationBodies.push(request.postDataJSON());
+        if (verificationFailure)
+          return route.fulfill({
+            status: 403,
+            headers: {
+              "x-supabase-api-version": "2024-01-01",
+              "Access-Control-Expose-Headers": "x-supabase-api-version",
+            },
+            json: {
+              code: "otp_expired",
+              message: "private verification diagnostic",
+            },
+          });
+      }
       const value = session();
       if (registeredName)
         value.user.user_metadata = { gear_application_name: registeredName };
       return route.fulfill({ json: value });
+    }
+    if (path === "/auth/v1/recover") return route.fulfill({ json: {} });
+    if (path === "/auth/v1/user") {
+      if (request.method() === "PUT")
+        passwordUpdates.push(request.postDataJSON());
+      return route.fulfill({ json: { user: session().user } });
     }
     if (path === "/auth/v1/signup") {
       registeredName = request.postDataJSON().data.gear_application_name;
@@ -130,6 +155,11 @@ async function fixture(page: Page, enabled = true) {
     actions,
     authPaths,
     listReads: () => listReads,
+    verificationBodies,
+    passwordUpdates,
+    failVerification: () => {
+      verificationFailure = true;
+    },
   };
 }
 
@@ -314,4 +344,123 @@ test("callback codes are removed from the address before rendering", async ({
     page.getByRole("heading", { name: "我的账号", exact: true }),
   ).toBeVisible();
   expect(page.url()).not.toContain("example-sensitive-code");
+});
+
+test("recovery remains closed without its separate release flag", async ({
+  page,
+}) => {
+  const state = await fixture(page);
+  await page.goto("/#/login");
+  await expect(page.getByRole("link", { name: "忘记密码" })).toHaveCount(0);
+  await page.goto("/#/recover");
+  await expect(
+    page.getByRole("button", { name: "发送找回验证码" }),
+  ).toBeDisabled();
+  expect(state.authPaths).toEqual([]);
+});
+
+test("recovery verifies six digits before changing only the password and returning to login", async ({
+  page,
+}) => {
+  const state = await fixture(page, true, true);
+  state.setMembership({ ...pending, status: "active", role: "viewer" });
+  await page.goto("/#/login");
+  await page.getByRole("link", { name: "忘记密码" }).click();
+  await page.getByLabel("注册邮箱").fill(email);
+  const requested = page.waitForRequest(
+    (request) => new URL(request.url()).pathname === "/auth/v1/recover",
+  );
+  await page.getByRole("button", { name: "发送找回验证码" }).click();
+  expect(new URL((await requested).url()).searchParams.get("redirect_to")).toBe(
+    new URL("/", page.url()).toString(),
+  );
+  await expect(page.getByRole("status")).toContainText(
+    "若该邮箱对应已验证、已启用",
+  );
+  await expect(page.getByLabel("新密码", { exact: true })).toHaveCount(0);
+  await page.getByLabel("验证码", { exact: true }).fill("000042");
+  await page.getByRole("button", { name: "验证找回验证码" }).click();
+  await expect(page.getByLabel("新密码", { exact: true })).toBeVisible();
+  expect(state.verificationBodies[0]).toMatchObject({
+    email,
+    token: "000042",
+    type: "recovery",
+  });
+  expect(
+    await page.evaluate(() =>
+      Object.keys(localStorage).filter((key) =>
+        key.startsWith("gear.recovery"),
+      ),
+    ),
+  ).toEqual([]);
+  await page.evaluate(() => localStorage.setItem("unrelated.auth", "keep"));
+  const newPassword = examplePassword + "-new";
+  await page.getByLabel("新密码", { exact: true }).fill(newPassword);
+  await page.getByLabel("再次输入新密码", { exact: true }).fill(newPassword);
+  await page.getByRole("button", { name: "设置新密码" }).click();
+  expect(state.passwordUpdates).toEqual([]);
+  await page.getByRole("checkbox").check();
+  await page
+    .getByLabel("再次输入新密码", { exact: true })
+    .fill(newPassword + "-different");
+  await page.getByRole("button", { name: "设置新密码" }).click();
+  await expect(page.getByRole("alert")).toContainText("两次输入的新密码不一致");
+  expect(state.passwordUpdates).toEqual([]);
+  await page.getByLabel("新密码", { exact: true }).fill(newPassword);
+  await page.getByLabel("再次输入新密码", { exact: true }).fill(newPassword);
+  await page.getByRole("button", { name: "设置新密码" }).click();
+  await expect(page.getByRole("status")).toContainText("密码已更新");
+  expect(state.passwordUpdates).toEqual([
+    {
+      password: newPassword,
+      code_challenge: null,
+      code_challenge_method: null,
+    },
+  ]);
+  expect(state.actions).toEqual([]);
+  expect(
+    await page.evaluate(() => localStorage.getItem("unrelated.auth")),
+  ).toBe("keep");
+  expect(
+    await page.evaluate(() => localStorage.getItem("gear.auth.v1")),
+  ).toBeNull();
+  await page.getByRole("link", { name: "返回登录", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "登录设备簿" })).toBeVisible();
+});
+
+test("wrong recovery codes cannot reach password changes", async ({ page }) => {
+  const state = await fixture(page, true, true);
+  state.failVerification();
+  await page.goto("/#/recover");
+  await page.getByLabel("注册邮箱").fill(email);
+  await page.getByRole("button", { name: "发送找回验证码" }).click();
+  await page.getByLabel("验证码", { exact: true }).fill("123456");
+  await page.getByRole("button", { name: "验证找回验证码" }).click();
+  await expect(page.getByRole("alert")).toContainText("验证码已失效");
+  await expect(page.getByLabel("新密码", { exact: true })).toHaveCount(0);
+  expect(state.passwordUpdates).toEqual([]);
+});
+
+test("membership is checked again if disabled after the recovery code was verified", async ({
+  page,
+}) => {
+  const state = await fixture(page, true, true);
+  state.setMembership({ ...pending, status: "active", role: "viewer" });
+  await page.goto("/#/recover");
+  await page.getByLabel("注册邮箱").fill(email);
+  await page.getByRole("button", { name: "发送找回验证码" }).click();
+  await page.getByLabel("验证码", { exact: true }).fill("123456");
+  await page.getByRole("button", { name: "验证找回验证码" }).click();
+  await expect(page.getByLabel("新密码", { exact: true })).toBeVisible();
+  state.setMembership({ ...pending, status: "disabled", role: null });
+  await page
+    .getByLabel("新密码", { exact: true })
+    .fill(examplePassword + "-new");
+  await page
+    .getByLabel("再次输入新密码", { exact: true })
+    .fill(examplePassword + "-new");
+  await page.getByRole("checkbox").check();
+  await page.getByRole("button", { name: "设置新密码" }).click();
+  await expect(page.getByRole("alert")).toContainText("暂时无法完成密码找回");
+  expect(state.passwordUpdates).toEqual([]);
 });
