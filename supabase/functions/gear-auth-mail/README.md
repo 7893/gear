@@ -33,3 +33,7 @@ OAuth 与提交邮件共用 4.5 秒请求期限；实例内短暂缓存访问令
 本次启用已获单独授权；未来更改共享发信配置仍需相应授权。函数不随网站 CD 发布，现有 CI 不持有 Gmail 凭据。实施差异见[账号接入记录](../../../docs/account-implementation.md)。
 
 参考：[Supabase Send Email Hook](https://supabase.com/docs/guides/auth/auth-hooks/send-email-hook)、[Gmail API messages.send](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/send)。
+
+## 统一模板
+
+[templates.ts](templates.ts)集中提供设备簿六位验证码与业务通知内容，具体用途和上线边界见[邮件模板与操作规则](../../../docs/email-templates.md)。设备簿注册邮件本地已调用此模块；找回与普通通知只准备了模板，对应页面、发送消费及调度尚未接入。其他应用继续使用原通用模板，不能仅根据共享用户曾申请设备簿就改写其在其他应用的找回邮件。

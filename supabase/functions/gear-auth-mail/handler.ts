@@ -1,4 +1,5 @@
 import { Webhook } from "standardwebhooks";
+import { renderGearCodeEmail } from "./templates.ts";
 
 export type MailEnvironment = Record<
   | "GEAR_AUTH_WEBHOOK_SECRET"
@@ -81,16 +82,7 @@ export function renderEmails(payload: Payload, publicUrl: string): Mail[] {
       if (!token || !/^[0-9]{6}$/.test(token)) throw new Error("invalid_token");
       return {
         to: address(recipient),
-        subject: titles[action],
-        text: [
-          titles[action],
-          "",
-          `验证码：${token}`,
-          "",
-          "请返回设备簿，在验证邮箱页面输入这六位数字。",
-          "验证码仅可使用一次；如已失效，请在验证页面重新发送。",
-          "请勿向他人提供验证码。如果不是您本人注册，请忽略此邮件。",
-        ].join("\n"),
+        ...renderGearCodeEmail("signup", token),
       };
     }
     const lines = [

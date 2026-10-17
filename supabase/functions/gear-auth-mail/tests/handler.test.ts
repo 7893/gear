@@ -6,6 +6,7 @@ import {
   renderEmails,
   type MailEnvironment,
 } from "../handler.ts";
+import { renderGearCodeEmail, renderGearNotification } from "../templates.ts";
 
 const secret = Buffer.from("fictional webhook test material only").toString(
   "base64",
@@ -196,6 +197,57 @@ test("Gear signup sends only a six-digit code and rejects other code formats", a
     renderEmails(payload, env.GEAR_AUTH_PUBLIC_URL)[0].text,
     /https:\/\//,
   );
+});
+
+test("recovery code templates cannot turn codes into links or passwords", () => {
+  for (const purpose of ["signup", "recovery", "reauthentication"] as const) {
+    const mail = renderGearCodeEmail(purpose, "000042");
+    assert.match(mail.text, /验证码：000042/);
+    assert.doesNotMatch(mail.text, /https?:|验证链接|新密码：|旧密码：/);
+    for (const invalid of ["12345", "1234567", "１２３４５６", "123\n45"])
+      assert.throws(
+        () => renderGearCodeEmail(purpose, invalid),
+        /invalid_token/,
+      );
+  }
+  assert.notEqual(
+    renderGearCodeEmail("recovery", "000042").subject,
+    renderGearCodeEmail("signup", "000042").subject,
+  );
+});
+
+test("notification links use only the configured HTTPS origin and reject empty due summaries", () => {
+  const pending = renderGearNotification(
+    { kind: "application_pending", applicantName: "Example applicant" },
+    "https://app.example.invalid",
+  );
+  const links = pending.text.match(/https:\/\/\S+/g) || [];
+  assert.deepEqual(links, ["https://app.example.invalid/#/members"]);
+  for (const origin of [
+    "http://app.example.invalid",
+    "https://person:secret@app.example.invalid",
+    "https://app.example.invalid/?token=example",
+    "https://app.example.invalid/unexpected",
+  ])
+    assert.throws(
+      () => renderGearNotification({ kind: "application_rejected" }, origin),
+      /invalid_app_origin/,
+    );
+  for (const overdue of [-1, 0, 1.5, Number.NaN])
+    assert.throws(
+      () =>
+        renderGearNotification(
+          {
+            kind: "daily_due",
+            businessDate: "2030-01-01",
+            dueSoon: 0,
+            dueToday: 0,
+            overdue,
+          },
+          "https://app.example.invalid",
+        ),
+      /invalid_due_summary/,
+    );
 });
 
 test("supports the shared project's normal Auth actions and security notifications", () => {
