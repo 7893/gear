@@ -158,6 +158,46 @@ test("secure email change pairs each recipient with the correct Supabase hash", 
   );
 });
 
+test("Gear signup sends only a six-digit code and rejects other code formats", async () => {
+  const signup = {
+    ...payload,
+    user: {
+      ...payload.user,
+      user_metadata: { gear_application_name: "Example applicant" },
+    },
+    email_data: { ...payload.email_data, token: "000042" },
+  };
+  const [mail] = renderEmails(signup, env.GEAR_AUTH_PUBLIC_URL);
+  assert.match(mail.text, /验证码：000042/);
+  assert.doesNotMatch(mail.text, /https?:|验证链接|a{64}/);
+  let calls = 0;
+  const handler = createHandler(env, async () => {
+    calls++;
+    return Response.json({});
+  });
+  for (const token of [
+    undefined,
+    "12345",
+    "1234567",
+    "12345678",
+    "12a456",
+    "１２３４５６",
+  ]) {
+    const invalid = { ...signup, email_data: { ...signup.email_data, token } };
+    assert.throws(
+      () => renderEmails(invalid, env.GEAR_AUTH_PUBLIC_URL),
+      /invalid_token/,
+    );
+    assert.equal((await handler(signed(invalid))).status, 400);
+  }
+  assert.equal(calls, 0);
+  // Other applications retain their existing verification links.
+  assert.match(
+    renderEmails(payload, env.GEAR_AUTH_PUBLIC_URL)[0].text,
+    /https:\/\//,
+  );
+});
+
 test("supports the shared project's normal Auth actions and security notifications", () => {
   for (const action of [
     "signup",

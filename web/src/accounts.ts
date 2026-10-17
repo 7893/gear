@@ -55,6 +55,7 @@ const messages: Record<string, string> = {
   request_conflict: "本次请求与此前操作不同，请刷新后重试。",
   invalid_transition: "当前状态不能执行此操作，请刷新后重试。",
   reason_required: "请填写处理原因。",
+  invalid_verification_code: "请输入六位纯数字验证码。",
 };
 export function safeError(error: unknown): string {
   const message =
@@ -187,6 +188,8 @@ export async function register(
     throw error;
 }
 export async function verifyEmail(email: string, token: string): Promise<void> {
+  if (!/^[0-9]{6}$/.test(token.trim()))
+    throw new Error("invalid_verification_code");
   const { error } = await service().auth.verifyOtp({
     email: email.trim(),
     token: token.trim(),

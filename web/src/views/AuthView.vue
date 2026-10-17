@@ -44,8 +44,9 @@ async function submit() {
       await router.push("/");
     } else if (props.mode === "register") {
       await register(displayName.value, email.value, password.value);
+      await router.push("/verify");
       notice.value =
-        "若该邮箱可以注册，验证邮件将发送至邮箱；已有账号请直接登录。";
+        "若该邮箱可以注册，将收到六位纯数字验证码，请在此输入；已有账号请直接登录。";
     } else {
       await verifyEmail(email.value, token.value);
       await router.push("/");
@@ -83,7 +84,7 @@ async function resend() {
       验证邮箱后提交使用申请，经管理员审核后开放设备信息。
     </p>
     <p v-else-if="mode === 'verify'" class="muted">
-      输入注册邮箱和邮件中的验证码，也可使用邮件中的验证链接。
+      输入注册邮箱和邮件中的六位纯数字验证码。
     </p>
     <form @submit.prevent="submit">
       <label v-if="mode === 'register'"
@@ -127,7 +128,8 @@ async function resend() {
           autocomplete="one-time-code"
           required
           minlength="6"
-          maxlength="10"
+          maxlength="6"
+          pattern="[0-9]{6}"
       /></label>
       <p v-if="notice" class="notice" role="status">{{ notice }}</p>
       <p v-if="error" class="notice error" role="alert">{{ error }}</p>

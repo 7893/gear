@@ -171,9 +171,11 @@ test("register, verify and explicitly apply without assigning a role", async ({
   const body = (await sent).postDataJSON() as Record<string, unknown>;
   expect(body.data).toEqual({ gear_application_name: "Example applicant" });
   await expect(page.getByRole("status")).toContainText("若该邮箱可以注册");
-  await expect(page.getByLabel("密码", { exact: true })).toHaveValue("");
-  await page.getByRole("link", { name: "验证邮箱", exact: true }).click();
-  await page.getByLabel("邮箱", { exact: true }).fill(email);
+  await expect(
+    page.getByRole("heading", { name: "验证邮箱", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("密码", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("邮箱", { exact: true })).toHaveValue(email);
   await page.getByLabel("验证码", { exact: true }).fill("123456");
   await page.getByRole("button", { name: "验证邮箱", exact: true }).click();
   await expect(
@@ -188,6 +190,42 @@ test("register, verify and explicitly apply without assigning a role", async ({
   await expect(
     page.getByRole("link", { name: "登录", exact: true }),
   ).toBeVisible();
+});
+
+test("verification requires exactly six ASCII digits and preserves leading zeroes", async ({
+  page,
+}) => {
+  const state = await fixture(page);
+  await page.goto("/#/verify");
+  await page.getByLabel("邮箱", { exact: true }).fill(email);
+  const input = page.getByLabel("验证码", { exact: true });
+  await expect(input).toHaveAttribute("maxlength", "6");
+  for (const code of ["12345", "1234567", "12a456", "１２３４５６"]) {
+    await input.evaluate((element, value) => {
+      const field = element as HTMLInputElement;
+      field.value = value;
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    }, code);
+    expect(
+      await input.evaluate((element) =>
+        (element as HTMLInputElement).checkValidity(),
+      ),
+    ).toBe(false);
+    await page.getByRole("button", { name: "验证邮箱", exact: true }).click();
+  }
+  expect(state.authPaths.filter((path) => path === "/auth/v1/verify")).toEqual(
+    [],
+  );
+  await input.fill("000042");
+  const verified = page.waitForRequest(
+    (request) => new URL(request.url()).pathname === "/auth/v1/verify",
+  );
+  await page.getByRole("button", { name: "验证邮箱", exact: true }).click();
+  expect((await verified).postDataJSON()).toMatchObject({
+    email,
+    token: "000042",
+    type: "signup",
+  });
 });
 
 test("an existing shared identity explicitly applies before membership is created", async ({

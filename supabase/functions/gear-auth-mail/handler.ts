@@ -10,7 +10,11 @@ export type MailEnvironment = Record<
   string
 >;
 type Payload = {
-  user: { email: string; new_email?: string };
+  user: {
+    email: string;
+    new_email?: string;
+    user_metadata?: { gear_application_name?: unknown };
+  };
   email_data: {
     email_action_type: string;
     token?: string;
@@ -67,9 +71,28 @@ export function renderEmails(payload: Payload, publicUrl: string): Mail[] {
       },
     ];
   if (!titles[action]) throw new Error("unsupported_action");
+  const gearSignup =
+    action === "signup" &&
+    typeof payload.user.user_metadata?.gear_application_name === "string";
   const make = (recipient: string, token?: string, hash?: string): Mail => {
     if (token !== undefined && !/^[0-9]{6,10}$/.test(token))
       throw new Error("invalid_token");
+    if (gearSignup) {
+      if (!token || !/^[0-9]{6}$/.test(token)) throw new Error("invalid_token");
+      return {
+        to: address(recipient),
+        subject: titles[action],
+        text: [
+          titles[action],
+          "",
+          `验证码：${token}`,
+          "",
+          "请返回设备簿，在验证邮箱页面输入这六位数字。",
+          "验证码仅可使用一次；如已失效，请在验证页面重新发送。",
+          "请勿向他人提供验证码。如果不是您本人注册，请忽略此邮件。",
+        ].join("\n"),
+      };
+    }
     const lines = [
       titles[action],
       "",
