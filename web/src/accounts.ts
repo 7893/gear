@@ -108,6 +108,11 @@ const messages: Record<string, string> = {
     "已有设备使用相同旧编号，请核对是否为不同实物，再确认继续登记。",
   asset_not_found: "未找到该设备，请返回台账核对。",
   flows_unavailable: "流转办理与单据尚未开放。",
+  invalid_due_filter: "请选择有效的到期情况。",
+  invalid_extension: "请填写延期原因，长度不超过两千字。",
+  invalid_extension_date: "新期限须晚于原期限，且不能早于东八区今天。",
+  assignment_not_temporary: "设备已不属于当前临时领用，请重新读取设备情况。",
+  assignment_conflict: "设备或期限已变化，请刷新设备情况后重新核对延期。",
   invalid_document: "单据资料不符合要求，请核对字段与明细数量。",
   invalid_document_item: "请核对设备明细、实际状况；故障设备须填写说明。",
   invalid_document_date: "交接日期不能晚于今天，也不能早于设备最近一次流转。",
@@ -340,6 +345,8 @@ export async function inventoryRpc(
     | "list_parties"
     | "create_party"
     | "initialize_asset"
+    | "list_due_assets"
+    | "extend_assignment"
     | "list_documents"
     | "get_document"
     | "save_document"

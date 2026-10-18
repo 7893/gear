@@ -14,10 +14,16 @@ import {
   type AssetDetails,
 } from "../inventory";
 import InventoryGate from "../components/InventoryGate.vue";
+import ExtensionForm from "../components/ExtensionForm.vue";
 const route = useRoute();
 const data = ref<AssetDetails | null>(null);
 const error = ref("");
 const loading = ref(false);
+const message = ref("");
+function extended() {
+  message.value = "延期已记录，原分发单和签字件保留。";
+  void load();
+}
 let generation = 0;
 async function load() {
   const current = ++generation;
@@ -42,6 +48,7 @@ watch(
     () => route.params.id,
   ],
   () => {
+    message.value = "";
     if (inventoryAccess.value) void load();
     else {
       generation++;
@@ -58,6 +65,10 @@ onBeforeUnmount(() => generation++);
   <section v-if="inventoryAccess" class="card">
     <RouterLink to="/assets">返回设备台账</RouterLink>
     <h1 class="refresh">设备详情</h1>
+    <button type="button" class="quiet" :disabled="loading" @click="load">
+      刷新设备情况
+    </button>
+    <p v-if="message" class="notice" role="status">{{ message }}</p>
     <p v-if="loading" role="status">正在读取设备…</p>
     <div v-if="error" class="notice error" role="alert">
       <p>{{ error }}</p>
@@ -136,6 +147,11 @@ onBeforeUnmount(() => generation++);
           <dd class="preserve-text">{{ data.asset.note || "未填写" }}</dd>
         </div>
       </dl>
+      <ExtensionForm
+        :key="data.asset.id + ':' + data.asset.version"
+        :asset="data.asset"
+        @updated="extended"
+      />
       <h3>历史记录</h3>
       <ol v-if="data.history.length" class="asset-history">
         <li v-for="event in data.history" :key="event.id">
@@ -144,7 +160,9 @@ onBeforeUnmount(() => generation++);
               ? "登记已有设备"
               : event.event_type === "document_confirmed"
                 ? "交接确认"
-                : "设备变更记录"
+                : event.event_type === "assignment_extended"
+                  ? "临时使用延期"
+                  : "设备变更记录"
           }}</strong>
           <p>
             历史日期：{{ event.occurred_on || "未知，未补造日期" }}；记录于
@@ -158,6 +176,11 @@ onBeforeUnmount(() => generation++);
             }}
           </p>
           <p v-if="event.reason">说明：{{ event.reason }}</p>
+          <p v-if="event.event_type === 'assignment_extended'">
+            原期限：{{ event.after_data.previous_due_on }}；新期限：{{
+              event.after_data.due_on
+            }}
+          </p>
           <RouterLink
             v-if="event.after_data.document_id && account.flowsEnabled"
             :to="'/documents/' + event.after_data.document_id"

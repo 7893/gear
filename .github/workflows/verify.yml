@@ -108,6 +108,7 @@ jobs:
           python3 database/tests/check_inventory.py
           python3 database/tests/check_demo_inventory.py
           python3 database/tests/check_flows.py
+          python3 database/tests/check_temporary_use.py
           python3 database/tests/check_evidence.py
           python3 database/tests/check_schema_year.py
         env:

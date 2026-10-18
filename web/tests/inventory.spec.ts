@@ -9,6 +9,7 @@ const assetId = "00000000-0000-4000-8000-000000000031";
 const newAssetId = "00000000-0000-4000-8000-000000000032";
 const base: Asset = {
   id: assetId,
+  version: 1,
   asset_code: "SB-000001",
   legacy_code: "00001-A",
   serial_number: null,
@@ -70,6 +71,9 @@ async function fixture(
     },
   ];
   const saved = new Map<string, Asset>();
+  const extensions = new Map<string, Asset>();
+  const history: Record<string, unknown[]> = {};
+  let extensionConflict = false;
   const user = {
     id: identity,
     email: "operator@example.invalid",
@@ -226,6 +230,7 @@ async function fixture(
             json: {
               asset,
               history: [
+                ...(history[asset.id] || []),
                 {
                   id: "1",
                   event_type: "asset_initialized",
@@ -240,12 +245,88 @@ async function fixture(
           })
         : route.fulfill({ status: 400, json: { message: "asset_not_found" } });
     }
+    if (name === "extend_assignment") {
+      if (extensionConflict)
+        return route.fulfill({
+          status: 400,
+          json: { message: "assignment_conflict" },
+        });
+      let result = extensions.get(String(body.request_id));
+      const asset = assets.find((a) => a.id === body.asset_id)!;
+      if (!result) {
+        const previous = asset.due_on;
+        asset.due_on = String(body.new_due_on);
+        asset.version = (asset.version || 1) + 1;
+        result = structuredClone(asset);
+        extensions.set(String(body.request_id), result);
+        history[asset.id] = [
+          {
+            id: "2",
+            event_type: "assignment_extended",
+            occurred_on: "2030-01-01",
+            recorded_at: "2030-01-01T00:00:00Z",
+            actor_label: "示例经办人",
+            reason: body.reason,
+            after_data: { ...asset, previous_due_on: previous },
+          },
+        ];
+      }
+      if (uncertain) {
+        uncertain = false;
+        return route.abort("failed");
+      }
+      return route.fulfill({ json: result });
+    }
+    if (name === "list_due_assets") {
+      if (listFailure)
+        return route.fulfill({
+          status: 503,
+          json: { message: "private database diagnostic" },
+        });
+      const records = assets
+        .filter(
+          (a) =>
+            a.usage_kind === "temporary" &&
+            a.holder_party_id &&
+            a.management_status === "managed",
+        )
+        .map((a) => ({
+          ...a,
+          due_state:
+            a.due_on! < "2030-01-01"
+              ? "overdue"
+              : a.due_on === "2030-01-01"
+                ? "today"
+                : a.due_on! <= "2030-01-04"
+                  ? "upcoming"
+                  : "later",
+        }));
+      return route.fulfill({
+        json: {
+          business_on: "2030-01-01",
+          notice_days: 3,
+          items: records.filter(
+            (a) => !body.state || body.state === a.due_state,
+          ),
+          summary: {
+            total: records.length,
+            ...Object.fromEntries(
+              ["overdue", "today", "upcoming", "later"].map((state) => [
+                state,
+                records.filter((a) => a.due_state === state).length,
+              ]),
+            ),
+          },
+        },
+      });
+    }
     throw new Error("Unexpected inventory RPC: " + name);
   });
   return {
     calls,
     authCalls,
     assets,
+    conflictExtension: (value: boolean) => (extensionConflict = value),
     filterResults: (items: Asset[] | undefined) => (listResults = items),
     failList: (value: boolean) => (listFailure = value),
     requireDuplicateAck: () => (duplicate = true),
@@ -395,6 +476,174 @@ test("inventory is closed by default and never queries business RPCs", async ({
     page.getByRole("button", { name: "保存并查看设备" }),
   ).toHaveCount(0);
   expect(state.calls.every((c) => c.name === "get_my_membership")).toBe(true);
+});
+
+test("temporary extension retries the same request and shows old and new dates in history", async ({
+  page,
+}) => {
+  const state = await fixture(page);
+  await login(page);
+  await expect(
+    page.getByRole("heading", { name: "设备台账", exact: true }),
+  ).toBeVisible();
+  await page.goto("/#/assets/" + assetId);
+  const form = page.getByRole("region", { name: "临时使用延期" });
+  await expect(form).toBeVisible();
+  await form.getByLabel("新的预计归还日期", { exact: true }).fill("2030-02-01");
+  await form.getByLabel("延期原因", { exact: true }).fill("示例挂职期限延长");
+  state.loseNextAcknowledgement();
+  await form.getByRole("button", { name: "确认延期", exact: true }).click();
+  await expect(form.getByRole("alert")).toBeVisible();
+  await expect(form.getByLabel("延期原因", { exact: true })).toHaveValue(
+    "示例挂职期限延长",
+  );
+  await form.getByRole("button", { name: "确认延期", exact: true }).click();
+  await expect(
+    page.getByText("延期已记录，原分发单和签字件保留。", { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".asset-history")).toContainText(
+    "原期限：2030-01-01；新期限：2030-02-01",
+  );
+  const calls = state.calls.filter((c) => c.name === "extend_assignment");
+  expect(calls).toHaveLength(2);
+  expect(calls[0]!.body).toEqual(calls[1]!.body);
+  expect(calls[0]!.body).toMatchObject({
+    asset_id: assetId,
+    expected_version: 1,
+    new_due_on: "2030-02-01",
+    reason: "示例挂职期限延长",
+  });
+  expect(state.assets[0]!.version).toBe(2);
+});
+
+test("extension rejects an unchanged date and retains a conflicted form", async ({
+  page,
+}) => {
+  const state = await fixture(page);
+  await login(page);
+  await expect(
+    page.getByRole("heading", { name: "设备台账", exact: true }),
+  ).toBeVisible();
+  await page.goto("/#/assets/" + assetId);
+  const form = page.getByRole("region", { name: "临时使用延期" });
+  await form.getByLabel("新的预计归还日期", { exact: true }).fill("2030-01-01");
+  await form.getByLabel("延期原因", { exact: true }).fill("示例原因");
+  await form.getByRole("button", { name: "确认延期", exact: true }).click();
+  await expect(form.getByRole("alert")).toContainText("新期限须晚于原期限");
+  expect(
+    state.calls.filter((c) => c.name === "extend_assignment"),
+  ).toHaveLength(0);
+  state.conflictExtension(true);
+  await form.getByLabel("新的预计归还日期", { exact: true }).fill("2030-02-01");
+  await form.getByRole("button", { name: "确认延期", exact: true }).click();
+  await expect(form.getByRole("alert")).toContainText("设备或期限已变化");
+  await expect(form.getByLabel("延期原因", { exact: true })).toHaveValue(
+    "示例原因",
+  );
+  expect(state.assets[0]!.due_on).toBe("2030-01-01");
+});
+
+test("due ledger uses server business date, pages and filters without conflating empty and failure", async ({
+  page,
+}) => {
+  const state = await fixture(page, "viewer");
+  state.assets.splice(
+    0,
+    1,
+    ...paginationAssets().map((a, i) => ({
+      ...a,
+      due_on: i === 0 ? "2029-12-31" : "2030-01-01",
+    })),
+  );
+  await login(page);
+  await expect(
+    page.getByRole("heading", { name: "设备台账", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "临时使用与到期", exact: true }).click();
+  await expect(
+    page.getByText("业务日期：2030-01-01（东八区）；提前 3 天提示。", {
+      exact: false,
+    }),
+  ).toBeVisible();
+  const rows = page.locator("tbody tr");
+  await expect(rows).toHaveCount(20);
+  await expect(page.getByLabel("临时使用统计")).toContainText("已逾期：1");
+  await expect(page.getByLabel("临时使用统计")).toContainText("今天到期：50");
+  await page.getByRole("button", { name: "下一页", exact: true }).click();
+  await expect(
+    page.getByLabel("临时使用分页").getByRole("status"),
+  ).toContainText("第 2 / 3 页");
+  await page
+    .getByRole("combobox", { name: "每页显示", exact: true })
+    .selectOption("10");
+  await expect(rows).toHaveCount(10);
+  await expect(
+    page.getByLabel("临时使用分页").getByRole("status"),
+  ).toContainText("第 1 / 6 页");
+  await page
+    .getByRole("combobox", { name: "到期情况", exact: true })
+    .selectOption("overdue");
+  await page.getByRole("button", { name: "查询", exact: true }).click();
+  await expect(rows).toHaveCount(1);
+  await page
+    .getByRole("link", { name: "SB-000001 · 示例打印机", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "设备详情", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("region", { name: "临时使用延期" })).toHaveCount(
+    0,
+  );
+  await page.goto("/#/due");
+  await page
+    .getByRole("combobox", { name: "到期情况", exact: true })
+    .selectOption("upcoming");
+  await page.getByRole("button", { name: "查询", exact: true }).click();
+  await expect(
+    page.getByText("当前条件下没有临时领用设备。", { exact: true }),
+  ).toBeVisible();
+  state.failList(true);
+  await page.getByRole("button", { name: "查询", exact: true }).click();
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(
+    page.getByText("当前条件下没有临时领用设备。", { exact: true }),
+  ).toHaveCount(0);
+  await expect(page.locator("body")).not.toContainText(
+    "private database diagnostic",
+  );
+  expect(
+    state.calls.filter((c) => c.name === "extend_assignment"),
+  ).toHaveLength(0);
+});
+
+test("revoking a current operator removes the extension form and private data", async ({
+  page,
+}) => {
+  const state = await fixture(page);
+  await login(page);
+  await expect(
+    page.getByRole("heading", { name: "设备台账", exact: true }),
+  ).toBeVisible();
+  await page.goto("/#/assets/" + assetId);
+  await expect(
+    page.getByRole("region", { name: "临时使用延期" }),
+  ).toBeVisible();
+  state.disable();
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(
+    page.getByText("当前账号无法执行此操作，请登录或查看账号状态。", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole("region", { name: "临时使用延期" })).toHaveCount(
+    0,
+  );
+  await expect(
+    page.getByRole("heading", { name: "SB-000001 · 示例打印机", exact: true }),
+  ).toHaveCount(0);
+  expect(
+    state.calls.filter((c) => c.name === "extend_assignment"),
+  ).toHaveLength(0);
 });
 
 test("viewer lands on ledger, sends fixed filters, reads history and cannot open creation", async ({

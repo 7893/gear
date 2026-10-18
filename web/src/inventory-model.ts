@@ -71,8 +71,25 @@ export type AssetDetails = {
     recorded_at: string;
     actor_label: string;
     reason: string | null;
-    after_data: Partial<Asset> & { document_id?: string; document_no?: string };
+    after_data: Partial<Asset> & {
+      document_id?: string;
+      document_no?: string;
+      previous_due_on?: string;
+    };
   }[];
+};
+export const dueStates = {
+  overdue: "已逾期",
+  today: "今天到期",
+  upcoming: "即将到期",
+  later: "尚未临近",
+};
+export type DueState = keyof typeof dueStates;
+export type DueAssetList = {
+  business_on: string;
+  notice_days: number;
+  items: (Asset & { due_state: DueState })[];
+  summary: Record<DueState | "total", number>;
 };
 export type AssetList = {
   items: Asset[];

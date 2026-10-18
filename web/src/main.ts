@@ -8,6 +8,7 @@ import DiagnosticsView from "./views/DiagnosticsView.vue";
 import RecoveryView from "./views/RecoveryView.vue";
 import HomeView from "./views/HomeView.vue";
 import InventoryView from "./views/InventoryView.vue";
+import DueView from "./views/DueView.vue";
 import AssetCreateView from "./views/AssetCreateView.vue";
 import AssetDetailView from "./views/AssetDetailView.vue";
 import DocumentsView from "./views/DocumentsView.vue";
@@ -24,6 +25,7 @@ async function start() {
       { path: "/", component: HomeView },
       { path: "/account", component: StatusView },
       { path: "/assets", component: InventoryView },
+      { path: "/due", component: DueView },
       { path: "/assets/new", component: AssetCreateView },
       { path: "/assets/:id", component: AssetDetailView },
       { path: "/flows", component: DocumentsView, props: { manage: true } },

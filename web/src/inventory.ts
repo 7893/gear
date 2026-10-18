@@ -8,6 +8,8 @@ import type {
   AssetInput,
   PartyInput,
   Placement,
+  DueState,
+  DueAssetList,
 } from "./inventory-model";
 export * from "./inventory-model";
 
@@ -79,6 +81,25 @@ export async function listAssets(filters: {
 }
 export async function getAsset(id: string): Promise<AssetDetails> {
   return (await inventoryRpc("get_asset", { asset_id: id })) as AssetDetails;
+}
+export async function listDueAssets(
+  state: DueState | null,
+): Promise<DueAssetList> {
+  return (await inventoryRpc("list_due_assets", { state })) as DueAssetList;
+}
+export async function extendAssignment(
+  asset: Asset,
+  newDueOn: string,
+  reason: string,
+  requestId: string,
+): Promise<Asset> {
+  return (await inventoryRpc("extend_assignment", {
+    asset_id: asset.id,
+    expected_version: asset.version,
+    new_due_on: newDueOn,
+    reason,
+    request_id: requestId,
+  })) as Asset;
 }
 export async function listParties(): Promise<Party[]> {
   return (await inventoryRpc("list_parties")) as Party[];

@@ -15,6 +15,7 @@ python3 database/tests/check_notifications.py
 python3 database/tests/check_inventory.py
 python3 database/tests/check_demo_inventory.py
 python3 database/tests/check_flows.py
+python3 database/tests/check_temporary_use.py
 python3 database/tests/check_evidence.py
 python3 database/tests/check_schema_year.py
 ```
@@ -60,6 +61,10 @@ python3 database/tests/check_schema_year.py
 迁移 `202610190008_evidence.sql` 及 [Storage 隔离脚本](configure_evidence_storage.sql)已本地验证并经授权执行云端。迁移新增附件五列、十八个函数、一个原件保护触发器及两个事件类型；不增加业务表，不更改既有账号、设备、分配、打印快照或其他应用。只有新建的文件完成接口增加服务角色执行权，服务角色仍无业务表读写权限。
 
 存储策略独立安装：目标桶名从私有环境传入，拒绝客户端直接访问该桶，其他桶策略保持有效；桶通过 Storage API 创建为私有并限制类型/单文件大小。网站 CD 不执行这些操作，原件服务也须单独部署。权限、上限、识别范围、回退和验收边界见[签字件实施记录](../docs/evidence-implementation.md)。
+
+## 临时使用延期与到期查询迁移
+
+迁移 `202610190009_temporary_use.sql` 本地新增两组查询和延期函数，尚未应用正式数据库。不增加表或列，沿用当前临时分配、设备版本和 `assignment_extended` 事件；延期保留原单据与签字原件。临近天数读取已有设置，业务日期由服务端按东八区计算。隔离检查已加入 CI；必须先获授权执行迁移，再推送发布页面，详见[本轮实施](../docs/temporary-use-implementation.md)。
 
 ## Schema 命名与配置
 
