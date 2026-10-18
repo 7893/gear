@@ -50,3 +50,9 @@ pnpm -C web run dev
 ## 流转与打印
 
 已实现并获授权发布领入、分发、退回、草稿、单据查询和冻结快照打印；`GEAR_FLOWS_ENABLED` 控制 `flowsEnabled`，缺省关闭，本次上线已开启。办理入口 `/#/flows`，记录入口 `/#/documents`，详情和打印 `/#/documents/:id`。正式单据只读保存时的快照；草稿有显著标记。二维码本地生成 SVG，单据编号和页码使用打印页边距，桌面 Chromium 已检查五十条明细 PDF。接口、已确认编号、权限与上线范围见[流转实施记录](../docs/flows-implementation.md)。
+
+## 签字件与人工归档
+
+已本地实现正式单据详情中的原件上传、逐页预览、下载、二维码和 PDF 单号识别、手动关联更正及四项人工核对归档；尚未上线。`GEAR_EVIDENCE_ENABLED` 控制 `evidenceEnabled`，缺省关闭且依赖台账与流转开关。PDF 模块和 worker 按需加载并随网站提供，图片无二维码或 PDF 无内置文字时允许人工处理；不自动判断签字真实性。
+
+新增十个附件场景，合计三十八个浏览器场景通过。云端迁移 007、私有桶、隔离策略及独立文件函数待单独授权，不把本地测试等同于真实签字和 Storage 验收。详见[签字件实施](../docs/evidence-implementation.md)。

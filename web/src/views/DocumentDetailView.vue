@@ -21,6 +21,7 @@ import {
   type DocumentItem,
 } from "../flows";
 import FlowGate from "../components/FlowGate.vue";
+import EvidencePanel from "../components/EvidencePanel.vue";
 const route = useRoute();
 const router = useRouter();
 const data = ref<FlowDocument | null>(null);
@@ -180,9 +181,11 @@ async function remove() {
               ? "待回传签字件"
               : data.evidence_state === "archived"
                 ? "已归档"
-                : data.status === "draft"
-                  ? "尚未实际交接"
-                  : "凭证待核对"
+                : data.evidence_state === "awaiting_review"
+                  ? "待核对签字件"
+                  : data.status === "draft"
+                    ? "尚未实际交接"
+                    : "凭证待核对"
           }}。
         </p>
         <p class="hint">
@@ -232,6 +235,11 @@ async function remove() {
         </p>
       </template>
     </div>
+    <EvidencePanel
+      v-if="data && data.status !== 'draft'"
+      :document="data"
+      @changed="load"
+    />
     <article
       v-if="data && snapshotComplete"
       class="print-sheet"

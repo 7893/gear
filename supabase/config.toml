@@ -5,3 +5,8 @@ project_id = "gear"
 verify_jwt = false
 entrypoint = "./functions/gear-auth-mail/index.ts"
 import_map = "./functions/gear-auth-mail/deno.json"
+
+[functions.gear-evidence]
+verify_jwt = true
+entrypoint = "./functions/gear-evidence/index.ts"
+import_map = "./functions/gear-evidence/deno.json"

@@ -106,6 +106,7 @@ jobs:
           python3 database/tests/check_inventory.py
           python3 database/tests/check_demo_inventory.py
           python3 database/tests/check_flows.py
+          python3 database/tests/check_evidence.py
         env:
           PG_BINDIR: /usr/lib/postgresql/16/bin
 
@@ -134,7 +135,7 @@ jobs:
 
   deploy:
     name: Deploy and verify
-    needs: [repository, gateway, smoke-page, database, auth-mail]
+    needs: [repository, gateway, smoke-page, database, auth-mail, evidence]
     if: >-
       github.ref == 'refs/heads/main' &&
       github.event_name != 'pull_request' &&
@@ -169,6 +170,7 @@ jobs:
           GEAR_RECOVERY_ENABLED: ${{ vars.GEAR_RECOVERY_ENABLED }}
           GEAR_INVENTORY_ENABLED: ${{ vars.GEAR_INVENTORY_ENABLED }}
           GEAR_FLOWS_ENABLED: ${{ vars.GEAR_FLOWS_ENABLED }}
+          GEAR_EVIDENCE_ENABLED: ${{ vars.GEAR_EVIDENCE_ENABLED }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
           CI_DEPLOY_USER: ${{ secrets.CI_DEPLOY_USER }}
@@ -187,3 +189,26 @@ jobs:
           GEAR_FUNCTION_PREFIX: ${{ secrets.GEAR_FUNCTION_PREFIX }}
           AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           AWS_CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID }}
+
+  evidence:
+    name: Signed evidence checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: supabase/functions/gear-evidence
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '26.10.0'
+      - name: Install pinned package manager
+        run: npm install --global pnpm@12.8.1
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Validate evidence handler
+        run: pnpm run check

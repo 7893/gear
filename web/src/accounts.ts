@@ -27,6 +27,7 @@ export const account = reactive({
   recoveryEnabled: false,
   inventoryEnabled: false,
   flowsEnabled: false,
+  evidenceEnabled: false,
   initializing: true,
   loading: false,
   signedIn: false,
@@ -49,6 +50,31 @@ function makeClient(apiUrl: string, publishableKey: string) {
 let client: ReturnType<typeof makeClient> | undefined;
 let refreshSequence = 0;
 const messages: Record<string, string> = {
+  evidence_unavailable: "签字件功能尚未开放。",
+  invalid_evidence: "附件资料无效，请核对文件、外部单号和更正原因。",
+  invalid_evidence_file: "文件无效，请选择完整的 JPEG、PNG 或 PDF 原件。",
+  unsupported_evidence_file: "支持 JPEG、PNG 和 PDF；其他格式请转换后再上传。",
+  evidence_file_too_large: "单文件最多 20 MiB，请拆分文件后上传。",
+  invalid_or_encrypted_pdf:
+    "PDF 无法读取或已加密，请检查文件并解除密码后重试。",
+  pdf_page_limit_exceeded: "单个 PDF 最多 20 页，请拆分后上传。",
+  image_dimensions_exceeded: "图片像素过大，请调整至 4000 万像素以内。",
+  invalid_evidence_hints: "识别结果无效，可重新识别或清除结果后人工核对。",
+  evidence_document_unavailable:
+    "只能为有效正式单据办理签字件，请刷新单据状态。",
+  archived_evidence_admin_required: "已归档凭证须由管理员填写原因后更正。",
+  duplicate_attachment: "此单已有相同文件，请检查现有附件或待完成上传。",
+  evidence_limit_exceeded:
+    "每单最多 10 个有效附件，合计 100 MiB；待完成上传也计入限额。",
+  attachment_not_found: "附件不存在或当前账号无权读取。",
+  attachment_conflict: "附件已变化，请刷新后重新核对。",
+  attachment_cancelled: "这次上传已取消，请重新选择文件。",
+  upload_incomplete: "上传或读取未完成，可保留文件重试；已上传原件不会被覆盖。",
+  evidence_review_required:
+    "请核对全部有效附件的签字、单号、内容和页数，先处理待完成上传。",
+  evidence_manual_reason_required:
+    "未识别或单号不一致，请填写人工核对说明后归档。",
+
   admin_required: "当前账号没有管理员权限，请刷新状态。",
   login_required: "请重新登录。",
   email_not_verified: "请先完成邮箱验证。",
@@ -212,6 +238,7 @@ export async function initializeAccounts(): Promise<void> {
     account.recoveryEnabled = config.recoveryEnabled;
     account.inventoryEnabled = config.inventoryEnabled;
     account.flowsEnabled = config.flowsEnabled;
+    account.evidenceEnabled = config.evidenceEnabled;
     if (!account.enabled) return;
     client = makeClient(config.apiUrl, config.publishableKey);
     if (code) {
@@ -309,13 +336,33 @@ export async function inventoryRpc(
     | "get_document"
     | "save_document"
     | "delete_document"
-    | "confirm_document",
+    | "confirm_document"
+    | "list_evidence"
+    | "get_attachment"
+    | "match_evidence"
+    | "reserve_attachment"
+    | "cancel_attachment"
+    | "update_attachment"
+    | "archive_evidence",
   parameters: Record<string, unknown> = {},
 ): Promise<unknown> {
   if (!account.inventoryEnabled) throw new Error("inventory_unavailable");
   if (name.endsWith("document") || name === "list_documents") {
     if (!account.flowsEnabled) throw new Error("flows_unavailable");
   }
+  if (
+    [
+      "list_evidence",
+      "get_attachment",
+      "match_evidence",
+      "reserve_attachment",
+      "cancel_attachment",
+      "update_attachment",
+      "archive_evidence",
+    ].includes(name) &&
+    (!account.evidenceEnabled || !account.flowsEnabled)
+  )
+    throw new Error("evidence_unavailable");
   const { data, error } = await service()
     .rpc(name, parameters)
     .abortSignal(AbortSignal.timeout(15000));
@@ -377,3 +424,42 @@ export const statusLabels = {
   rejected: "已拒绝",
   disabled: "已停用",
 };
+
+export async function evidenceRequest(options: {
+  body?: FormData;
+  attachmentId?: string;
+  signal?: AbortSignal;
+}): Promise<Response> {
+  if (
+    !account.evidenceEnabled ||
+    !account.flowsEnabled ||
+    !account.inventoryEnabled
+  )
+    throw new Error("evidence_unavailable");
+  const { data, error } = await service().auth.getSession();
+  if (error || !data.session) throw new Error("login_required");
+  const config = await configuration();
+  const url = new URL(config.apiUrl + "/functions/v1/gear-evidence");
+  if (options.attachmentId)
+    url.searchParams.set("attachment_id", options.attachmentId);
+  const response = await fetch(url, {
+    method: options.body ? "POST" : "GET",
+    headers: {
+      apikey: config.publishableKey,
+      Authorization: "Bearer " + data.session.access_token,
+    },
+    body: options.body,
+    cache: "no-store",
+    signal: AbortSignal.any([
+      AbortSignal.timeout(120000),
+      ...(options.signal ? [options.signal] : []),
+    ]),
+  });
+  if (!response.ok) {
+    const result = (await response.json().catch(() => ({}))) as {
+      error?: string;
+    };
+    throw new Error(result.error || "upload_incomplete");
+  }
+  return response;
+}

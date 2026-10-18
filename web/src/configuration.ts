@@ -5,6 +5,7 @@ export type RuntimeConfig = {
   recoveryEnabled: boolean;
   inventoryEnabled: boolean;
   flowsEnabled: boolean;
+  evidenceEnabled: boolean;
 };
 
 export async function configuration(): Promise<RuntimeConfig> {
@@ -38,5 +39,6 @@ export async function configuration(): Promise<RuntimeConfig> {
     recoveryEnabled: value.recoveryEnabled === true,
     inventoryEnabled: value.inventoryEnabled === true,
     flowsEnabled: value.flowsEnabled === true,
+    evidenceEnabled: value.evidenceEnabled === true,
   };
 }

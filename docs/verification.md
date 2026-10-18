@@ -15,15 +15,16 @@
 | 凭据扫描 | Gitleaks 默认规则扫描已获取的完整 Git 历史，输出脱敏，不上传扫描报告 |
 | 提交规则 | 新增提交必须经 GitHub 验证签名；标题要求 ASCII、包含英文字母且不超过七个空格分隔单词，英文表达仍由人工审阅 |
 | 后端接入网关 | 独立锁定依赖，执行 ESLint、Prettier、生成绑定类型后的 TypeScript 检查、八项行为测试与 Worker 构建；不连接共享数据库执行测试 |
-| 前端账号与连接检测 | 独立锁定依赖，执行 ESLint、Prettier、Vue/TypeScript 类型检查、二十八项虚构 Auth/RPC 浏览器测试（账号、台账与流转）及 Vite 构建；不访问生产服务 |
+| 前端账号与连接检测 | 独立锁定依赖，执行 ESLint、Prettier、Vue/TypeScript 类型检查、三十八项虚构 Auth/RPC 浏览器测试（账号、台账、流转与签字件）及 Vite 构建；不访问生产服务 |
 | 认证邮件适配器 | 签名校验、MIME、收件人映射、固定提供方主机和失败处理；所有 Google 请求均为模拟，无真实发信凭据 |
+| 签字原件服务 | 固定版本文件解析、实际大小/哈希、仅服务端完成接口、上传响应丢失及私有下载复核；所有云端请求均为模拟 |
 | 数据库初始结构 | 以虚构 Auth 替身和业务数据运行临时 PostgreSQL 集群，验证迁移、RLS、并发唯一分配、快照与附件约束、跨日流水和回滚；不连接云端数据库 |
 
 PR 检查实际贡献提交，排除 GitHub 临时合并提交；普通推送检查本次新增提交，首次推送和手动运行检查全部可达提交。签名验证调用 GitHub API，接口或验证服务不可用时检查失败，不静默跳过。
 
 文档检查不联网验证外链，当前解析范围是 Markdown 行内链接和 `#` 标题，不代替完整 Markdown 渲染器。凭据扫描不能识别所有真实邮箱、IP、域名和资源编号；提交前仍需人工检查暂存内容，并在本地对照私有配置检查真实值。不要为了云端扫描而向 PR 暴露真实配置或凭据。
 
-工作流使用 GitHub 托管的临时 Ubuntu runner，五个 CI 检查任务只有仓库内容只读权限，不引用部署 Secrets。数据库任务复用 runner 的 PostgreSQL 16，本地按目标环境验证 PostgreSQL 17；运行方法见[数据库迁移说明](../database/README.md)。使用普通 `pull_request` 事件，第三方 Action 固定完整提交 SHA，下载的验证工具固定版本与 SHA-256。已启用的发布任务单独使用 OIDC 与部署 Secrets，只允许可信主分支进入；配置及授权边界见[自动发布流程](deployment.md)。依赖升级时同时核对官方发行来源和校验值。
+工作流使用 GitHub 托管的临时 Ubuntu runner，六个 CI 检查任务只有仓库内容只读权限，不引用部署 Secrets。数据库任务复用 runner 的 PostgreSQL 16，本地按目标环境验证 PostgreSQL 17；运行方法见[数据库迁移说明](../database/README.md)。使用普通 `pull_request` 事件，第三方 Action 固定完整提交 SHA，下载的验证工具固定版本与 SHA-256。已启用的发布任务单独使用 OIDC 与部署 Secrets，只允许可信主分支进入；配置及授权边界见[自动发布流程](deployment.md)。依赖升级时同时核对官方发行来源和校验值。
 
 参考：[GitHub Actions 安全约定](https://docs.github.com/en/actions/reference/security/secure-use)、[提交签名验证字段](https://docs.github.com/en/rest/commits/commits#get-a-commit)、[Ubuntu runner 已安装软件](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md)、[Gitleaks](https://github.com/gitleaks/gitleaks)、[actionlint](https://github.com/rhysd/actionlint)。
 

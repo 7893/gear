@@ -428,6 +428,30 @@ fieldset {
     min-width: 680px;
   }
 }
+.evidence-panel {
+  margin: 24px 0;
+  padding: 20px 0;
+  border-top: 1px solid #ccd3dd;
+}
+.evidence-files {
+  padding-left: 20px;
+}
+.evidence-files li {
+  margin: 16px 0;
+  overflow-wrap: anywhere;
+}
+.evidence-preview img {
+  display: block;
+  max-width: 100%;
+  max-height: 1000px;
+  object-fit: contain;
+  background: white;
+  border: 1px solid #ccd3dd;
+}
+.evidence-panel form,
+.evidence-upload {
+  margin-top: 20px;
+}
 @page {
   size: A4;
   margin: 12mm 10mm 18mm;
