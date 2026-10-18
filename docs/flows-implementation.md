@@ -9,19 +9,19 @@
 - 退回：从同一个持有方和交出负责人名下选设备，支持部分退回；逐件核对正常或故障，故障须说明，整单填写退回原因。可退经办人库存，也可实际直接退往上游；库存也可退上游。原持有方或负责人停用不阻止实际退回。
 - 单据：草稿保存、编辑、删除、核对确认、列表查询和详情；正式单据提供同一 A4 打印骨架与另存 PDF。
 
-转交、团队负责人交接、延期、独立故障处置、正式单据作废或更正、导出、到期邮件与单位抬头设置入口仍在后续阶段。签字件上传和识别归档已[本地实现](evidence-implementation.md)，尚待迁移 007 和私有文件服务上线授权。本轮详情会兼容显示已有作废状态，不代表已提供作废操作。
+转交、团队负责人交接、延期、独立故障处置、正式单据作废或更正、导出、到期邮件与单位抬头设置入口仍在后续阶段。签字件上传和识别归档已[本地实现](evidence-implementation.md)，尚待迁移 008 和私有文件服务上线授权。本轮详情会兼容显示已有作废状态，不代表已提供作废操作。
 
 ## 数据库与接口
 
-[迁移 006](../database/migrations/202610190006_flows.sql) 仅改变设备簿：为 `gear.documents` 增加 `remarks`，为 `gear.document_items` 增加 `allow_legacy_duplicate`，再增加五组公开接口与内部实现、两个私有辅助函数。没有新业务表、共享 Auth、Storage、邮件、扩展或调度配置。
+[迁移 006](../database/migrations/202610190006_flows.sql) 仅改变设备簿：为 `gear_2026.documents` 增加 `remarks`，为 `gear_2026.document_items` 增加 `allow_legacy_duplicate`，再增加五组公开接口与内部实现、两个私有辅助函数。没有新业务表、共享 Auth、Storage、邮件、扩展或调度配置。
 
 | 接口 | 用途 |
 | --- | --- |
-| `gear.list_documents(search, kind, state)` | 按单号、双方或实际交接人文字搜索及类型、状态筛选 |
-| `gear.get_document(document_id)` | 读取单据及逐件明细；正式记录包含确认时快照 |
-| `gear.save_document(details, items, request_id, document_id, expected_version)` | 新建或更新有权访问的草稿，不改变实物去向 |
-| `gear.delete_document(document_id, expected_version, request_id)` | 删除草稿和明细，保留无强外键的删除审计 |
-| `gear.confirm_document(document_id, expected_version, request_id)` | 原子确认整单并生成永久单号及事件 |
+| `gear_2026.list_documents(search, kind, state)` | 按单号、双方或实际交接人文字搜索及类型、状态筛选 |
+| `gear_2026.get_document(document_id)` | 读取单据及逐件明细；正式记录包含确认时快照 |
+| `gear_2026.save_document(details, items, request_id, document_id, expected_version)` | 新建或更新有权访问的草稿，不改变实物去向 |
+| `gear_2026.delete_document(document_id, expected_version, request_id)` | 删除草稿和明细，保留无强外键的删除审计 |
+| `gear_2026.confirm_document(document_id, expected_version, request_id)` | 原子确认整单并生成永久单号及事件 |
 
 管理员可处理全部草稿，经办人只能处理自己的草稿；查询人只读正式单据。三种角色均须邮箱已验证、成员已启用。匿名、停用和未审核身份无权读取业务；`service_role` 不增加执行权。私有记录及日期辅助函数不授予客户端执行权，不增加直接写表、取设备号或单据流水权限。
 

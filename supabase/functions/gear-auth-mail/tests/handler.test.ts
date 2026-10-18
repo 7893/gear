@@ -13,6 +13,7 @@ const secret = Buffer.from("fictional webhook test material only").toString(
   "base64",
 );
 const env: MailEnvironment = {
+  GEAR_DB_SCHEMA: "example_app_2026",
   GEAR_AUTH_WEBHOOK_SECRET: secret,
   GEAR_AUTH_PUBLIC_URL: "https://api.example.invalid",
   GEAR_GMAIL_CLIENT_ID: "example-client",
@@ -440,6 +441,10 @@ test("recovery checks server-only eligibility before Google and hides ineligible
       hosts.push(url.hostname);
       if (url.hostname === "backend.example.invalid") {
         assert.equal(url.pathname, "/rest/v1/rpc/can_recover_password");
+        assert.equal(
+          new Headers(init?.headers).get("Content-Profile"),
+          configured.GEAR_DB_SCHEMA,
+        );
         assert.equal(
           new Headers(init?.headers).get("Authorization"),
           "Bearer example-service-key",

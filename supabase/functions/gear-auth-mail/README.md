@@ -11,7 +11,7 @@ pnpm -C supabase/functions/gear-auth-mail run check
 
 测试采用虚构签名和模拟 OAuth/Gmail 响应；覆盖签名篡改、过期、大小限制、UTF-8 MIME、固定请求主机、邮箱更换时双验证码映射、认证类型与安全通知、发送结果不明时不在函数内重试。Node 检查不代替部署后的 Supabase Edge Runtime 验证。
 
-需要六项私有运行配置：
+发信身份需要以下六项私有配置；数据库调用另统一读取 `GEAR_DB_SCHEMA`，与网站和网关保持一致：
 
 - `GEAR_AUTH_WEBHOOK_SECRET`：Supabase Hook 的 Standard Webhooks 签名秘密。
 - `GEAR_AUTH_PUBLIC_URL`：邮件链接使用的 HTTPS 认证 API origin。

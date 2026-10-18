@@ -7,6 +7,7 @@ const id = (n: number) =>
   "00000000-0000-4000-8000-" + String(n).padStart(12, "0");
 const env: Environment = {
   SUPABASE_URL: "https://database.example.invalid/",
+  GEAR_DB_SCHEMA: "example_app_2026",
   SUPABASE_ANON_KEY: "example-anon",
   SUPABASE_SERVICE_ROLE_KEY: "example-service",
   GEAR_STORAGE_BUCKET: "example-evidence",

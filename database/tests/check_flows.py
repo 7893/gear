@@ -34,15 +34,15 @@ def main():
         today=db.run("SELECT (now() AT TIME ZONE 'Asia/Shanghai')::date")
         base={'kind':'receipt','handover_on':today,'from_kind':'external','to_kind':'inventory',
             'from_label':'示例交付方','to_label':'经办人库存','sender_name':'示例移交人','receiver_name':'示例接收人'}
-        before_assets=db.run('SELECT count(*) FROM gear.assets')
+        before_assets=db.run('SELECT count(*) FROM gear_2026.assets')
         initial_request=str(uuid4())
         with ThreadPoolExecutor(max_workers=2) as pool:
             drafts=list(pool.map(lambda _:save(db,base,[line(),line(),line(condition='faulty')],request=initial_request),range(2)))
         assert drafts[0]==drafts[1]
         draft=drafts[0]
         assert draft['status']=='draft' and draft['document_no'] is None
-        assert db.run('SELECT count(*) FROM gear.assets')==before_assets
-        assert db.run('SELECT count(*) FROM gear.document_counters')=='0'
+        assert db.run('SELECT count(*) FROM gear_2026.assets')==before_assets
+        assert db.run('SELECT count(*) FROM gear_2026.document_counters')=='0'
         assert draft['id'] not in {d['id'] for d in rpc(db,'viewer','list_documents')}
         rpc(db,'viewer','get_document',quoted(draft['id']),fail='document_not_found')
         save(db,base,[line()],user='viewer',fail='inventory_access_denied')
@@ -53,10 +53,10 @@ def main():
         assert confirmed['header_snapshot']['title']=='设备簿'
         assert confirmed['header_snapshot']['operator_name']=='Example operator'
         assert rpc(db,'viewer','get_document',quoted(draft['id']))==confirmed
-        assert db.run("SELECT count(*) FROM gear.events WHERE event_type='asset_initialized'")=='0'
-        assert db.run('SELECT count(*) FROM gear.assets')==str(int(before_assets)+3)
-        db.run(f"UPDATE gear.documents SET sender_name='forged' WHERE id='{draft['id']}'",fail='formal document fields are frozen')
-        db.run(f"DELETE FROM gear.document_items WHERE document_id='{draft['id']}'",fail='formal document items are frozen')
+        assert db.run("SELECT count(*) FROM gear_2026.events WHERE event_type='asset_initialized'")=='0'
+        assert db.run('SELECT count(*) FROM gear_2026.assets')==str(int(before_assets)+3)
+        db.run(f"UPDATE gear_2026.documents SET sender_name='forged' WHERE id='{draft['id']}'",fail='formal document fields are frozen')
+        db.run(f"DELETE FROM gear_2026.document_items WHERE document_id='{draft['id']}'",fail='formal document items are frozen')
         print('PASS drafts do not reserve stock/numbers; receipt atomically creates assets and frozen numbered evidence')
 
         person=party(db); team=party(db,details={'kind':'team','name':'示例团队','default_responsible_id':person['id']})
@@ -70,9 +70,9 @@ def main():
         issued=results[0];assert results[0]==results[1]
         assert issued['document_no'].startswith('FF-')
         assert int(issued['document_no'].split('-')[-1])==int(confirmed['document_no'].split('-')[-1])+1
-        assert db.run(f"SELECT count(*) FROM gear.assignments WHERE holder_party_id='{team['id']}' AND closed_at IS NULL")=='2'
+        assert db.run(f"SELECT count(*) FROM gear_2026.assignments WHERE holder_party_id='{team['id']}' AND closed_at IS NULL")=='2'
         assert all(i['state_after']['holder_party_id']==team['id'] for i in issued['items'])
-        db.run(f"UPDATE gear.parties SET name='示例更名团队' WHERE id='{team['id']}'")
+        db.run(f"UPDATE gear_2026.parties SET name='示例更名团队' WHERE id='{team['id']}'")
         assert rpc(db,'viewer','get_document',quoted(issued['id']))==issued
         print('PASS concurrent confirmation retry creates one issue, shared daily numbers and immutable party snapshots')
 
@@ -97,9 +97,9 @@ def main():
         assert reentered['items'][0]['asset_id']==held['id']
         print('PASS partial faulty return closes only selected use; upstream exit and same-device re-receipt preserve identity')
 
-        bad=save(db,issue,[line(reentered_asset),line(received[2])]); count=db.run('SELECT count(*) FROM gear.assignments')
+        bad=save(db,issue,[line(reentered_asset),line(received[2])]); count=db.run('SELECT count(*) FROM gear_2026.assignments')
         confirm(db,bad,fail='asset_flow_conflict')
-        assert db.run('SELECT count(*) FROM gear.assignments')==count
+        assert db.run('SELECT count(*) FROM gear_2026.assignments')==count
         assert rpc(db,'viewer','get_asset',quoted(held['id']))['asset']==reentered_asset
         assert rpc(db,'operator','get_document',quoted(bad['id']))['status']=='draft'
         stale=save(db,issue,[line(reentered_asset)])
@@ -140,13 +140,13 @@ def main():
         args=f"'{deletion['id']}',{deletion['version']},'{delete_request}'"
         assert rpc(db,'operator','delete_document',args)['deleted']
         assert rpc(db,'operator','delete_document',args)['deleted']
-        assert db.run(f"SELECT count(*) FROM gear.events WHERE after_data->>'id'='{deletion['id']}' AND event_type='draft_deleted'")=='1'
+        assert db.run(f"SELECT count(*) FROM gear_2026.events WHERE after_data->>'id'='{deletion['id']}' AND event_type='draft_deleted'")=='1'
         edit=save(db,base,[line()]);old_version=deepcopy(edit)
         edit=save(db,base,[line(),line()],draft=edit)
         save(db,base,[line()],draft=old_version,fail='document_conflict')
         confirm(db,old_version,fail='document_conflict')
         print('PASS old-code acknowledgement, draft audit retained after deletion and optimistic draft versions')
-        db.run(f"INSERT INTO gear.members(id,auth_user_id,display_name,status,role) VALUES ('{IDS['other']}','{IDS['other']}','Example second operator','active','operator')")
+        db.run(f"INSERT INTO gear_2026.members(id,auth_user_id,display_name,status,role) VALUES ('{IDS['other']}','{IDS['other']}','Example second operator','active','operator')")
         rpc(db,'other','get_document',quoted(edit['id']),fail='document_not_found')
         assert edit['id'] not in {d['id'] for d in rpc(db,'other','list_documents')}
         save(db,base,[line()],user='other',draft=edit,fail='draft_access_denied')
@@ -157,17 +157,17 @@ def main():
         historic=confirm(db,save(db,{**base,'handover_on':'2000-01-01'},[line()]))
         assert historic['numbering_on']==today and historic['handover_on']=='2000-01-01'
         assert today.replace('-','') in historic['document_no']
-        db.run(f"UPDATE gear.document_counters SET last_value=9999 WHERE business_on='{today}'")
+        db.run(f"UPDATE gear_2026.document_counters SET last_value=9999 WHERE business_on='{today}'")
         extended=confirm(db,save(db,base,[line()]))
         assert extended['document_no'].endswith('-10000')
         print('PASS foreign drafts stay private, caller identity cannot be supplied, business-day numbering expands')
-        db.run("UPDATE gear.members SET status='disabled',role=NULL WHERE id='"+IDS['operator']+"'")
+        db.run("UPDATE gear_2026.members SET status='disabled',role=NULL WHERE id='"+IDS['operator']+"'")
         confirm(db,issuedraft,request=request,fail='inventory_access_denied')
         for user in ['pending','disabled','unverified']:
             rpc(db,user,'list_documents',fail='inventory_access_denied')
-        db.run('SET ROLE anon; SELECT gear.list_documents()',fail='permission denied')
-        db.run('SET ROLE service_role; SELECT gear.list_documents()',fail='permission denied')
-        db.run('SET ROLE authenticated; SELECT gear_private.document_record(NULL)',fail='permission denied')
+        db.run('SET ROLE anon; SELECT gear_2026.list_documents()',fail='permission denied')
+        db.run('SET ROLE service_role; SELECT gear_2026.list_documents()',fail='permission denied')
+        db.run('SET ROLE authenticated; SELECT gear_private_2026.document_record(NULL)',fail='permission denied')
         assert db.run('SELECT id FROM unrelated.sentinel')=='7'
         print('PASS lost permission blocks replays, helpers remain private and unrelated applications survive')
     print(json.dumps({'flow_rpc_checks':'passed','production_access':False}))

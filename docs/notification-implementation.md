@@ -18,11 +18,11 @@
 
 | 接口 | 权限与用途 |
 | --- | --- |
-| `gear.claim_account_notification()` | 仅 `service_role`，领取一个审核通知任务并签发处理令牌 |
-| `gear.prepare_account_notification(job_id, token)` | 仅 `service_role`，重新核对资格，并只返回一次当前收件人和固定类型内容 |
-| `gear.finish_account_notification(...)` | 仅 `service_role`，凭令牌登记已提交、明确失败或结果不明 |
-| `gear.notification_status()` | 已登录有效管理员，读取计数和最近二十项处理状态；不返回收件邮箱、正文、令牌或邮件服务原始响应 |
-| `gear_private.configure_account_notifications(enabled)` | 仅数据库拥有者，设置通知开关、启用边界及审计 |
+| `gear_2026.claim_account_notification()` | 仅 `service_role`，领取一个审核通知任务并签发处理令牌 |
+| `gear_2026.prepare_account_notification(job_id, token)` | 仅 `service_role`，重新核对资格，并只返回一次当前收件人和固定类型内容 |
+| `gear_2026.finish_account_notification(...)` | 仅 `service_role`，凭令牌登记已提交、明确失败或结果不明 |
+| `gear_2026.notification_status()` | 已登录有效管理员，读取计数和最近二十项处理状态；不返回收件邮箱、正文、令牌或邮件服务原始响应 |
+| `gear_private_2026.configure_account_notifications(enabled)` | 仅数据库拥有者，设置通知开关、启用边界及审计 |
 
 服务端没有新增直接读写业务表、读取 Auth 用户表或执行其他业务函数的权限。内部函数固定空 `search_path`，服务角色只能访问明确授予的接口。匿名、普通成员不能领取、完成任务或更改发送开关。
 

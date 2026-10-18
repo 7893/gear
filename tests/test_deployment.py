@@ -31,6 +31,7 @@ class DeploymentBoundaries(unittest.TestCase):
             ('GITHUB_SHA', 'HEAD'), ('DEPLOY_HOST', '-oProxyCommand=example'),
             ('CI_DEPLOY_USER', 'example;exit'), ('DEPLOY_PORT', '0'),
             ('SUPABASE_PUBLISHABLE_KEY', 'sb_secret_example'),
+            ('GEAR_DB_SCHEMA', 'gear;SELECT 1'), ('GEAR_DB_SCHEMA', ''),
         ):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 deploy.validate(dict(env, **{name: value}))

@@ -8,7 +8,7 @@ from check_schema import IDS, ROOT, disposable_database, setup
 
 
 def call(db, user, function, args='', fail=None):
-    value = db.as_user(user, f'SELECT gear.{function}({args})', fail=fail)
+    value = db.as_user(user, f'SELECT {getattr(db,"schema","gear")}.{function}({args})', fail=fail)
     return json.loads(value) if not fail else None
 
 
@@ -101,6 +101,7 @@ def bootstrap(with_application=False):
         """)
         for migration in sorted((ROOT / 'database/migrations').glob('*.sql')):
             db.run(migration.read_text())
+        db.schema='gear_2026'
         for name in ['admin', 'operator']:
             db.run(f"INSERT INTO auth.users VALUES ('{IDS[name]}','{name}@example.invalid',now())")
         pending = call(db, 'admin', 'apply_for_access', "'Example pending admin'") if with_application else None
@@ -110,12 +111,12 @@ def bootstrap(with_application=False):
         db.env['GEAR_ADMIN_EMAIL'] = 'admin@example.invalid'
         db.env['GEAR_ADMIN_DISPLAY_NAME'] = 'Example admin'
         initialized = json.loads(db.run((ROOT / 'database/bootstrap_admin.sql').read_text()))
-        repeated = json.loads(db.run(f"SELECT gear_private.bootstrap_admin('{IDS['admin']}','Different name')"))
+        repeated = json.loads(db.run(f"SELECT gear_private_2026.bootstrap_admin('{IDS['admin']}','Different name')"))
         assert initialized == repeated and initialized['role'] == 'admin'
         if pending:
             assert initialized['id'] == pending['id'] and initialized['version'] == 2
-        assert db.run("SELECT count(*) FROM gear.events WHERE actor_source='bootstrap'") == '1'
-        db.run(f"SELECT gear_private.bootstrap_admin('{IDS['operator']}','Another admin')", fail='bootstrap_not_allowed')
+        assert db.run("SELECT count(*) FROM gear_2026.events WHERE actor_source='bootstrap'") == '1'
+        db.run(f"SELECT gear_private_2026.bootstrap_admin('{IDS['operator']}','Another admin')", fail='bootstrap_not_allowed')
         assert call(db, 'admin', 'get_my_membership')['membership']['role'] == 'admin'
 
 

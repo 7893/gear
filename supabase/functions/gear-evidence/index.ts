@@ -4,6 +4,7 @@ declare const Deno: {
   serve(handler: (request: Request) => Promise<Response>): void;
 };
 const names = [
+  "GEAR_DB_SCHEMA",
   "SUPABASE_URL",
   "SUPABASE_ANON_KEY",
   "SUPABASE_SERVICE_ROLE_KEY",

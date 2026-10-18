@@ -12,7 +12,7 @@ def reserve(db,doc,user='operator',request=None,**changes):
  return rpc(db,user,'reserve_attachment',','.join([quoted(doc['id']),quoted(json.dumps(details)),str(doc['version']),quoted(request or str(uuid4()))]))
 def finish(db,item,doc,actor='operator',hints=None,fail=None):
  info={'media_type':'application/pdf','size_bytes':100,'sha256':item['upload_manifest']['sha256'],'page_count':2,'recognition':hints if hints is not None else {'document_ids':[doc['id']],'document_numbers':[doc['document_no']]}}
- sql=f"SET LOCAL ROLE service_role; SELECT gear.commit_attachment({quoted(item['id'])},{quoted(IDS[actor])},{quoted(json.dumps(info))})"
+ sql=f"SET LOCAL ROLE service_role; SELECT gear_2026.commit_attachment({quoted(item['id'])},{quoted(IDS[actor])},{quoted(json.dumps(info))})"
  raw=db.run('BEGIN; '+sql+'; COMMIT;',fail=fail)
  return json.loads(raw) if not fail else None
 
@@ -29,7 +29,7 @@ def main():
   today=db.run("SELECT (now() AT TIME ZONE 'Asia/Shanghai')::date")
   base={'kind':'receipt','handover_on':today,'from_kind':'external','to_kind':'inventory','from_label':'示例交付方','to_label':'经办人库存','sender_name':'示例移交人','receiver_name':'示例接收人'}
   doc=confirm(db,save(db,base,[line()]));other=confirm(db,save(db,base,[line()]))
-  assets=db.run('SELECT md5(jsonb_agg(to_jsonb(a) ORDER BY id)::text) FROM gear.assets a');assignments=db.run('SELECT count(*) FROM gear.assignments')
+  assets=db.run('SELECT md5(jsonb_agg(to_jsonb(a) ORDER BY id)::text) FROM gear_2026.assets a');assignments=db.run('SELECT count(*) FROM gear_2026.assignments')
   request=str(uuid4())
   with ThreadPoolExecutor(max_workers=2) as pool:items=list(pool.map(lambda _:reserve(db,doc,request=request),range(2)))
   assert items[0]==items[1];pending=items[0]
@@ -37,7 +37,7 @@ def main():
   assert current(db,doc)['evidence_state']=='awaiting_upload'
   assert rpc(db,'viewer','list_evidence',quoted(doc['id']))['items']==[]
   rpc(db,'viewer','get_attachment',quoted(pending['id']),fail='attachment_not_found')
-  db.run(f"SET ROLE authenticated; SELECT gear.commit_attachment({quoted(pending['id'])},{quoted(IDS['operator'])},'{{}}')",fail='permission denied')
+  db.run(f"SET ROLE authenticated; SELECT gear_2026.commit_attachment({quoted(pending['id'])},{quoted(IDS['operator'])},'{{}}')",fail='permission denied')
   finish(db,pending,doc,actor='viewer',fail='inventory_access_denied')
   ready=finish(db,pending,doc);assert ready['upload_state']=='ready' and ready['page_count']==2
   assert finish(db,pending,doc)==ready
@@ -57,8 +57,8 @@ def main():
   archive(db,current(db,other),[moved],fail='evidence_manual_reason_required')
   archive(db,current(db,other),[moved],reason='示例人工核对外部单据内容与关联')
   print('PASS explicit manual checks, archived corrections admin-only, old association audited and original retained')
-  db.run(f"UPDATE gear.attachments SET storage_key='forged' WHERE id={quoted(moved['id'])}",fail='attachment_original_is_permanent')
-  db.run(f"DELETE FROM gear.attachments WHERE id={quoted(moved['id'])}",fail='attachment_original_is_permanent')
+  db.run(f"UPDATE gear_2026.attachments SET storage_key='forged' WHERE id={quoted(moved['id'])}",fail='attachment_original_is_permanent')
+  db.run(f"DELETE FROM gear_2026.attachments WHERE id={quoted(moved['id'])}",fail='attachment_original_is_permanent')
   # Add a different original to the archived record as admin; successful upload reopens review.
   extra=reserve(db,current(db,other),user='admin',hash='b',correction_reason='示例补充第二页')
   extra=finish(db,extra,other,actor='admin',hints={'document_ids':[],'document_numbers':[]})
@@ -82,13 +82,13 @@ def main():
   for role in ['viewer','pending','disabled','unverified','other']:
    rpc(db,role,'reserve_attachment',','.join([quoted(doc['id']),"'{}'",'1',quoted(str(uuid4()))]),fail='inventory_access_denied')
   for role in ['pending','disabled','unverified','other']:rpc(db,role,'get_attachment',quoted(ready['id']),fail='inventory_access_denied')
-  db.run("SET ROLE anon; SELECT gear.list_evidence(NULL)",fail='permission denied')
-  db.run("SET ROLE service_role; SELECT gear.list_evidence(NULL)",fail='permission denied')
-  db.run("SET ROLE authenticated; SELECT gear_private.evidence_changed(NULL)",fail='permission denied')
-  db.run(f"UPDATE gear.members SET status='disabled',role=NULL WHERE id={quoted(IDS['operator'])}")
+  db.run("SET ROLE anon; SELECT gear_2026.list_evidence(NULL)",fail='permission denied')
+  db.run("SET ROLE service_role; SELECT gear_2026.list_evidence(NULL)",fail='permission denied')
+  db.run("SET ROLE authenticated; SELECT gear_private_2026.evidence_changed(NULL)",fail='permission denied')
+  db.run(f"UPDATE gear_2026.members SET status='disabled',role=NULL WHERE id={quoted(IDS['operator'])}")
   finish(db,pending,doc,fail='inventory_access_denied')
-  assert db.run('SELECT md5(jsonb_agg(to_jsonb(a) ORDER BY id)::text) FROM gear.assets a')==assets
-  assert db.run('SELECT count(*) FROM gear.assignments')==assignments
+  assert db.run('SELECT md5(jsonb_agg(to_jsonb(a) ORDER BY id)::text) FROM gear_2026.assets a')==assets
+  assert db.run('SELECT count(*) FROM gear_2026.assignments')==assignments
   assert db.run('SELECT id FROM unrelated.sentinel')=='7'
   # Mock Storage lives only in this disposable database. An unrelated permissive policy
   # must not open Gear's bucket, and a restrictive Gear policy must not block other buckets.

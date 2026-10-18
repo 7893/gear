@@ -22,11 +22,11 @@
 
 | 接口 | 用途 |
 | --- | --- |
-| `gear.list_parties()` | 读取当前有效的个人与团队名单 |
-| `gear.create_party(details, request_id)` | 管理员或经办人创建接收对象并登记审计 |
-| `gear.initialize_asset(details, placement, request_id, allow_legacy_duplicate)` | 管理员或经办人原子登记存量设备及初始分配 |
-| `gear.list_assets(search, category, state, holder_kind)` | 读取有效台账、筛选结果及全局六类互斥统计 |
-| `gear.get_asset(asset_id)` | 读取设备现状及该设备的审计历史 |
+| `gear_2026.list_parties()` | 读取当前有效的个人与团队名单 |
+| `gear_2026.create_party(details, request_id)` | 管理员或经办人创建接收对象并登记审计 |
+| `gear_2026.initialize_asset(details, placement, request_id, allow_legacy_duplicate)` | 管理员或经办人原子登记存量设备及初始分配 |
+| `gear_2026.list_assets(search, category, state, holder_kind)` | 读取有效台账、筛选结果及全局六类互斥统计 |
+| `gear_2026.get_asset(asset_id)` | 读取设备现状及该设备的审计历史 |
 
 公开接口通过已固定空 `search_path` 的内部实现核对当前验证状态、成员状态和角色。只有启用且邮箱已验证的三种角色可以读取；管理员和经办人可建账及新增接收对象，查询人不能写入。匿名及 `service_role` 不新增执行权。
 

@@ -54,6 +54,8 @@ def validate(env):
         https_origin(env[name])
     if not env['SUPABASE_PUBLISHABLE_KEY'].startswith('sb_publishable_'):
         raise ValueError('Only a Supabase publishable key may enter the page')
+    if not re.fullmatch(r'[a-z][a-z0-9_]{0,62}', env['GEAR_DB_SCHEMA']):
+        raise ValueError('Invalid database schema identifier')
     if not re.fullmatch(r'arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+', env['AWS_DEPLOY_ROLE_ARN']):
         raise ValueError('Invalid deployment role')
 
@@ -153,6 +155,7 @@ def deploy(env):
     dist = PAGE / 'dist'
     (dist / 'runtime-config.json').write_text(json.dumps({
         'apiUrl': https_origin(env['PUBLIC_API_URL']),
+        'databaseSchema': env['GEAR_DB_SCHEMA'],
         'publishableKey': env['SUPABASE_PUBLISHABLE_KEY'],
         'release': env['GITHUB_SHA'],
         'accountsEnabled': env.get('GEAR_ACCOUNTS_ENABLED') == 'true',
@@ -221,7 +224,8 @@ def deploy(env):
         raise RuntimeError('CDN refresh did not complete before the deadline')
     output = run('Live browser verification', ['pnpm', 'run', 'test:live'], cwd=PAGE,
         env=dict(clean, SMOKE_BASE_URL=env['PUBLIC_APP_URL'],
-                 SMOKE_EXPECTED_REVISION=env['GITHUB_SHA']), timeout=110)
+                 SMOKE_EXPECTED_REVISION=env['GITHUB_SHA'],
+                 SMOKE_EXPECTED_SCHEMA=env['GEAR_DB_SCHEMA']), timeout=110)
     # Print a fixed success summary; no response bodies or deployment identifiers.
     if '"supabase":"passed"' not in output:
         raise RuntimeError('Live browser verification did not return its success summary')

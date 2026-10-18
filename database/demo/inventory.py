@@ -105,12 +105,12 @@ BEGIN
         RAISE EXCEPTION 'demo_requires_fifty_assets';
     END IF;
     FOR item IN SELECT value FROM jsonb_array_elements(payload->'people') LOOP
-        result := gear.create_party(item->'details', (item->>'request_id')::uuid);
+        result := gear_2026.create_party(item->'details', (item->>'request_id')::uuid);
         recipients := recipients || jsonb_build_object(item->>'key', result);
     END LOOP;
     FOR item IN SELECT value FROM jsonb_array_elements(payload->'teams') LOOP
         details := item->'details' || jsonb_build_object('default_responsible_id', recipients->(item->>'responsible_key')->>'id');
-        result := gear.create_party(details, (item->>'request_id')::uuid);
+        result := gear_2026.create_party(details, (item->>'request_id')::uuid);
         recipients := recipients || jsonb_build_object(item->>'key', result);
     END LOOP;
     FOR item IN SELECT value FROM jsonb_array_elements(payload->'assets') LOOP
@@ -119,15 +119,15 @@ BEGIN
             placement := placement || jsonb_build_object('holder_party_id', recipients->(item->>'holder_key')->>'id',
                 'responsible_person_id', recipients->(item->>'responsible_key')->>'id');
         END IF;
-        result := gear.initialize_asset(item->'details', placement, (item->>'request_id')::uuid,
+        result := gear_2026.initialize_asset(item->'details', placement, (item->>'request_id')::uuid,
             (item->>'allow_legacy_duplicate')::boolean);
         assets := assets || jsonb_build_array(result);
     END LOOP;
-    PERFORM set_config('gear.demo_result', jsonb_build_object('batch_id', payload->>'batch_id',
+    PERFORM set_config('gear_2026.demo_result', jsonb_build_object('batch_id', payload->>'batch_id',
         'base_date', payload->>'base_date', 'recipients', recipients, 'assets', assets)::text, true);
 END;
 $demo$;
-SELECT current_setting('gear.demo_result')::jsonb AS result;
+SELECT current_setting('gear_2026.demo_result')::jsonb AS result;
 COMMIT;
 """
 

@@ -14,7 +14,7 @@
 
 ## 资格与邮件
 
-[迁移 003](../database/migrations/202610180003_recovery.sql) 只新增 `gear.can_recover_password(uuid)`，返回该认证身份是否具有已验证邮箱和已启用的设备簿成员资格。固定空 `search_path` 的只读 `SECURITY DEFINER` 函数只授予 `service_role` 执行；该角色只新增 `gear` schema 使用权和这一个函数的执行权，没有新增表读取、写入或其他函数权限。匿名及普通登录者不能调用该资格查询。
+[迁移 003](../database/migrations/202610180003_recovery.sql) 只新增 `gear_2026.can_recover_password(uuid)`，返回该认证身份是否具有已验证邮箱和已启用的设备簿成员资格。固定空 `search_path` 的只读 `SECURITY DEFINER` 函数只授予 `service_role` 执行；该角色只新增 `gear_2026` schema 使用权和这一个函数的执行权，没有新增表读取、写入或其他函数权限。匿名及普通登录者不能调用该资格查询。
 
 邮件函数根据 `GEAR_AUTH_APP_URL` 与 Auth 传入的精确回调根入口识别设备簿的找回请求；不以共享用户的设备簿 metadata 判断请求来源。签名通过后，使用平台自带服务凭据调用固定的资格 RPC，检查通过才向 Gmail 提交六位验证码邮件。无资格时不发邮件并返回统一成功；查询失败则受控失败，不能绕过检查发送。
 

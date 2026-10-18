@@ -8,7 +8,7 @@ from check_accounts import change
 
 
 def service(db, name, args=''):
-    value = db.run(f'SET ROLE service_role; SELECT gear.{name}({args})')
+    value = db.run(f'SET ROLE service_role; SELECT gear_2026.{name}({args})')
     return json.loads(value) if value else None
 
 
@@ -22,7 +22,7 @@ def prepare(db, job):
 
 def finish(db, job, outcome, code=None, message=None, delay=60):
     quoted = lambda value: "'" + value + "'" if value is not None else 'NULL'
-    return db.run(f"SET ROLE service_role; SELECT gear.finish_account_notification("
+    return db.run(f"SET ROLE service_role; SELECT gear_2026.finish_account_notification("
                   f"'{job['id']}','{job['lease_token']}','{outcome}',{quoted(message)},{quoted(code)},{delay})") == 't'
 
 
@@ -30,12 +30,12 @@ def pending(db):
     identity, member, job_id = map(str, [uuid4(), uuid4(), uuid4()])
     db.run(f"""
         INSERT INTO auth.users VALUES ('{identity}','applicant@example.invalid',now());
-        INSERT INTO gear.members (id,auth_user_id,display_name) VALUES ('{member}','{identity}','Example applicant');
+        INSERT INTO gear_2026.members (id,auth_user_id,display_name) VALUES ('{member}','{identity}','Example applicant');
         WITH event AS (
-            INSERT INTO gear.events (scope,event_type,target_member_id,actor_member_id,actor_label,actor_source,after_data)
+            INSERT INTO gear_2026.events (scope,event_type,target_member_id,actor_member_id,actor_label,actor_source,after_data)
             VALUES ('member','member_applied','{member}','{member}','Example applicant','user',
                 '{{"id":"{member}","status":"pending","version":1}}') RETURNING id)
-        INSERT INTO gear.notification_outbox (id,dedup_key,notification_type,recipient_member_id,source_event_id,payload)
+        INSERT INTO gear_2026.notification_outbox (id,dedup_key,notification_type,recipient_member_id,source_event_id,payload)
         SELECT '{job_id}','example:{job_id}','application_pending','{IDS['admin']}',id,
             '{{"to":"ignored@example.invalid","member_id":"{IDS['disabled']}"}}' FROM event;
     """)
@@ -43,7 +43,7 @@ def pending(db):
 
 
 def clear(db):
-    db.run('DELETE FROM gear.notification_outbox')
+    db.run('DELETE FROM gear_2026.notification_outbox')
 
 
 def main():
@@ -53,26 +53,27 @@ def main():
             if path.name.endswith('initial_schema.sql'):
                 continue
             db.run(path.read_text())
-        migration = ROOT / 'database/migrations/202610180004_notifications.sql'
-        db.run(migration.read_text(), fail='already exists')
+        db.schema='gear_2026'
+        migration = ROOT / 'database/migrations/202610190007_schema_year.sql'
+        db.run(migration.read_text(), fail='schema_year_source_missing')
         for user in ['admin','viewer','pending','disabled','unverified']:
-            db.as_user(user, 'SELECT gear.claim_account_notification()', fail='permission denied')
-        db.run('SET ROLE anon; SELECT gear.notification_status()', fail='permission denied')
+            db.as_user(user, 'SELECT gear_2026.claim_account_notification()', fail='permission denied')
+        db.run('SET ROLE anon; SELECT gear_2026.notification_status()', fail='permission denied')
         for user in ['viewer','pending','disabled','unverified']:
-            db.as_user(user, 'SELECT gear.notification_status()', fail='admin_required')
-        db.run('SET ROLE service_role; SELECT * FROM gear.notification_outbox', fail='permission denied')
-        db.run('SET ROLE service_role; SELECT gear_private.notification_status()', fail='permission denied')
-        db.run('SET ROLE service_role; SELECT gear_private.configure_account_notifications(true)', fail='permission denied')
-        db.as_user('admin','SELECT gear_private.configure_account_notifications(true)', fail='permission denied')
-        assert json.loads(db.as_user('admin','SELECT gear.notification_status()'))['enabled'] is False
+            db.as_user(user, 'SELECT gear_2026.notification_status()', fail='admin_required')
+        db.run('SET ROLE service_role; SELECT * FROM gear_2026.notification_outbox', fail='permission denied')
+        db.run('SET ROLE service_role; SELECT gear_private_2026.notification_status()', fail='permission denied')
+        db.run('SET ROLE service_role; SELECT gear_private_2026.configure_account_notifications(true)', fail='permission denied')
+        db.as_user('admin','SELECT gear_private_2026.configure_account_notifications(true)', fail='permission denied')
+        assert json.loads(db.as_user('admin','SELECT gear_2026.notification_status()'))['enabled'] is False
         member, job_id = pending(db)
         assert claim(db) is None
-        assert db.run(f"SELECT status FROM gear.notification_outbox WHERE id='{job_id}'") == 'pending'
-        db.run('SELECT gear_private.configure_account_notifications(true)')
-        db.run('SELECT gear_private.configure_account_notifications(true)')
-        assert db.run("SELECT count(*) FROM gear.events WHERE event_type='settings_updated'") == '1'
+        assert db.run(f"SELECT status FROM gear_2026.notification_outbox WHERE id='{job_id}'") == 'pending'
+        db.run('SELECT gear_private_2026.configure_account_notifications(true)')
+        db.run('SELECT gear_private_2026.configure_account_notifications(true)')
+        assert db.run("SELECT count(*) FROM gear_2026.events WHERE event_type='settings_updated'") == '1'
         assert claim(db) is None
-        assert db.run(f"SELECT error_code FROM gear.notification_outbox WHERE id='{job_id}'") == 'before_enablement'
+        assert db.run(f"SELECT error_code FROM gear_2026.notification_outbox WHERE id='{job_id}'") == 'before_enablement'
         print('PASS service-only mutation, admin-only diagnostics, disabled sender and historical cutoff')
 
         clear(db)
@@ -98,7 +99,7 @@ def main():
         job = claim(db)
         change(db,'admin',member,1,'active','viewer')
         assert prepare(db,job) is None
-        assert db.run(f"SELECT status FROM gear.notification_outbox WHERE id='{job_id}'") == 'cancelled'
+        assert db.run(f"SELECT status FROM gear_2026.notification_outbox WHERE id='{job_id}'") == 'cancelled'
         result = claim(db)
         assert prepare(db,result)['notification'] == {'kind':'application_approved','role':'viewer'}
         assert finish(db,result,'submitted',message='approved-id')
@@ -123,45 +124,45 @@ def main():
         job = claim(db)
         assert finish(db,job,'failed',code='oauth_temporary',delay=3600)
         assert claim(db) is None
-        assert db.run(f"SELECT available_at-last_attempt_at > interval '59 minutes' FROM gear.notification_outbox WHERE id='{job['id']}'") == 't'
-        db.run("UPDATE gear.notification_outbox SET available_at=now()-interval '1 second'")
+        assert db.run(f"SELECT available_at-last_attempt_at > interval '59 minutes' FROM gear_2026.notification_outbox WHERE id='{job['id']}'") == 't'
+        db.run("UPDATE gear_2026.notification_outbox SET available_at=now()-interval '1 second'")
         next_job = claim(db)
         assert next_job['lease_token'] != job['lease_token']
         assert not finish(db,job,'failed',code='oauth_temporary')
         assert prepare(db,next_job)
         assert finish(db,next_job,'unknown',code='submission_unknown')
         assert claim(db) is None
-        assert db.run('SELECT attempt_count FROM gear.notification_outbox') == '2'
+        assert db.run('SELECT attempt_count FROM gear_2026.notification_outbox') == '2'
         clear(db)
         pending(db)
         job = claim(db)
-        db.run("UPDATE gear.notification_outbox SET lease_until=now()-interval '1 second'")
+        db.run("UPDATE gear_2026.notification_outbox SET lease_until=now()-interval '1 second'")
         assert not finish(db,job,'failed',code='oauth_temporary')
         assert claim(db) is None
-        assert db.run('SELECT status FROM gear.notification_outbox') == 'unknown'
+        assert db.run('SELECT status FROM gear_2026.notification_outbox') == 'unknown'
         clear(db)
         pending(db)
         job = claim(db)
         assert finish(db,job,'failed',code='mail_authorization')
-        db.run("UPDATE gear.notification_outbox SET available_at=now()-interval '1 second'")
+        db.run("UPDATE gear_2026.notification_outbox SET available_at=now()-interval '1 second'")
         assert claim(db) is None
         print('PASS delayed retry, stale worker fencing, ambiguous delivery and expired leases never auto-retried')
 
         clear(db)
         pending(db)
         job = claim(db)
-        db.run('SELECT gear_private.configure_account_notifications(false)')
+        db.run('SELECT gear_private_2026.configure_account_notifications(false)')
         assert prepare(db,job) is None
         assert claim(db) is None
         pending(db)
-        db.run('SELECT gear_private.configure_account_notifications(true)')
+        db.run('SELECT gear_private_2026.configure_account_notifications(true)')
         assert claim(db) is None  # Both jobs predate the new boundary.
         clear(db)
         pending(db)
         job = claim(db)
         db.run(f"UPDATE auth.users SET email_confirmed_at=NULL WHERE id='{IDS['admin']}'")
         assert prepare(db,job) is None
-        db.as_user('admin','SELECT gear.notification_status()', fail='admin_required')
+        db.as_user('admin','SELECT gear_2026.notification_status()', fail='admin_required')
         db.run(f"UPDATE auth.users SET email_confirmed_at=now() WHERE id='{IDS['admin']}'")
         print('PASS owner-only audited toggle, disable/re-enable boundary and recipient verification recheck')
 
@@ -171,16 +172,16 @@ def main():
             job = claim(db)
             assert job is not None
             assert finish(db,job,'failed',code='oauth_temporary')
-            db.run("UPDATE gear.notification_outbox SET available_at=now()-interval '1 second'")
+            db.run("UPDATE gear_2026.notification_outbox SET available_at=now()-interval '1 second'")
         assert claim(db) is None
         clear(db)
         pending(db)
         job = claim(db)
         assert finish(db,job,'failed',code='oauth_temporary')
-        db.run("UPDATE gear.notification_outbox SET attempt_count=50,available_at=now()-interval '1 second'")
+        db.run("UPDATE gear_2026.notification_outbox SET attempt_count=50,available_at=now()-interval '1 second'")
         pending(db)
         assert claim(db) is None
-        state = json.loads(db.as_user('admin','SELECT gear.notification_status()'))
+        state = json.loads(db.as_user('admin','SELECT gear_2026.notification_status()'))
         assert state['enabled'] and state['counts']['failed'] == 1 and state['counts']['pending'] == 1
         assert all(set(row)=={'id','notification_type','status','attempt_count','error_code','updated_at'} for row in state['recent'])
         assert db.run('SELECT id FROM unrelated.sentinel') == '7'
@@ -194,7 +195,7 @@ def scheduler_checks(db):
     db.env['GEAR_NOTIFICATION_FUNCTION_URL'] = 'https://exampleproject.supabase.co/functions/v1/gear-notification-mail'
     db.env['GEAR_NOTIFICATION_TOKEN'] = 'example-only-scheduler-token-' * 2
     db.run(script, fail='Required scheduler extensions')
-    assert db.run("SELECT to_regprocedure('gear_private.invoke_account_notifications()') IS NULL") == 't'
+    assert db.run("SELECT to_regprocedure('gear_private_2026.invoke_account_notifications()') IS NULL") == 't'
     # Test the exact dispatch function with isolated Vault/HTTP doubles. These
     # are SQL captures, never real network calls or a substitute for live Cron.
     db.run("""
@@ -208,16 +209,16 @@ def scheduler_checks(db):
             LANGUAGE plpgsql AS $$ BEGIN
             INSERT INTO unrelated.notification_requests VALUES (url,headers,body,timeout_milliseconds); RETURN 1; END $$;
     """)
-    function = script[script.index('CREATE FUNCTION gear_private.invoke_account_notifications'):script.index('SELECT cron.schedule')]
+    function = script[script.index('CREATE FUNCTION gear_private_2026.invoke_account_notifications'):script.index('SELECT cron.schedule')]
     db.run(function)
-    db.run('SET ROLE service_role; SELECT gear_private.invoke_account_notifications()', fail='permission denied')
+    db.run('SET ROLE service_role; SELECT gear_private_2026.invoke_account_notifications()', fail='permission denied')
     clear(db)
-    assert db.run('SELECT gear_private.invoke_account_notifications()') == ''
+    assert db.run('SELECT gear_private_2026.invoke_account_notifications()') == ''
     pending(db)
-    db.run('SELECT gear_private.configure_account_notifications(false)')
-    assert db.run('SELECT gear_private.invoke_account_notifications()') == ''
-    db.run('SELECT gear_private.configure_account_notifications(true)')
-    assert db.run('SELECT gear_private.invoke_account_notifications()') == '1'
+    db.run('SELECT gear_private_2026.configure_account_notifications(false)')
+    assert db.run('SELECT gear_private_2026.invoke_account_notifications()') == ''
+    db.run('SELECT gear_private_2026.configure_account_notifications(true)')
+    assert db.run('SELECT gear_private_2026.invoke_account_notifications()') == '1'
     assert db.run("SELECT count(*) FROM unrelated.notification_requests WHERE body='{}' AND timeout_ms=45000") == '1'
     assert db.run("SELECT headers->>'Authorization' LIKE 'Bearer example-only-%' FROM unrelated.notification_requests") == 't'
     print('PASS scheduler installation fails without extensions; isolated dispatcher checks toggle and queue before HTTP')

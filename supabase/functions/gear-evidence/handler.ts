@@ -1,5 +1,6 @@
 import { hints, MAX_FILE_BYTES, readBounded, verifyFile } from "./files.ts";
 export type Environment = Record<
+  | "GEAR_DB_SCHEMA"
   | "SUPABASE_URL"
   | "SUPABASE_ANON_KEY"
   | "SUPABASE_SERVICE_ROLE_KEY"
@@ -109,7 +110,7 @@ export async function handle(
         headers: {
           ...(service ? serviceHeaders : userHeaders),
           "Content-Type": "application/json",
-          "Content-Profile": "gear",
+          "Content-Profile": env.GEAR_DB_SCHEMA,
         },
         body: JSON.stringify(body),
       });

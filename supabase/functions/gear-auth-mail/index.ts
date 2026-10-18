@@ -5,6 +5,7 @@ declare const Deno: {
   serve(handler: (request: Request) => Promise<Response>): void;
 };
 const names = [
+  "GEAR_DB_SCHEMA",
   "GEAR_AUTH_WEBHOOK_SECRET",
   "GEAR_AUTH_PUBLIC_URL",
   "GEAR_GMAIL_CLIENT_ID",

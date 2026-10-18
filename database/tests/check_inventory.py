@@ -11,7 +11,7 @@ def quoted(value):
 
 
 def rpc(db, user, name, args='', fail=None):
-    result = db.as_user(user, f'SELECT gear.{name}({args})', fail=fail)
+    result = db.as_user(user, f'SELECT gear_2026.{name}({args})', fail=fail)
     return json.loads(result) if not fail else None
 
 
@@ -33,8 +33,8 @@ def main():
         for path in sorted((ROOT / 'database/migrations').glob('*.sql')):
             if not path.name.endswith('initial_schema.sql'):
                 db.run(path.read_text())
-        migration = ROOT / 'database/migrations/202610180005_inventory.sql'
-        db.run(migration.read_text(), fail='already exists')
+        migration = ROOT / 'database/migrations/202610190007_schema_year.sql'
+        db.run(migration.read_text(), fail='schema_year_source_missing')
         for user in ['pending', 'other', 'disabled', 'unverified']:
             rpc(db, user, 'list_assets', fail='inventory_access_denied')
             rpc(db, user, 'list_parties', fail='inventory_access_denied')
@@ -42,11 +42,11 @@ def main():
         for user in ['viewer', 'pending', 'disabled', 'unverified']:
             party(db, user, fail='inventory_access_denied')
             initialize(db, user, fail='inventory_access_denied')
-        db.run('SET ROLE anon; SELECT gear.list_assets()', fail='permission denied')
-        db.run('SET ROLE service_role; SELECT gear.list_assets()', fail='permission denied')
-        db.as_user('operator', "SELECT nextval('gear.asset_code_sequence')", fail='permission denied')
-        db.as_user('admin', "INSERT INTO gear.assets(name) VALUES ('bypass')", fail='permission denied')
-        db.as_user('operator', 'SELECT gear_private.asset_record(NULL)', fail='permission denied')
+        db.run('SET ROLE anon; SELECT gear_2026.list_assets()', fail='permission denied')
+        db.run('SET ROLE service_role; SELECT gear_2026.list_assets()', fail='permission denied')
+        db.as_user('operator', "SELECT nextval('gear_2026.asset_code_sequence')", fail='permission denied')
+        db.as_user('admin', "INSERT INTO gear_2026.assets(name) VALUES ('bypass')", fail='permission denied')
+        db.as_user('operator', 'SELECT gear_private_2026.asset_record(NULL)', fail='permission denied')
         print('PASS current verified membership, write roles and no direct table or sequence mutation')
 
         person_id = str(uuid4())
@@ -63,7 +63,7 @@ def main():
         assert person['id'] in {p['id'] for p in rpc(db, 'viewer', 'list_parties')}
         print('PASS idempotent recipient creation, teams require active person leaders and receivers need no login')
 
-        docs_before = db.run('SELECT count(*) FROM gear.documents')
+        docs_before = db.run('SELECT count(*) FROM gear_2026.documents')
         request = str(uuid4())
         with ThreadPoolExecutor(max_workers=2) as pool:
             initialized = list(pool.map(lambda _: initialize(db, request=request, details={'legacy_code': '00007 / OLD'}), range(2)))
@@ -71,8 +71,8 @@ def main():
         assert asset == initialized[1]
         assert asset['asset_code'] == 'SB-000001' and asset['legacy_code'] == '00007 / OLD'
         assert asset['display_status'] == 'inventory_available' and asset['last_flow_on'] is None
-        assert db.run(f"SELECT count(*) FROM gear.events WHERE request_id='{request}'") == '1'
-        assert db.run(f"SELECT count(*) FROM gear.assignments WHERE asset_id='{asset['id']}'") == '0'
+        assert db.run(f"SELECT count(*) FROM gear_2026.events WHERE request_id='{request}'") == '1'
+        assert db.run(f"SELECT count(*) FROM gear_2026.assignments WHERE asset_id='{asset['id']}'") == '0'
         detail = rpc(db, 'viewer', 'get_asset', f"'{asset['id']}'")
         assert detail['history'][0]['occurred_on'] is None
         assert detail['history'][0]['after_data'] == asset
@@ -94,7 +94,7 @@ def main():
         team_placement = {'holder_party_id': team['id'], 'responsible_person_id': person['id'], 'usage_kind': 'temporary', 'due_on': '2000-03-04'}
         team_asset = initialize(db, placement=team_placement)
         assert team_asset['holder_kind'] == 'team' and team_asset['started_on'] is None and team_asset['due_on'] == '2000-03-04'
-        assert db.run(f"SELECT followup_member_id::text FROM gear.assignments WHERE asset_id='{team_asset['id']}'") == IDS['operator']
+        assert db.run(f"SELECT followup_member_id::text FROM gear_2026.assignments WHERE asset_id='{team_asset['id']}'") == IDS['operator']
         assert rpc(db, 'viewer', 'get_asset', f"'{team_asset['id']}'")['history'][0]['after_data'] == team_asset
         initialize(db, placement={**team_placement, 'responsible_person_id': None}, fail='responsible_person_required')
         initialize(db, placement={**team_placement, 'due_on': None}, fail='invalid_placement')
@@ -109,7 +109,7 @@ def main():
         initialize(db, details={'management_status': 'scrapped'}, fail='invalid_asset')
         initialize(db, details={'name': {'invalid': 'object'}}, fail='invalid_asset')
         initialize(db, details={'name': 'x' * 121}, fail='invalid_asset')
-        assert db.run('SELECT count(*) FROM gear.documents') == docs_before
+        assert db.run('SELECT count(*) FROM gear_2026.documents') == docs_before
         print('PASS inventory/person/team initialization, faulty issued stock, unknown dates and temporary use without fabricated documents')
 
         state = rpc(db, 'viewer', 'list_assets')
@@ -124,24 +124,24 @@ def main():
         assert rpc(db, 'viewer', 'list_assets', "'Example person'")['matched'] == 2
         rpc(db, 'viewer', 'list_assets', "'',NULL,'made_up'", fail='invalid_inventory_filter')
         rpc(db, 'viewer', 'get_asset', f"'{uuid4()}'", fail='asset_not_found')
-        db.run(f"UPDATE gear.parties SET name='Renamed example person' WHERE id='{person['id']}'")
-        db.run(f"UPDATE gear.parties SET default_responsible_id='{IDS['person2']}' WHERE id='{team['id']}'")
+        db.run(f"UPDATE gear_2026.parties SET name='Renamed example person' WHERE id='{person['id']}'")
+        db.run(f"UPDATE gear_2026.parties SET default_responsible_id='{IDS['person2']}' WHERE id='{team['id']}'")
         current = rpc(db, 'viewer', 'get_asset', f"'{team_asset['id']}'")
         assert current['asset']['responsible_person_id'] == person['id']
         assert current['asset']['responsible_name'] == 'Renamed example person'
         assert current['history'][0]['after_data']['responsible_name'] == 'Example person'
-        db.run(f"UPDATE gear.assets SET invalidated_at=now(),invalidated_by='{IDS['admin']}',invalid_reason='Example duplicate' WHERE id='{other['id']}'")
+        db.run(f"UPDATE gear_2026.assets SET invalidated_at=now(),invalidated_by='{IDS['admin']}',invalid_reason='Example duplicate' WHERE id='{other['id']}'")
         assert rpc(db,'viewer','list_assets')['summary']['total'] == summary['total'] - 1
         assert rpc(db,'viewer','get_asset',f"'{other['id']}'")['asset']['invalidated_at'] is not None
-        db.run(f"UPDATE gear.parties SET is_active=false WHERE id='{person['id']}'")
+        db.run(f"UPDATE gear_2026.parties SET is_active=false WHERE id='{person['id']}'")
         initialize(db, placement=placement, fail='holder_unavailable')
         initialize(db, placement=team_placement, fail='responsible_person_required')
         assert db.run('SELECT id FROM unrelated.sentinel') == '7'
         print('PASS literal search, exclusive summaries, invalid records excluded, immutable history and inactive recipient protection')
 
-        db.run("SELECT setval('gear.asset_code_sequence',999999,true)")
+        db.run("SELECT setval('gear_2026.asset_code_sequence',999999,true)")
         assert initialize(db)['asset_code'] == 'SB-1000000'
-        db.run(f"UPDATE gear.members SET status='disabled',role=NULL WHERE id='{IDS['operator']}'")
+        db.run(f"UPDATE gear_2026.members SET status='disabled',role=NULL WHERE id='{IDS['operator']}'")
         initialize(db, request=request, details={'legacy_code': '00007 / OLD'}, fail='inventory_access_denied')
         rpc(db, 'operator', 'get_asset', f"'{asset['id']}'", fail='inventory_access_denied')
         print('PASS sequence expands beyond six digits and revoked access cannot replay earlier creation')

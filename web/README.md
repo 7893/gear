@@ -12,7 +12,7 @@ pnpm -C web run dev
 
 ## 配置与路由
 
-构建产物不包含部署地址。运行时从 `/runtime-config.json` 读取 `apiUrl`、`publishableKey`、`release`、`accountsEnabled`、`recoveryEnabled`、`inventoryEnabled`、`flowsEnabled`；实际文件由已获授权的发布流程注入并忽略。只有公开 publishable key 可进入浏览器，管理密钥和发件令牌不进入本目录。
+构建产物不包含部署地址。运行时从 `/runtime-config.json` 读取 `apiUrl`、`databaseSchema`、`publishableKey`、`release`、`accountsEnabled`、`recoveryEnabled`、`inventoryEnabled`、`flowsEnabled`、`evidenceEnabled`；实际文件由已获授权的发布流程注入并忽略。`databaseSchema` 由同一个 `GEAR_DB_SCHEMA` 注入，与网关一致；缺失或格式错误时拒绝初始化，不回退到写死名称。只有公开 publishable key 可进入浏览器，管理密钥和发件令牌不进入本目录。
 
 `accountsEnabled` 只有明确的 `true` 才开启账号服务。共享认证配置已获准接入，账号发布开关已开启；关闭时不创建 Auth 客户端，不发送登录、注册或会话刷新请求。GitHub 发布步骤通过仓库变量 `GEAR_ACCOUNTS_ENABLED` 控制此项：共享配置获准并检查通过后，开放入口供指定管理员本人注册、验证，再由部署者初始化权限并完成真实流程验收；不能以切换此变量替代共享配置审批或验收。
 
@@ -53,6 +53,6 @@ pnpm -C web run dev
 
 ## 签字件与人工归档
 
-已本地实现正式单据详情中的原件上传、逐页预览、下载、二维码和 PDF 单号识别、手动关联更正及四项人工核对归档；尚未上线。`GEAR_EVIDENCE_ENABLED` 控制 `evidenceEnabled`，缺省关闭且依赖台账与流转开关。PDF 模块和 worker 按需加载并随网站提供，图片无二维码或 PDF 无内置文字时允许人工处理；不自动判断签字真实性。
+已本地实现正式单据详情中的原件上传、逐页预览、下载、二维码和 PDF 单号识别、手动关联更正及四项人工核对归档；前端代码随主分支发布，数据库和独立文件服务尚未上线，功能保持关闭。`GEAR_EVIDENCE_ENABLED` 控制 `evidenceEnabled`，缺省关闭且依赖台账与流转开关。PDF 模块和 worker 按需加载并随网站提供，图片无二维码或 PDF 无内置文字时允许人工处理；不自动判断签字真实性。
 
-新增十个附件场景，合计三十八个浏览器场景通过。云端迁移 007、私有桶、隔离策略及独立文件函数待单独授权，不把本地测试等同于真实签字和 Storage 验收。详见[签字件实施](../docs/evidence-implementation.md)。
+新增十个附件场景，合计三十八个浏览器场景通过。云端迁移 008、私有桶、隔离策略及独立文件函数待单独授权，不把本地测试等同于真实签字和 Storage 验收。详见[签字件实施](../docs/evidence-implementation.md)。

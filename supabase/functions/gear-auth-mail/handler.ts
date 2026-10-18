@@ -2,6 +2,7 @@ import { Webhook } from "standardwebhooks";
 import { renderGearCodeEmail } from "./templates.ts";
 
 export type MailEnvironment = Record<
+  | "GEAR_DB_SCHEMA"
   | "GEAR_AUTH_WEBHOOK_SECRET"
   | "GEAR_AUTH_PUBLIC_URL"
   | "GEAR_GMAIL_CLIENT_ID"
@@ -319,7 +320,7 @@ export function createHandler(
               apikey: env.SUPABASE_SERVICE_ROLE_KEY,
               Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY,
               "Content-Type": "application/json",
-              "Content-Profile": "gear",
+              "Content-Profile": env.GEAR_DB_SCHEMA,
             },
             body: JSON.stringify({ identity_id: payload.user.id }),
           },

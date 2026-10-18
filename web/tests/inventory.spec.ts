@@ -82,6 +82,7 @@ async function fixture(
     route.fulfill({
       json: {
         apiUrl: api,
+        databaseSchema: "example_app_2026",
         publishableKey: "sb_publishable_example",
         accountsEnabled: true,
         recoveryEnabled: true,
@@ -118,7 +119,7 @@ async function fixture(
     expect(path.startsWith("/rest/v1/rpc/")).toBe(true);
     const name = path.split("/").at(-1)!;
     const body = request.postDataJSON() as Record<string, unknown>;
-    expect(request.headers()["content-profile"]).toBe("gear");
+    expect(request.headers()["content-profile"]).toBe("example_app_2026");
     calls.push({ name, body });
     if (name === "get_my_membership")
       return route.fulfill({

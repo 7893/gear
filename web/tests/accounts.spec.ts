@@ -63,6 +63,7 @@ async function fixture(page: Page, enabled = true, recoveryEnabled = false) {
     route.fulfill({
       json: {
         apiUrl: api,
+        databaseSchema: "example_app_2026",
         publishableKey: "sb_publishable_example",
         accountsEnabled: enabled,
         recoveryEnabled,
@@ -113,7 +114,7 @@ async function fixture(page: Page, enabled = true, recoveryEnabled = false) {
     // The UI must use fixed RPCs, never direct Auth admin endpoints or table writes.
     if (!path.startsWith("/rest/v1/rpc/"))
       throw new Error("Unexpected account request");
-    expect(request.headers()["content-profile"]).toBe("gear");
+    expect(request.headers()["content-profile"]).toBe("example_app_2026");
     if (path.endsWith("/get_my_membership")) {
       if (profileFailure)
         return route.fulfill({

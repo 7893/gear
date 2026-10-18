@@ -2,6 +2,7 @@ import { renderMime } from "./handler.ts";
 import { renderGearNotification, type Notification } from "./templates.ts";
 
 export type NotificationEnvironment = Record<
+  | "GEAR_DB_SCHEMA"
   | "GEAR_NOTIFICATION_TOKEN"
   | "GEAR_AUTH_APP_URL"
   | "GEAR_GMAIL_CLIENT_ID"
@@ -132,7 +133,7 @@ export function createNotificationHandler(
           apikey: env.SUPABASE_SERVICE_ROLE_KEY,
           Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY,
           "Content-Type": "application/json",
-          "Content-Profile": "gear",
+          "Content-Profile": env.GEAR_DB_SCHEMA,
         },
         body: JSON.stringify(body),
       });

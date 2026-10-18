@@ -35,9 +35,13 @@ export const account = reactive({
   message: "",
   error: "",
 });
-function makeClient(apiUrl: string, publishableKey: string) {
+function makeClient(
+  apiUrl: string,
+  publishableKey: string,
+  databaseSchema: string,
+) {
   return createClient(apiUrl, publishableKey, {
-    db: { schema: "gear" },
+    db: { schema: databaseSchema },
     auth: {
       storageKey: "gear.auth.v1",
       flowType: "pkce",
@@ -240,7 +244,11 @@ export async function initializeAccounts(): Promise<void> {
     account.flowsEnabled = config.flowsEnabled;
     account.evidenceEnabled = config.evidenceEnabled;
     if (!account.enabled) return;
-    client = makeClient(config.apiUrl, config.publishableKey);
+    client = makeClient(
+      config.apiUrl,
+      config.publishableKey,
+      config.databaseSchema,
+    );
     if (code) {
       const { error } = await client.auth.exchangeCodeForSession(code);
       account.message = error

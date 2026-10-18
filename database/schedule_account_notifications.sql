@@ -32,13 +32,13 @@ END $$;
 SELECT vault.create_secret(url,'gear_notification_url') AS gear_vault_url FROM gear_notification_install \gset
 SELECT vault.create_secret(token,'gear_notification_token') AS gear_vault_token FROM gear_notification_install \gset
 
-CREATE FUNCTION gear_private.invoke_account_notifications() RETURNS bigint
+CREATE FUNCTION gear_private_2026.invoke_account_notifications() RETURNS bigint
 LANGUAGE plpgsql SET search_path = '' SET timezone = 'UTC' AS $$
 DECLARE endpoint text; credential text; request_id bigint;
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM gear.app_settings WHERE id = 1
+    IF NOT EXISTS (SELECT 1 FROM gear_2026.app_settings WHERE id = 1
         AND outbound_mail_enabled AND notifications_enabled_at IS NOT NULL) THEN RETURN NULL; END IF;
-    IF NOT EXISTS (SELECT 1 FROM gear.notification_outbox WHERE notification_type IN ('application_pending','application_result') AND
+    IF NOT EXISTS (SELECT 1 FROM gear_2026.notification_outbox WHERE notification_type IN ('application_pending','application_result') AND
         ((status = 'pending' AND available_at <= clock_timestamp())
          OR (status = 'failed' AND attempt_count < 5 AND available_at <= clock_timestamp()
             AND error_code IN ('oauth_temporary','provider_rate_limit','provider_unauthorized'))
@@ -53,9 +53,9 @@ BEGIN
     RETURN request_id;
 END;
 $$;
-REVOKE ALL ON FUNCTION gear_private.invoke_account_notifications() FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON FUNCTION gear_private_2026.invoke_account_notifications() FROM PUBLIC,anon,authenticated,service_role;
 SELECT cron.schedule('gear-account-notifications','* * * * *',
-    'SELECT gear_private.invoke_account_notifications();') AS gear_cron_id \gset
+    'SELECT gear_private_2026.invoke_account_notifications();') AS gear_cron_id \gset
 COMMIT;
 -- Sending remains OFF. A separate authorized owner transaction calls:
--- SELECT gear_private.configure_account_notifications(true);
+-- SELECT gear_private_2026.configure_account_notifications(true);

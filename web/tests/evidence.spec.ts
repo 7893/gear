@@ -96,6 +96,7 @@ async function fixture(
     route.fulfill({
       json: {
         apiUrl: api,
+        databaseSchema: "example_app_2026",
         publishableKey: "sb_publishable_example",
         accountsEnabled: true,
         inventoryEnabled: true,

@@ -94,7 +94,11 @@ export default {
 
     for (const key of ["Accept-Profile", "Content-Profile"]) {
       const value = request.headers.get(key);
-      if (value && value !== env.GEAR_DB_SCHEMA)
+      if (
+        value &&
+        value !== env.GEAR_DB_SCHEMA &&
+        value !== env.GEAR_DB_SCHEMA.replace(/_\d{4}$/, "")
+      )
         return error("schema_not_allowed", 403);
     }
     const forwarded = new Headers();

@@ -1,5 +1,6 @@
 export type RuntimeConfig = {
   apiUrl: string;
+  databaseSchema: string;
   publishableKey: string;
   accountsEnabled: boolean;
   recoveryEnabled: boolean;
@@ -18,6 +19,8 @@ export async function configuration(): Promise<RuntimeConfig> {
   if (
     !value ||
     typeof value.apiUrl !== "string" ||
+    typeof value.databaseSchema !== "string" ||
+    !/^[a-z][a-z0-9_]{0,62}$/.test(value.databaseSchema) ||
     typeof value.publishableKey !== "string" ||
     !value.publishableKey.startsWith("sb_publishable_")
   )
@@ -34,6 +37,7 @@ export async function configuration(): Promise<RuntimeConfig> {
     throw new Error("configuration_invalid");
   return {
     apiUrl: url.origin,
+    databaseSchema: value.databaseSchema,
     publishableKey: value.publishableKey,
     accountsEnabled: value.accountsEnabled === true,
     recoveryEnabled: value.recoveryEnabled === true,

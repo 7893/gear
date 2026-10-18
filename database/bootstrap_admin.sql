@@ -14,7 +14,7 @@
 BEGIN;
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '30s';
-SELECT gear_private.bootstrap_admin(
+SELECT gear_private_2026.bootstrap_admin(
     (SELECT u.id FROM auth.users u WHERE lower(u.email) = lower(btrim(:'gear_admin_email'))),
     :'gear_admin_name'
 );

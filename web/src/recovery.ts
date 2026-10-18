@@ -2,9 +2,13 @@ import { createClient } from "@supabase/supabase-js";
 import { configuration } from "./configuration";
 import { signOut, type Profile } from "./accounts";
 
-function makeRecoveryClient(apiUrl: string, publishableKey: string) {
+function makeRecoveryClient(
+  apiUrl: string,
+  publishableKey: string,
+  databaseSchema: string,
+) {
   return createClient(apiUrl, publishableKey, {
-    db: { schema: "gear" },
+    db: { schema: databaseSchema },
     auth: {
       storageKey: "gear.recovery.v1",
       flowType: "implicit",
@@ -29,7 +33,11 @@ export function createRecoveryFlow() {
     const config = await configuration();
     if (!config.accountsEnabled || !config.recoveryEnabled)
       throw new Error("recovery_unavailable");
-    client = makeRecoveryClient(config.apiUrl, config.publishableKey);
+    client = makeRecoveryClient(
+      config.apiUrl,
+      config.publishableKey,
+      config.databaseSchema,
+    );
     return client;
   }
   async function eligible() {

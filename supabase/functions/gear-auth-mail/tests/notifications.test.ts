@@ -6,6 +6,7 @@ import {
 } from "../notifications.ts";
 
 const env: NotificationEnvironment = {
+  GEAR_DB_SCHEMA: "example_app_2026",
   GEAR_NOTIFICATION_TOKEN: "example-only-scheduler-".repeat(3),
   GEAR_AUTH_APP_URL: "https://app.example.invalid/",
   GEAR_GMAIL_CLIENT_ID: "example-client",
@@ -40,7 +41,7 @@ function fixture(options: Options = {}, configuration = env) {
     let name: keyof Options;
     let body: Record<string, unknown>;
     if (url.origin === env.SUPABASE_URL) {
-      assert.equal(headers.get("Content-Profile"), "gear");
+      assert.equal(headers.get("Content-Profile"), "example_app_2026");
       assert.equal(
         headers.get("Authorization"),
         "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY,
@@ -113,7 +114,10 @@ test("notification endpoint accepts only the dedicated server token before provi
     assert.equal((await f.handler(f.request(value))).status, 401);
   assert.equal((await f.handler(f.request(undefined, "GET"))).status, 405);
   assert.equal(f.calls.length, 0);
-  const missing = fixture({}, { ...env, GEAR_NOTIFICATION_TOKEN: "" });
+  const missing = fixture(
+    {},
+    { ...env, GEAR_DB_SCHEMA: "example_app_2026", GEAR_NOTIFICATION_TOKEN: "" },
+  );
   assert.equal((await missing.handler(missing.request())).status, 503);
   const invalid = fixture(
     {},

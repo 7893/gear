@@ -5,7 +5,7 @@ import gateway from "../src/index.ts";
 const env = {
   SUPABASE_URL: "https://upstream.example.com",
   FRONTEND_ORIGIN: "https://app.example.com",
-  GEAR_DB_SCHEMA: "gear",
+  GEAR_DB_SCHEMA: "example_app_2026",
   GEAR_STORAGE_BUCKET: "gear-attachments",
   GEAR_FUNCTION_PREFIX: "gear-",
 };
@@ -81,8 +81,8 @@ test("requires caller API key and rejects an alternate database schema", async (
 test("pins database schema, preserves caller authorization and disables caching", async () => {
   const stub = mock.method(globalThis, "fetch", async (request, options) => {
     assert.equal(new URL(request.url).origin, env.SUPABASE_URL);
-    assert.equal(request.headers.get("Accept-Profile"), "gear");
-    assert.equal(request.headers.get("Content-Profile"), "gear");
+    assert.equal(request.headers.get("Accept-Profile"), env.GEAR_DB_SCHEMA);
+    assert.equal(request.headers.get("Content-Profile"), env.GEAR_DB_SCHEMA);
     assert.equal(request.headers.get("Authorization"), "Bearer fictional");
     assert.equal(request.headers.get("Cookie"), null);
     assert.equal(options.cf.cacheTtl, 0);
@@ -179,6 +179,45 @@ test("email verification links work without placing an API key in the URL", asyn
       env,
     );
     assert.equal(response.status, 302);
+  } finally {
+    stub.mock.restore();
+  }
+});
+
+test("legacy public profile maps only to configured namespace; private schemas stay forbidden", async () => {
+  const seen: string[] = [];
+  const stub = mock.method(globalThis, "fetch", async (request) => {
+    seen.push(request.headers.get("Content-Profile"));
+    return new Response("[]");
+  });
+  try {
+    for (const profile of ["example_app_2026", "example_app"]) {
+      const result = await gateway.fetch(
+        new Request("https://api.example.com/rest/v1/rpc/list_assets", {
+          method: "POST",
+          headers: { apikey: "fictional", "Content-Profile": profile },
+          body: "{}",
+        }),
+        env,
+      );
+      assert.equal(result.status, 200);
+    }
+    for (const profile of [
+      "gear_private",
+      "example_app_private_2026",
+      "example_other_2026",
+    ]) {
+      const result = await gateway.fetch(
+        new Request("https://api.example.com/rest/v1/rpc/list_assets", {
+          method: "POST",
+          headers: { apikey: "fictional", "Content-Profile": profile },
+          body: "{}",
+        }),
+        env,
+      );
+      assert.equal(result.status, 403);
+    }
+    assert.deepEqual(seen, [env.GEAR_DB_SCHEMA, env.GEAR_DB_SCHEMA]);
   } finally {
     stub.mock.restore();
   }
