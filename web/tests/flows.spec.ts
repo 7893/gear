@@ -28,6 +28,7 @@ const team: Party = {
   default_responsible_id: person.id,
   note: null,
 };
+const nextPerson: Party = { ...person, id: id(13), name: "示例新负责人" };
 function asset(n: number, held = false): Asset {
   return {
     id: id(100 + n),
@@ -195,7 +196,8 @@ async function fixture(
           },
         },
       });
-    if (name === "list_parties") return route.fulfill({ json: [person, team] });
+    if (name === "list_parties")
+      return route.fulfill({ json: [person, nextPerson, team] });
     if (name === "list_assets")
       return route.fulfill({
         json: {
@@ -266,13 +268,27 @@ async function fixture(
           ...saved,
           status: "confirmed",
           version: saved.version + 1,
-          document_no: "FF-20200101-0002",
+          document_no:
+            { receipt: "LR", issue: "FF", transfer: "ZJ", return: "TH" }[
+              saved.kind
+            ] + "-20200101-0002",
           confirmed_at: "2020-01-01T00:00:00Z",
           header_snapshot: { title: "冻结的示例抬头" },
           parties_snapshot: {
             ...document().parties_snapshot!,
             sender_name: saved.sender_name,
             receiver_name: saved.receiver_name,
+            from_label: saved.from_label,
+            to_label: saved.to_label,
+            from_responsible_name:
+              [person, nextPerson].find((p) => p.id === saved.from_person_id)
+                ?.name || null,
+            to_responsible_name:
+              [person, nextPerson].find((p) => p.id === saved.to_person_id)
+                ?.name || null,
+            transfer_mode: saved.transfer_mode,
+            usage_kind: saved.usage_kind,
+            due_on: saved.due_on,
           },
           items: saved.items.map((item, index) => ({
             ...item,
@@ -451,6 +467,215 @@ test("team temporary issue saves per-asset versions and explicit responsibility"
   await page.getByRole("button", { name: "确认实际交接", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("设备 SB-000001");
   await expect(page.getByRole("region", { name: "交接确认" })).toBeVisible();
+});
+
+test("ordinary transfer uses held normal equipment and a new recipient and deadline", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  f.stock[3].condition = "faulty";
+  await login(page);
+  await page.goto("/#/flows");
+  await page.getByRole("link", { name: "新建转交单", exact: true }).click();
+  await identities(page);
+  await page
+    .getByRole("combobox", { name: "当前持有方", exact: true })
+    .selectOption(team.id);
+  await expect(
+    page.getByRole("combobox", { name: "交出负责人", exact: true }),
+  ).toHaveValue(person.id);
+  await expect(page.getByRole("checkbox", { name: /SB-000001/ })).toHaveCount(
+    0,
+  );
+  await expect(page.getByRole("checkbox", { name: /SB-000004/ })).toHaveCount(
+    0,
+  );
+  await page
+    .getByRole("combobox", { name: "接收对象", exact: true })
+    .selectOption(nextPerson.id);
+  await page
+    .getByRole("combobox", { name: "使用方式", exact: true })
+    .selectOption("temporary");
+  await page.getByLabel("预计归还日期", { exact: true }).fill("2031-01-01");
+  await page.getByRole("checkbox", { name: /SB-000003/ }).check();
+  await expect(
+    page.getByRole("combobox", { name: "实际交接状况", exact: true }),
+  ).toHaveValue("normal");
+  await page
+    .getByRole("button", { name: "保存并核对交接", exact: true })
+    .click();
+  const call = f.calls.find((c) => c.name === "save_document")!;
+  expect(call.body.details).toMatchObject({
+    kind: "transfer",
+    transfer_mode: "holder",
+    from_kind: "party",
+    to_kind: "party",
+    from_party_id: team.id,
+    from_person_id: person.id,
+    to_party_id: nextPerson.id,
+    to_person_id: nextPerson.id,
+    usage_kind: "temporary",
+    due_on: "2031-01-01",
+  });
+  expect((call.body.items as FlowItem[]).map((i) => i.asset_id)).toEqual([
+    id(103),
+  ]);
+  f.loseAcknowledgement();
+  await page.getByRole("button", { name: "确认实际交接", exact: true }).click();
+  await expect(page.getByRole("alert")).toBeVisible();
+  await page.getByRole("button", { name: "确认实际交接", exact: true }).click();
+  await expect(page.getByRole("article", { name: "交接单据" })).toContainText(
+    "ZJ-20200101-0002",
+  );
+  const confirmations = f.calls.filter((c) => c.name === "confirm_document");
+  expect(confirmations).toHaveLength(2);
+  expect(confirmations[0].body).toEqual(confirmations[1].body);
+});
+
+test("same-team responsibility includes faults and keeps mixed individual deadlines visible", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  f.stock[2].due_on = "2019-12-31";
+  f.stock[2].started_on = null;
+  f.stock[3].condition = "faulty";
+  await login(page);
+  await page.goto("/#/documents/new?kind=transfer");
+  await identities(page);
+  await page
+    .getByRole("combobox", { name: "转交方式", exact: true })
+    .selectOption("responsibility");
+  await page
+    .getByRole("combobox", { name: "当前持有方", exact: true })
+    .selectOption(team.id);
+  await expect(
+    page.getByRole("combobox", { name: "接收对象", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("combobox", { name: "接收对象", exact: true }),
+  ).toHaveValue(team.id);
+  await page
+    .getByRole("combobox", { name: "接收负责人", exact: true })
+    .selectOption(nextPerson.id);
+  await expect(
+    page.getByRole("combobox", { name: "使用方式", exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByLabel("预计归还日期", { exact: true })).toHaveCount(0);
+  await page.getByRole("checkbox", { name: /SB-000003/ }).check();
+  await page.getByRole("checkbox", { name: /SB-000004/ }).check();
+  await expect(page.locator(".flow-item").first()).toContainText(
+    "保留原起始日期：未知",
+  );
+  await expect(page.locator(".flow-item").first()).toContainText("2019-12-31");
+  await expect(
+    page
+      .locator(".flow-item")
+      .last()
+      .getByRole("combobox", { name: "实际交接状况", exact: true }),
+  ).toHaveValue("faulty");
+  await expect(
+    page
+      .locator(".flow-item")
+      .last()
+      .getByRole("combobox", { name: "实际交接状况", exact: true }),
+  ).toBeDisabled();
+  await page
+    .getByRole("button", { name: "保存并核对交接", exact: true })
+    .click();
+  const call = f.calls.find((c) => c.name === "save_document")!;
+  expect(call.body.details).toMatchObject({
+    kind: "transfer",
+    transfer_mode: "responsibility",
+    from_party_id: team.id,
+    to_party_id: team.id,
+    from_person_id: person.id,
+    to_person_id: nextPerson.id,
+    usage_kind: null,
+    due_on: null,
+  });
+  expect(
+    (call.body.items as FlowItem[]).map((i) => i.condition_on_handover),
+  ).toEqual(["normal", "faulty"]);
+  await expect(page.getByRole("region", { name: "交接确认" })).toContainText(
+    "保留当前分配",
+  );
+  await page.getByRole("button", { name: "确认实际交接", exact: true }).click();
+  const sheet = page.getByRole("article", { name: "交接单据" });
+  await expect(sheet).toContainText("同团队负责人交接");
+  await expect(sheet).toContainText("保留预计归还日期：2019-12-31");
+  await expect(sheet).toContainText("保留预计归还日期：2030-01-01");
+});
+
+test("same responsible person is rejected without saving a transfer", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  await login(page);
+  await page.goto("/#/documents/new?kind=transfer");
+  await identities(page);
+  await page
+    .getByRole("combobox", { name: "转交方式", exact: true })
+    .selectOption("responsibility");
+  await page
+    .getByRole("combobox", { name: "当前持有方", exact: true })
+    .selectOption(team.id);
+  await page
+    .getByRole("combobox", { name: "接收负责人", exact: true })
+    .selectOption(person.id);
+  await page.getByRole("checkbox", { name: /SB-000003/ }).check();
+  await page
+    .getByRole("button", { name: "保存并核对交接", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText("不同负责人");
+  expect(f.calls.filter((c) => c.name === "save_document")).toHaveLength(0);
+});
+
+test("responsibility print uses frozen dates and names when current data differs", async ({
+  page,
+}) => {
+  const f = await fixture(page, "viewer");
+  const doc = document("confirmed", 2);
+  doc.kind = "transfer";
+  doc.transfer_mode = "responsibility";
+  doc.document_no = "ZJ-20200101-0001";
+  doc.usage_kind = null;
+  doc.due_on = null;
+  doc.parties_snapshot = {
+    ...doc.parties_snapshot!,
+    from_responsible_name: "冻结的旧负责人",
+    to_responsible_name: "冻结的新负责人",
+    transfer_mode: "responsibility",
+  };
+  doc.items[0].asset_snapshot = {
+    ...asset(3, true),
+    condition: "faulty",
+    started_on: null,
+    due_on: "2019-12-31",
+  };
+  doc.items[0].condition_on_handover = "faulty";
+  doc.items[1].asset_snapshot = { ...asset(4, true), due_on: "2030-01-01" };
+  f.stock.forEach((a) => {
+    a.due_on = "2099-01-01";
+    a.responsible_name = "变更后的当前负责人";
+  });
+  f.setDocument(doc);
+  await login(page);
+  await page.goto("/#/documents/" + doc.id);
+  const sheet = page.getByRole("article", { name: "交接单据" });
+  await expect(sheet).toContainText("冻结的新负责人");
+  await expect(sheet).toContainText("冻结的旧负责人");
+  await expect(sheet).toContainText("原起始日期：未知");
+  await expect(sheet).toContainText("2019-12-31");
+  await expect(sheet).not.toContainText("2099-01-01");
+  await expect(
+    page.getByRole("link", { name: "继续编辑草稿", exact: true }),
+  ).toHaveCount(0);
+  await page.emulateMedia({ media: "print" });
+  const pdf = await page.pdf({
+    preferCSSPageSize: true,
+    displayHeaderFooter: false,
+  });
+  expect(pdf.length).toBeGreaterThan(10000);
 });
 test("partial faulty return requires explanation and saves selected held device only", async ({
   page,

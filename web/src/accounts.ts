@@ -118,6 +118,8 @@ const messages: Record<string, string> = {
   invalid_document_date: "交接日期不能晚于今天，也不能早于设备最近一次流转。",
   incomplete_document: "请补齐交接日期、实际移交人、接收人和设备明细。",
   invalid_document_parties: "请核对交接双方、负责人及退回说明。",
+  invalid_transfer_parties:
+    "普通转交须更换持有方；负责人交接须为同一团队的不同负责人。请核对双方和负责人。",
   document_not_found: "单据不存在，或当前账号无权读取。",
   draft_access_denied: "只能处理有权访问的草稿，请返回单据列表核对。",
   document_conflict: "草稿已被修改或确认，请重新读取后核对。",

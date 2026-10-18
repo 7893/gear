@@ -7,6 +7,7 @@ import {
   listParties,
   categories,
   partyLabel,
+  dueLabel,
   businessToday,
   requestFor,
   type Asset,
@@ -16,6 +17,7 @@ import {
   blankDetails,
   flowWriteAccess,
   flowKinds,
+  transferModes,
   getDocument,
   saveDocument,
   confirmDocument,
@@ -26,10 +28,11 @@ import {
 } from "../flows";
 import FlowGate from "../components/FlowGate.vue";
 import PartyQuickCreate from "../components/PartyQuickCreate.vue";
+import ActionGroup from "../components/ActionGroup.vue";
 const route = useRoute();
 const router = useRouter();
 const initialKind = (): FlowKind =>
-  ["receipt", "issue", "return"].includes(String(route.query.kind))
+  Object.hasOwn(flowKinds, String(route.query.kind))
     ? (route.query.kind as FlowKind)
     : "issue";
 const form = reactive(blankDetails(initialKind()));
@@ -61,10 +64,22 @@ const people = computed(() => parties.value.filter((p) => p.kind === "person"));
 const target = computed(() =>
   parties.value.find((p) => p.id === form.to_party_id),
 );
+const responsibility = computed(
+  () => form.kind === "transfer" && form.transfer_mode === "responsibility",
+);
+const assignsUsage = computed(
+  () =>
+    form.kind === "issue" ||
+    (form.kind === "transfer" && !responsibility.value),
+);
 const sources = computed(() => [
   ...new Map(
     assets.value
-      .filter((a) => a.holder_party_id)
+      .filter(
+        (a) =>
+          a.holder_party_id &&
+          (!responsibility.value || a.holder_kind === "team"),
+      )
       .map((a) => [
         a.holder_party_id!,
         { id: a.holder_party_id!, name: a.holder_name || "未命名持有方" },
@@ -95,6 +110,12 @@ const available = computed(() =>
       if (a.management_status !== "managed") return false;
       if (form.kind === "issue")
         return a.display_status === "inventory_available";
+      if (
+        form.kind === "transfer" &&
+        !responsibility.value &&
+        a.condition !== "normal"
+      )
+        return false;
       return form.from_kind === "inventory"
         ? !a.holder_party_id
         : a.holder_party_id === form.from_party_id &&
@@ -109,10 +130,13 @@ const available = computed(() =>
 );
 const selectedIds = computed(() => new Set(items.value.map((i) => i.asset_id)));
 function itemLabel(item: FlowItem) {
-  const asset = assets.value.find((a) => a.id === item.asset_id);
+  const asset = selectedAsset(item);
   return item.asset_id
     ? `${asset?.asset_code || "已选设备"} · ${asset?.name || "请刷新设备清单核对"}`
     : "新设备，确认后生成内部编号";
+}
+function selectedAsset(item: FlowItem) {
+  return assets.value.find((a) => a.id === item.asset_id);
 }
 function normalizedItems(): FlowItem[] {
   return items.value.map((item) => ({
@@ -254,6 +278,17 @@ watch(
   { flush: "sync" },
 );
 watch(
+  [() => form.transfer_mode, () => form.from_party_id],
+  () => {
+    if (loading.value || form.kind !== "transfer") return;
+    form.to_party_id = responsibility.value ? form.from_party_id : null;
+    form.to_person_id = null;
+    form.usage_kind = responsibility.value ? null : "long_term";
+    form.due_on = null;
+  },
+  { flush: "sync" },
+);
+watch(
   () => form.usage_kind,
   (usage) => {
     if (usage !== "temporary") form.due_on = null;
@@ -274,9 +309,18 @@ function toggle(asset: Asset) {
     asset_id: asset.id,
     expected_asset_version: asset.version ?? null,
     new_asset_data: null,
-    condition_on_handover: form.kind === "issue" ? "normal" : null,
+    condition_on_handover:
+      form.kind === "issue" ||
+      (form.kind === "transfer" && !responsibility.value)
+        ? "normal"
+        : responsibility.value
+          ? asset.condition
+          : null,
     location: asset.location,
-    note: "",
+    note:
+      responsibility.value && asset.condition === "faulty"
+        ? "保留当前故障状况，仅交接负责人"
+        : "",
     allow_legacy_duplicate: false,
   });
 }
@@ -349,7 +393,12 @@ function details() {
       data.from_person_id = null;
     }
   }
-  if (data.kind !== "issue") {
+  if (data.kind === "transfer") {
+    data.from_kind = "party";
+    data.to_kind = "party";
+    if (responsibility.value) data.to_party_id = data.from_party_id;
+  } else data.transfer_mode = null;
+  if (!assignsUsage.value) {
     data.usage_kind = null;
     data.due_on = null;
   }
@@ -367,6 +416,21 @@ async function save(review = false) {
   if (busy.value || loading.value || !ready.value || !flowWriteAccess.value)
     return;
   const data = details();
+  if (
+    review &&
+    data.kind === "transfer" &&
+    (!data.from_party_id ||
+      !data.from_person_id ||
+      !data.to_party_id ||
+      !data.to_person_id ||
+      (responsibility.value
+        ? data.from_party_id !== data.to_party_id ||
+          data.from_person_id === data.to_person_id
+        : data.from_party_id === data.to_party_id))
+  ) {
+    error.value = safeError(new Error("invalid_transfer_parties"));
+    return;
+  }
   if (
     review &&
     (!data.handover_on ||
@@ -387,7 +451,7 @@ async function save(review = false) {
   if (
     review &&
     ((data.kind === "receipt" && !data.from_label.trim()) ||
-      (data.kind === "issue" &&
+      (assignsUsage.value &&
         (!data.to_party_id ||
           !data.to_person_id ||
           (data.usage_kind === "temporary" &&
@@ -507,59 +571,28 @@ async function confirm() {
           >实际接收人<input v-model="form.receiver_name" maxlength="120"
         /></label>
       </div>
+      <label v-if="form.kind === 'transfer'"
+        >转交方式<select
+          v-model="form.transfer_mode"
+          :disabled="items.length > 0"
+        >
+          <option
+            v-for="(label, mode) in transferModes"
+            :key="mode"
+            :value="mode"
+          >
+            {{ label }}
+          </option>
+        </select></label
+      >
       <label v-if="form.kind === 'receipt'"
         >来源单位或交付方<input v-model="form.from_label" maxlength="120"
       /></label>
-      <template v-if="form.kind === 'issue'">
-        <div class="flow-grid">
-          <label
-            >接收对象<select v-model="form.to_party_id">
-              <option :value="null">请选择个人或团队</option>
-              <option
-                v-for="party in parties"
-                :key="party.id"
-                :value="party.id"
-              >
-                {{ partyLabel(party) }}
-              </option>
-            </select></label
-          >
-          <label
-            >接收负责人<select
-              v-model="form.to_person_id"
-              :disabled="target?.kind === 'person'"
-            >
-              <option :value="null">请选择个人</option>
-              <option
-                v-for="person in people"
-                :key="person.id"
-                :value="person.id"
-              >
-                {{ partyLabel(person) }}
-              </option>
-            </select></label
-          >
-          <label
-            >使用方式<select v-model="form.usage_kind">
-              <option value="long_term">长期使用</option>
-              <option value="temporary">临时使用</option>
-            </select></label
-          >
-          <label v-if="form.usage_kind === 'temporary'"
-            >预计归还日期<input
-              v-model="form.due_on"
-              type="date"
-              :min="form.handover_on || undefined"
-          /></label>
-        </div>
-        <PartyQuickCreate
-          :people="people"
-          :disabled="busy || reviewing"
-          @created="createdParty"
-        />
-      </template>
-      <div v-if="form.kind === 'return'" class="flow-grid">
-        <label
+      <div
+        v-if="form.kind === 'return' || form.kind === 'transfer'"
+        class="flow-grid"
+      >
+        <label v-if="form.kind === 'return'"
           >交出方类型<select
             v-model="form.from_kind"
             :disabled="items.length > 0"
@@ -600,7 +633,7 @@ async function confirm() {
             </select></label
           ></template
         >
-        <label
+        <label v-if="form.kind === 'return'"
           >退回去向<select v-model="form.to_kind">
             <option v-if="form.from_kind === 'party'" value="inventory">
               经办人库存
@@ -608,14 +641,69 @@ async function confirm() {
             <option value="external">上游单位或交付方</option>
           </select></label
         >
-        <label v-if="form.to_kind === 'external'"
+        <label v-if="form.kind === 'return' && form.to_kind === 'external'"
           >上游接收单位<input v-model="form.to_label" maxlength="120"
         /></label>
       </div>
+      <template v-if="form.kind === 'issue' || form.kind === 'transfer'">
+        <div class="flow-grid">
+          <label
+            >接收对象<select
+              v-model="form.to_party_id"
+              :disabled="responsibility"
+            >
+              <option :value="null">请选择个人或团队</option>
+              <option
+                v-for="party in parties"
+                :key="party.id"
+                :value="party.id"
+              >
+                {{ partyLabel(party) }}
+              </option>
+            </select></label
+          >
+          <label
+            >接收负责人<select
+              v-model="form.to_person_id"
+              :disabled="target?.kind === 'person'"
+            >
+              <option :value="null">请选择个人</option>
+              <option
+                v-for="person in people"
+                :key="person.id"
+                :value="person.id"
+              >
+                {{ partyLabel(person) }}
+              </option>
+            </select></label
+          >
+          <label v-if="assignsUsage"
+            >使用方式<select v-model="form.usage_kind">
+              <option value="long_term">长期使用</option>
+              <option value="temporary">临时使用</option>
+            </select></label
+          >
+          <label v-if="assignsUsage && form.usage_kind === 'temporary'"
+            >预计归还日期<input
+              v-model="form.due_on"
+              type="date"
+              :min="form.handover_on || undefined"
+          /></label>
+        </div>
+        <PartyQuickCreate
+          v-if="!responsibility"
+          :people="people"
+          :disabled="busy || reviewing"
+          @created="createdParty"
+        />
+      </template>
       <label
         >{{ form.kind === "return" ? "退回原因（必填）" : "用途或备注"
         }}<textarea v-model="form.remarks" maxlength="2000" />
       </label>
+      <p v-if="form.kind === 'transfer'" class="hint">
+        普通转交重新确定使用期限；同团队负责人交接保留当前分配和逐件期限，不处理或清除故障。
+      </p>
       <template v-if="form.kind === 'receipt'">
         <h2>添加新领入设备</h2>
         <div class="flow-grid">
@@ -694,6 +782,11 @@ async function confirm() {
       <h2 class="refresh">已选 {{ items.length }} 件设备</h2>
       <article v-for="(item, index) in items" :key="item.key" class="flow-item">
         <h3>第 {{ index + 1 }} 件 · {{ itemLabel(item) }}</h3>
+        <p v-if="responsibility && selectedAsset(item)" class="hint">
+          保留原起始日期：{{
+            selectedAsset(item)?.started_on || "未知"
+          }}；预计归还：{{ dueLabel(selectedAsset(item)!) }}。
+        </p>
         <div v-if="item.new_asset_data" class="flow-grid">
           <label
             >名称<input
@@ -737,7 +830,7 @@ async function confirm() {
           <label
             >实际交接状况<select
               v-model="item.condition_on_handover"
-              :disabled="form.kind === 'issue'"
+              :disabled="form.kind === 'issue' || form.kind === 'transfer'"
             >
               <option :value="null">请核对状况</option>
               <option value="normal">正常</option>
@@ -762,10 +855,10 @@ async function confirm() {
           移除第 {{ index + 1 }} 件
         </button>
       </article>
-      <div class="links">
+      <ActionGroup class="links">
         <button type="button" @click="save(false)">保存草稿</button
         ><button type="button" @click="save(true)">保存并核对交接</button>
-      </div>
+      </ActionGroup>
     </fieldset>
     <section v-if="reviewing && draft" class="notice" aria-label="交接确认">
       <h2>请核对实际交接</h2>
@@ -797,8 +890,14 @@ async function confirm() {
             : "长期使用"
         }}。
       </p>
+      <p v-if="draft.kind === 'transfer'">
+        {{ transferModes[draft.transfer_mode || "holder"] }}
+      </p>
+      <p v-if="responsibility">
+        只交接所选设备的负责人，保留当前分配、原起始日期和各自期限，故障状况不变。
+      </p>
       <p>确认后更新设备去向、历史并生成正式单号。打印不会重复办理。</p>
-      <div class="links">
+      <ActionGroup class="links">
         <button type="button" :disabled="busy" @click="confirm">
           {{ busy ? "正在确认…" : "确认实际交接" }}</button
         ><button
@@ -809,7 +908,7 @@ async function confirm() {
         >
           返回修改
         </button>
-      </div>
+      </ActionGroup>
     </section>
   </section>
   <FlowGate v-else title="流转办理" />

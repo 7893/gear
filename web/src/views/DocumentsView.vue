@@ -11,6 +11,7 @@ import {
   type FlowDocument,
 } from "../flows";
 import FlowGate from "../components/FlowGate.vue";
+import ActionGroup from "../components/ActionGroup.vue";
 const props = defineProps<{ manage?: boolean }>();
 const rows = ref<FlowDocument[]>([]);
 const loading = ref(false);
@@ -64,7 +65,7 @@ onBeforeUnmount(() => generation++);
 <template>
   <section v-if="flowAccess" class="card">
     <h1>{{ manage ? "流转办理" : "单据记录" }}</h1>
-    <div v-if="flowWriteAccess" class="links">
+    <ActionGroup v-if="flowWriteAccess" class="links">
       <RouterLink
         v-for="(label, kind) in flowKinds"
         :key="kind"
@@ -72,7 +73,7 @@ onBeforeUnmount(() => generation++);
         :to="'/documents/new?kind=' + kind"
         >新建{{ label }}单</RouterLink
       >
-    </div>
+    </ActionGroup>
     <p class="hint">
       草稿不占库存；请在实际交接时确认。打印和签字件回传不改变设备去向。
     </p>

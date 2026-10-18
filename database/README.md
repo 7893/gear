@@ -2,7 +2,7 @@
 
 `migrations/202610170001_initial_schema.sql` 创建 `gear` 的十一张表、只读台账视图，以及 `gear_private` 的内部辅助函数。应用角色只有受 RLS 限制的读取权限，没有直接写表或取号权限。迁移不初始化管理员、人员或设备；唯一初始数据是通用设置，邮件开关关闭，提醒采用待启用的默认参数。
 
-迁移 001 只建立基础结构。迁移 002 已新增申请、审核、角色和停用等账号 RPC，详见[账号接入记录](../docs/account-implementation.md)。审核通知的接口已随迁移 004 获授权应用云端；存量建账及台账查询接口已随迁移 005 获授权应用云端。迁移 006 已获授权应用云端，提供领入、分发、退回和草稿接口；转交和作废仍待实现，上传及人工归档的迁移 008 和独立文件服务已按授权上云，真实签字件的闭环验收待本人完成。内部设备编号已确认采用 `SB-000001`；本轮领入、分发、退回单号前缀 LR、FF、TH 和共用业务日流水已确认。
+迁移 001 只建立基础结构。迁移 002 已新增申请、审核、角色和停用等账号 RPC，详见[账号接入记录](../docs/account-implementation.md)。审核通知的接口已随迁移 004 获授权应用云端；存量建账及台账查询接口已随迁移 005 获授权应用云端。迁移 006 已获授权应用云端，提供领入、分发、退回和草稿接口；转交与负责人交接已在迁移 010 本地实现、尚未上线，单据作废仍待实现，上传及人工归档的迁移 008 和独立文件服务已按授权上云，真实签字件的闭环验收待本人完成。内部设备编号已确认采用 `SB-000001`；本轮领入、分发、退回单号前缀 LR、FF、TH 和共用业务日流水已确认。
 
 ## 隔离验证
 
@@ -16,6 +16,7 @@ python3 database/tests/check_inventory.py
 python3 database/tests/check_demo_inventory.py
 python3 database/tests/check_flows.py
 python3 database/tests/check_temporary_use.py
+python3 database/tests/check_transfers.py
 python3 database/tests/check_evidence.py
 python3 database/tests/check_schema_year.py
 ```
@@ -65,6 +66,10 @@ python3 database/tests/check_schema_year.py
 ## 临时使用延期与到期查询迁移
 
 迁移 `202610190009_temporary_use.sql` 已获授权应用，新增两组查询和延期函数。不增加表或列，沿用当前临时分配、设备版本和 `assignment_extended` 事件；延期保留原单据与签字原件。临近天数读取已有设置，业务日期由服务端按东八区计算。隔离检查已加入 CI；本轮先完成云端迁移、权限和只读检查，再通过既有 CI/CD 发布页面，详见[本轮实施](../docs/temporary-use-implementation.md)。
+
+## 转交与团队负责人交接迁移
+
+迁移 `202610190010_transfers.sql` 已本地实现并隔离检查，尚未应用正式数据库。扩展现有两个私有保存与确认函数，使用既有转交字段和约束，保留函数对象身份、权限和公开 RPC；不增加表或列，不写入交接记录。迁移先核对旧函数体指纹，遇到未知变更或重跑即整体失败。网站 CD 不执行 SQL，正式迁移须先获得授权并完成核对，再发布依赖它的页面，详见[转交实施](../docs/transfers-implementation.md)。
 
 ## Schema 命名与配置
 

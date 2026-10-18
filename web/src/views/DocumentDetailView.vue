@@ -15,6 +15,7 @@ import {
   flowAccess,
   flowWriteAccess,
   flowKinds,
+  transferModes,
   documentStates,
   getDocument,
   deleteDocument,
@@ -290,6 +291,9 @@ async function remove() {
           <tr>
             <th colspan="8" class="print-parties">
               <p>实际交接日期：{{ data.handover_on || "未填写" }}</p>
+              <p v-if="data.kind === 'transfer'">
+                转交方式：{{ transferModes[data.transfer_mode || "holder"] }}
+              </p>
               <p>
                 交出方：{{
                   parties?.from_label ||
@@ -368,9 +372,28 @@ async function remove() {
             </td>
             <td>{{ item.location || "未填写" }}</td>
             <td>
+              <p
+                v-if="
+                  data.kind === 'transfer' &&
+                  data.transfer_mode === 'responsibility'
+                "
+              >
+                原起始日期：{{ asset(item).started_on || "未知" }}；{{
+                  asset(item).usage_kind === "temporary"
+                    ? "保留预计归还日期：" + asset(item).due_on
+                    : "长期使用，原期限不变"
+                }}
+              </p>
               <p v-if="asset(item).note">设备：{{ asset(item).note }}</p>
               <p v-if="item.note">交接：{{ item.note }}</p>
-              <span v-if="!item.note && !asset(item).note">—</span>
+              <span
+                v-if="
+                  !item.note &&
+                  !asset(item).note &&
+                  data.transfer_mode !== 'responsibility'
+                "
+                >—</span
+              >
             </td>
           </tr>
         </tbody>

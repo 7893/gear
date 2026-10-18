@@ -1,6 +1,15 @@
 import type { Asset } from "./inventory-model.js";
 
-export const flowKinds = { receipt: "领入", issue: "分发", return: "退回" };
+export const flowKinds = {
+  receipt: "领入",
+  issue: "分发",
+  transfer: "转交",
+  return: "退回",
+};
+export const transferModes = {
+  holder: "更换持有方",
+  responsibility: "同团队负责人交接",
+};
 export const documentStates = {
   draft: "草稿",
   confirmed: "已确认",
@@ -9,6 +18,7 @@ export const documentStates = {
 export type FlowKind = keyof typeof flowKinds;
 export type FlowDetails = {
   kind: FlowKind;
+  transfer_mode: keyof typeof transferModes | null;
   handover_on: string | null;
   from_kind: "inventory" | "party" | "external";
   to_kind: "inventory" | "party" | "external";
@@ -68,6 +78,7 @@ export type FlowDocument = FlowDetails & {
     usage_kind: string | null;
     due_on: string | null;
     handover_on: string;
+    transfer_mode?: keyof typeof transferModes | null;
   } | null;
   evidence_state: string | null;
   void_reason: string | null;
@@ -77,6 +88,7 @@ export type FlowDocument = FlowDetails & {
 export function blankDetails(kind: FlowKind): FlowDetails {
   return {
     kind,
+    transfer_mode: kind === "transfer" ? "holder" : null,
     handover_on: null,
     from_kind:
       kind === "receipt"
@@ -84,7 +96,7 @@ export function blankDetails(kind: FlowKind): FlowDetails {
         : kind === "issue"
           ? "inventory"
           : "party",
-    to_kind: kind === "issue" ? "party" : "inventory",
+    to_kind: kind === "issue" || kind === "transfer" ? "party" : "inventory",
     from_party_id: null,
     to_party_id: null,
     from_person_id: null,
@@ -93,7 +105,7 @@ export function blankDetails(kind: FlowKind): FlowDetails {
     to_label: "",
     sender_name: "",
     receiver_name: "",
-    usage_kind: kind === "issue" ? "long_term" : null,
+    usage_kind: kind === "issue" || kind === "transfer" ? "long_term" : null,
     due_on: null,
     remarks: "",
   };
