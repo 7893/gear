@@ -12,13 +12,14 @@ pnpm -C web run dev
 
 ## 配置与路由
 
-构建产物不包含部署地址。运行时从 `/runtime-config.json` 读取 `apiUrl`、`publishableKey`、`release`、`accountsEnabled`；实际文件由已获授权的发布流程注入并忽略。只有公开 publishable key 可进入浏览器，管理密钥和发件令牌不进入本目录。
+构建产物不包含部署地址。运行时从 `/runtime-config.json` 读取 `apiUrl`、`publishableKey`、`release`、`accountsEnabled`、`recoveryEnabled`、`inventoryEnabled`；实际文件由已获授权的发布流程注入并忽略。只有公开 publishable key 可进入浏览器，管理密钥和发件令牌不进入本目录。
 
 `accountsEnabled` 只有明确的 `true` 才开启账号服务。共享认证配置已获准接入，账号发布开关已开启；关闭时不创建 Auth 客户端，不发送登录、注册或会话刷新请求。GitHub 发布步骤通过仓库变量 `GEAR_ACCOUNTS_ENABLED` 控制此项：共享配置获准并检查通过后，开放入口供指定管理员本人注册、验证，再由部署者初始化权限并完成真实流程验收；不能以切换此变量替代共享配置审批或验收。
 
 | 路由 | 内容 |
 | --- | --- |
-| `/#/` | 账号状态、验证后提交使用申请 |
+| `/#/` | 台账已开启且有权时进入台账，其他账号查看状态或提交使用申请 |
+| `/#/account` | 账号状态、验证后提交使用申请 |
 | `/#/login` | 邮箱密码登录 |
 | `/#/register` | 注册；已有共享身份应直接登录 |
 | `/#/verify` | 注册邮箱验证码及重发 |
@@ -44,4 +45,4 @@ pnpm -C web run dev
 
 ## 存量建账与台账
 
-本地新增台账、已有设备登记及设备详情；`GEAR_INVENTORY_ENABLED` 控制运行配置的 `inventoryEnabled`，缺省关闭，当前线上未启用。只有有权账号且开关开启时首页进入台账；账号状态保留在 `/#/account`。迁移 005、权限、未知日期、编号及上线边界见[本轮接入记录](../docs/inventory-implementation.md)。
+台账、已有设备登记及设备详情已获授权通过既有 CI/CD 发布；`GEAR_INVENTORY_ENABLED` 控制运行配置的 `inventoryEnabled`，缺省关闭，本次在迁移和权限检查通过后开启。只有有权账号且开关开启时首页进入台账；账号状态保留在 `/#/account`。迁移 005、权限、未知日期、编号及上线边界见[本轮接入记录](../docs/inventory-implementation.md)。
