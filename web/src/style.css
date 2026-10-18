@@ -52,12 +52,19 @@ a:hover {
   font-weight: 400;
   margin-left: 8px;
 }
-nav,
-.links,
-.row-actions {
+nav {
   display: flex;
   align-items: center;
   gap: 18px;
+  flex-wrap: wrap;
+}
+.action-group,
+.links,
+.row-actions,
+.pagination-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   flex-wrap: wrap;
 }
 .page {
@@ -199,9 +206,6 @@ a:focus-visible {
   overflow-wrap: anywhere;
   font-size: 13px;
 }
-.row-actions {
-  gap: 8px;
-}
 .inventory-filters {
   display: grid;
   grid-template-columns: 2fr 1fr 1fr 1fr auto;
@@ -240,11 +244,6 @@ a:focus-visible {
 }
 .inventory-pagination p {
   margin: 0;
-}
-.pagination-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
 }
 .inventory-table {
   width: 100%;

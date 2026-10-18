@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import ActionGroup from "../components/ActionGroup.vue";
 import {
   account,
   apply,
@@ -69,32 +70,38 @@ async function submit() {
                 : ""
             }}
           </p>
+          <p v-if="!account.inventoryEnabled" class="muted">
+            账号已启用。设备台账将在下一步接入。
+          </p>
+        </template>
+        <p v-if="account.profile.membership.review_note" class="muted">
+          处理说明：{{ account.profile.membership.review_note }}
+        </p>
+      </template>
+      <ActionGroup class="links" aria-label="账号操作">
+        <template v-if="account.profile.membership?.status === 'active'">
           <RouterLink
             v-if="account.inventoryEnabled"
             class="button"
             to="/assets"
             >查看设备台账</RouterLink
           >
-          <p v-else class="muted">账号已启用。设备台账将在下一步接入。</p>
           <RouterLink
             v-if="account.profile.membership.role === 'admin'"
             class="button"
             to="/members"
             >管理使用申请</RouterLink
-          ></template
+          >
+        </template>
+        <button
+          class="quiet"
+          type="button"
+          :disabled="account.loading"
+          @click="refreshProfile"
         >
-        <p v-if="account.profile.membership.review_note" class="muted">
-          处理说明：{{ account.profile.membership.review_note }}
-        </p>
-      </template>
-      <button
-        class="quiet refresh"
-        type="button"
-        :disabled="account.loading"
-        @click="refreshProfile"
-      >
-        刷新账号状态
-      </button>
+          刷新账号状态
+        </button>
+      </ActionGroup>
     </template>
     <button v-else class="quiet" type="button" @click="refreshProfile">
       重新获取账号状态

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { onBeforeUnmount, ref, watch } from "vue";
 import { account, safeError } from "../accounts";
 import {
   inventoryAccess,
@@ -9,29 +9,18 @@ import {
   type DueAssetList,
 } from "../inventory";
 import InventoryGate from "../components/InventoryGate.vue";
+import ListPagination from "../components/ListPagination.vue";
+import { defaultPageSize } from "../pagination";
 const state = ref<DueState | "">("");
 const data = ref<DueAssetList | null>(null);
 const error = ref("");
 const loading = ref(false);
-const page = ref(1);
-const pageSize = ref(20);
-const pageCount = computed(() =>
-  Math.max(1, Math.ceil((data.value?.items.length || 0) / pageSize.value)),
-);
-const items = computed(
-  () =>
-    data.value?.items.slice(
-      (page.value - 1) * pageSize.value,
-      page.value * pageSize.value,
-    ) || [],
-);
-watch(pageSize, () => (page.value = 1));
+const pageSize = ref(defaultPageSize);
 let generation = 0;
 async function load() {
   const current = ++generation;
   data.value = null;
   error.value = "";
-  page.value = 1;
   if (!inventoryAccess.value) return;
   loading.value = true;
   try {
@@ -92,81 +81,42 @@ onBeforeUnmount(() => generation++);
           >{{ label }}：{{ data.summary[key] }}</span
         >
       </div>
-      <nav class="inventory-pagination" aria-label="临时使用分页">
-        <label
-          >每页显示<select v-model.number="pageSize">
-            <option v-for="size in [10, 20, 50, 100]" :key="size" :value="size">
-              {{ size }} 条
-            </option>
-          </select></label
-        >
-        <p role="status">
-          第 {{ page }} / {{ pageCount }} 页，共 {{ data.items.length }} 条
-        </p>
-        <div class="pagination-actions">
-          <button
-            class="quiet"
-            type="button"
-            :disabled="page === 1"
-            @click="page = 1"
-          >
-            首页
-          </button>
-          <button
-            class="quiet"
-            type="button"
-            :disabled="page === 1"
-            @click="page--"
-          >
-            上一页
-          </button>
-          <button
-            class="quiet"
-            type="button"
-            :disabled="page >= pageCount"
-            @click="page++"
-          >
-            下一页
-          </button>
-          <button
-            class="quiet"
-            type="button"
-            :disabled="page >= pageCount"
-            @click="page = pageCount"
-          >
-            末页
-          </button>
+      <ListPagination
+        v-model:page-size="pageSize"
+        :items="data.items"
+        label="临时使用分页"
+        v-slot="{ items }"
+      >
+        <div v-if="items.length" class="table-scroll">
+          <table class="inventory-table">
+            <thead>
+              <tr>
+                <th>编号与设备</th>
+                <th>当前持有方</th>
+                <th>负责人</th>
+                <th>预计归还</th>
+                <th>到期情况</th>
+                <th>跟进经办人</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="asset in items" :key="asset.id">
+                <td>
+                  <RouterLink :to="'/assets/' + asset.id"
+                    >{{ asset.asset_code }} · {{ asset.name }}</RouterLink
+                  >
+                </td>
+                <td>{{ asset.holder_name }}</td>
+                <td>{{ asset.responsible_name }}</td>
+                <td>{{ asset.due_on }}</td>
+                <td>{{ dueStates[asset.due_state] }}</td>
+                <td>{{ asset.followup_name || "未指定" }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-      </nav>
-      <div v-if="items.length" class="table-scroll">
-        <table class="inventory-table">
-          <thead>
-            <tr>
-              <th>编号与设备</th>
-              <th>当前持有方</th>
-              <th>负责人</th>
-              <th>预计归还</th>
-              <th>到期情况</th>
-              <th>跟进经办人</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="asset in items" :key="asset.id">
-              <td>
-                <RouterLink :to="'/assets/' + asset.id"
-                  >{{ asset.asset_code }} · {{ asset.name }}</RouterLink
-                >
-              </td>
-              <td>{{ asset.holder_name }}</td>
-              <td>{{ asset.responsible_name }}</td>
-              <td>{{ asset.due_on }}</td>
-              <td>{{ dueStates[asset.due_state] }}</td>
-              <td>{{ asset.followup_name || "未指定" }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <p v-else>当前条件下没有临时领用设备。</p>
+        <p v-else>当前条件下没有临时领用设备。</p>
+      </ListPagination>
       <p class="muted">本页提供站内查询，归还提醒邮件尚未启用。</p>
     </template>
   </section>

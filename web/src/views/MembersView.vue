@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ActionGroup from "../components/ActionGroup.vue";
 import { computed, ref, watch } from "vue";
 import {
   account,
@@ -183,7 +184,7 @@ async function review(member: Member, status: MemberStatus) {
           maxlength="500"
           :disabled="!!busyId"
       /></label>
-      <div class="row-actions">
+      <ActionGroup class="row-actions">
         <template v-if="member.status === 'pending'"
           ><button
             type="button"
@@ -232,7 +233,7 @@ async function review(member: Member, status: MemberStatus) {
         >
           恢复待审核
         </button>
-      </div>
+      </ActionGroup>
     </form>
     <section aria-label="审核邮件通知">
       <h2>审核邮件通知</h2>

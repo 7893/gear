@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
+import { onBeforeUnmount, reactive, ref, watch } from "vue";
 import { account, safeError } from "../accounts";
 import {
   inventoryAccess,
@@ -12,6 +12,8 @@ import {
   type AssetList,
 } from "../inventory";
 import InventoryGate from "../components/InventoryGate.vue";
+import ListPagination from "../components/ListPagination.vue";
+import { defaultPageSize } from "../pagination";
 const filters = reactive({
   search: "",
   category: "",
@@ -21,34 +23,12 @@ const filters = reactive({
 const data = ref<AssetList | null>(null);
 const loading = ref(false);
 const error = ref("");
-const pageSizes = [10, 20, 50, 100];
-const pageSize = ref(20);
-const page = ref(1);
-const pageCount = computed(() =>
-  Math.max(1, Math.ceil((data.value?.items.length || 0) / pageSize.value)),
-);
-const pageStart = computed(() =>
-  data.value?.items.length ? (page.value - 1) * pageSize.value + 1 : 0,
-);
-const pageEnd = computed(() =>
-  Math.min(page.value * pageSize.value, data.value?.items.length || 0),
-);
-const pageItems = computed(
-  () =>
-    data.value?.items.slice(
-      (page.value - 1) * pageSize.value,
-      page.value * pageSize.value,
-    ) || [],
-);
-watch(pageSize, () => {
-  page.value = 1;
-});
+const pageSize = ref(defaultPageSize);
 let generation = 0;
 async function load() {
   const current = ++generation;
   data.value = null;
   error.value = "";
-  page.value = 1;
   if (!inventoryAccess.value) return;
   loading.value = true;
   try {
@@ -145,101 +125,60 @@ onBeforeUnmount(() => generation++);
       <p class="muted">
         符合当前条件：{{ data.matched }} 件。日期按东八区显示。
       </p>
-      <nav class="inventory-pagination" aria-label="设备分页">
-        <label
-          >每页显示<select v-model.number="pageSize">
-            <option v-for="size in pageSizes" :key="size" :value="size">
-              {{ size }} 条
-            </option>
-          </select></label
-        >
-        <p role="status">
-          第 {{ page }} / {{ pageCount }} 页<span v-if="data.items.length"
-            >，显示第 {{ pageStart }} 至 {{ pageEnd }} 条</span
-          >，共 {{ data.matched }} 条
-        </p>
-        <div class="pagination-actions">
-          <button
-            class="quiet"
-            type="button"
-            :disabled="page === 1"
-            @click="page = 1"
-          >
-            首页
-          </button>
-          <button
-            class="quiet"
-            type="button"
-            :disabled="page === 1"
-            @click="page--"
-          >
-            上一页
-          </button>
-          <button
-            class="quiet"
-            type="button"
-            :disabled="page >= pageCount"
-            @click="page++"
-          >
-            下一页
-          </button>
-          <button
-            class="quiet"
-            type="button"
-            :disabled="page >= pageCount"
-            @click="page = pageCount"
-          >
-            末页
-          </button>
+      <ListPagination
+        v-model:page-size="pageSize"
+        :items="data.items"
+        label="设备分页"
+        v-slot="{ items: pageItems }"
+      >
+        <div v-if="data.items.length" class="table-scroll">
+          <table class="inventory-table">
+            <thead>
+              <tr>
+                <th>编号与设备</th>
+                <th>分类与型号</th>
+                <th>状态与状况</th>
+                <th>当前持有方</th>
+                <th>负责人</th>
+                <th>位置</th>
+                <th>预计归还</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="asset in pageItems" :key="asset.id">
+                <td>
+                  <RouterLink :to="'/assets/' + asset.id"
+                    >{{ asset.asset_code }} · {{ asset.name }}</RouterLink
+                  ><small>旧编号：{{ asset.legacy_code || "未填写" }}</small>
+                </td>
+                <td>
+                  {{
+                    categories[asset.category as keyof typeof categories] ||
+                    asset.category
+                  }}<small>{{ asset.model || "型号未填写" }}</small>
+                </td>
+                <td>
+                  {{ assetStates[asset.display_status]
+                  }}<small>{{
+                    asset.condition === "faulty" ? "故障" : "正常"
+                  }}</small>
+                </td>
+                <td>{{ holderLabel(asset) }}</td>
+                <td>{{ asset.responsible_name || "不适用" }}</td>
+                <td>{{ asset.location || "未填写" }}</td>
+                <td>{{ dueLabel(asset) }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-      </nav>
-      <div v-if="data.items.length" class="table-scroll">
-        <table class="inventory-table">
-          <thead>
-            <tr>
-              <th>编号与设备</th>
-              <th>分类与型号</th>
-              <th>状态与状况</th>
-              <th>当前持有方</th>
-              <th>负责人</th>
-              <th>位置</th>
-              <th>预计归还</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="asset in pageItems" :key="asset.id">
-              <td>
-                <RouterLink :to="'/assets/' + asset.id"
-                  >{{ asset.asset_code }} · {{ asset.name }}</RouterLink
-                ><small>旧编号：{{ asset.legacy_code || "未填写" }}</small>
-              </td>
-              <td>
-                {{
-                  categories[asset.category as keyof typeof categories] ||
-                  asset.category
-                }}<small>{{ asset.model || "型号未填写" }}</small>
-              </td>
-              <td>
-                {{ assetStates[asset.display_status]
-                }}<small>{{
-                  asset.condition === "faulty" ? "故障" : "正常"
-                }}</small>
-              </td>
-              <td>{{ holderLabel(asset) }}</td>
-              <td>{{ asset.responsible_name || "不适用" }}</td>
-              <td>{{ asset.location || "未填写" }}</td>
-              <td>{{ dueLabel(asset) }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <p v-else>
-        {{
-          data.summary.total
-            ? "没有符合当前条件的设备，请调整查询条件。"
-            : "尚未登记设备。"
-        }}
-      </p>
+        <p v-else>
+          {{
+            data.summary.total
+              ? "没有符合当前条件的设备，请调整查询条件。"
+              : "尚未登记设备。"
+          }}
+        </p>
+      </ListPagination>
     </template>
   </section>
   <InventoryGate v-else />

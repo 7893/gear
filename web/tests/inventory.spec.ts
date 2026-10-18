@@ -478,6 +478,51 @@ test("inventory is closed by default and never queries business RPCs", async ({
   expect(state.calls.every((c) => c.name === "get_my_membership")).toBe(true);
 });
 
+test("account actions keep consistent spacing and wrap without overlapping", async ({
+  page,
+}) => {
+  await fixture(page, "admin");
+  await login(page);
+  await expect(
+    page.getByRole("heading", { name: "设备台账", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "我的账号", exact: true }).click();
+  const group = page.getByRole("group", { name: "账号操作", exact: true });
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 850 });
+    await expect(
+      group.getByRole("link", { name: "查看设备台账", exact: true }),
+    ).toBeVisible();
+    await expect(
+      group.getByRole("link", { name: "管理使用申请", exact: true }),
+    ).toBeVisible();
+    const boxes = await group.locator("a, button").evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const box = node.getBoundingClientRect();
+        return {
+          left: box.left,
+          right: box.right,
+          top: box.top,
+          bottom: box.bottom,
+        };
+      }),
+    );
+    expect(boxes).toHaveLength(3);
+    for (let i = 1; i < boxes.length; i++) {
+      const previous = boxes[i - 1]!,
+        current = boxes[i]!;
+      expect(
+        current.left - previous.right >= 11.5 ||
+          current.top - previous.bottom >= 11.5,
+      ).toBe(true);
+    }
+  }
+  await group
+    .getByRole("button", { name: "刷新账号状态", exact: true })
+    .click();
+  await expect(group).toBeVisible();
+});
+
 test("temporary extension retries the same request and shows old and new dates in history", async ({
   page,
 }) => {

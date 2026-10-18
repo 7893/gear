@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ActionGroup from "../components/ActionGroup.vue";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import qrcode from "qrcode-generator";
@@ -192,7 +193,7 @@ async function remove() {
           打印或另存 PDF 不会再次办理交接。建议使用桌面 Chrome 或
           Edge；关闭浏览器自带页眉页脚，页码由单据提供。
         </p>
-        <div class="links">
+        <ActionGroup class="links">
           <button
             type="button"
             :disabled="busy || !snapshotComplete || !!error"
@@ -215,20 +216,22 @@ async function remove() {
           >
             删除草稿
           </button>
-        </div>
+        </ActionGroup>
         <div v-if="deleting" class="notice">
           <p>确认删除此草稿？审计记录会保留。</p>
-          <button type="button" :disabled="busy" @click="remove">
-            确认删除草稿
-          </button>
-          <button
-            type="button"
-            class="quiet"
-            :disabled="busy"
-            @click="deleting = false"
-          >
-            保留草稿
-          </button>
+          <ActionGroup>
+            <button type="button" :disabled="busy" @click="remove">
+              确认删除草稿
+            </button>
+            <button
+              type="button"
+              class="quiet"
+              :disabled="busy"
+              @click="deleting = false"
+            >
+              保留草稿
+            </button>
+          </ActionGroup>
         </div>
         <p v-if="!snapshotComplete" class="notice error" role="alert">
           单据快照不完整，暂不能打印，请联系管理员。

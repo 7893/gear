@@ -64,7 +64,7 @@ python3 database/tests/check_schema_year.py
 
 ## 临时使用延期与到期查询迁移
 
-迁移 `202610190009_temporary_use.sql` 本地新增两组查询和延期函数，尚未应用正式数据库。不增加表或列，沿用当前临时分配、设备版本和 `assignment_extended` 事件；延期保留原单据与签字原件。临近天数读取已有设置，业务日期由服务端按东八区计算。隔离检查已加入 CI；必须先获授权执行迁移，再推送发布页面，详见[本轮实施](../docs/temporary-use-implementation.md)。
+迁移 `202610190009_temporary_use.sql` 已获授权应用，新增两组查询和延期函数。不增加表或列，沿用当前临时分配、设备版本和 `assignment_extended` 事件；延期保留原单据与签字原件。临近天数读取已有设置，业务日期由服务端按东八区计算。隔离检查已加入 CI；本轮先完成云端迁移、权限和只读检查，再通过既有 CI/CD 发布页面，详见[本轮实施](../docs/temporary-use-implementation.md)。
 
 ## Schema 命名与配置
 
