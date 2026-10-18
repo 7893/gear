@@ -221,6 +221,31 @@ a:focus-visible {
 .table-scroll {
   overflow-x: auto;
 }
+.inventory-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 16px 0;
+}
+.inventory-pagination label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+.inventory-pagination select {
+  width: auto;
+}
+.inventory-pagination p {
+  margin: 0;
+}
+.pagination-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .inventory-table {
   width: 100%;
   border-collapse: collapse;

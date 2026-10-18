@@ -48,6 +48,7 @@ async function fixture(
   const calls: { name: string; body: Record<string, unknown> }[] = [];
   const authCalls: string[] = [];
   const assets = [structuredClone(base)];
+  let listResults: Asset[] | undefined;
   const parties: Party[] = [
     {
       id: personId,
@@ -148,8 +149,8 @@ async function fixture(
         });
       return route.fulfill({
         json: {
-          items: assets,
-          matched: assets.length,
+          items: listResults ?? assets,
+          matched: (listResults ?? assets).length,
           summary: {
             total: assets.length,
             in_use: assets.length,
@@ -245,6 +246,7 @@ async function fixture(
     calls,
     authCalls,
     assets,
+    filterResults: (items: Asset[] | undefined) => (listResults = items),
     failList: (value: boolean) => (listFailure = value),
     requireDuplicateAck: () => (duplicate = true),
     loseNextAcknowledgement: () => (uncertain = true),
@@ -272,6 +274,109 @@ async function fillAsset(page: Page, name = "待登记碎纸机") {
     .getByRole("combobox", { name: "设备状况", exact: true })
     .selectOption("normal");
 }
+
+function paginationAssets() {
+  return Array.from({ length: 51 }, (_, index) => ({
+    ...structuredClone(base),
+    id: "00000000-0000-4000-8000-" + String(1000 + index).padStart(12, "0"),
+    asset_code: "SB-" + String(index + 1).padStart(6, "0"),
+  }));
+}
+
+test("ledger pages all fifty-one devices and supports each page size without refetching", async ({
+  page,
+}) => {
+  const state = await fixture(page, "viewer");
+  state.assets.splice(0, state.assets.length, ...paginationAssets());
+  await login(page);
+  const nav = page.getByRole("navigation", { name: "设备分页" });
+  const rows = page.locator(".inventory-table tbody tr");
+  const size = nav.getByRole("combobox", { name: "每页显示", exact: true });
+  await expect(rows).toHaveCount(20);
+  await expect(size).toHaveValue("20");
+  await expect(nav.getByRole("status")).toContainText(
+    "显示第 1 至 20 条，共 51 条",
+  );
+  await expect(
+    nav.getByRole("button", { name: "上一页", exact: true }),
+  ).toBeDisabled();
+  const requests = state.calls.filter((c) => c.name === "list_assets").length;
+  await nav.getByRole("button", { name: "下一页", exact: true }).click();
+  await expect(rows.first()).toContainText("SB-000021");
+  await expect(rows.last()).toContainText("SB-000040");
+  await nav.getByRole("button", { name: "末页", exact: true }).click();
+  await expect(rows).toHaveCount(11);
+  await expect(rows.first()).toContainText("SB-000041");
+  await expect(rows.last()).toContainText("SB-000051");
+  await expect(
+    nav.getByRole("button", { name: "下一页", exact: true }),
+  ).toBeDisabled();
+  await nav.getByRole("button", { name: "上一页", exact: true }).click();
+  await expect(rows.first()).toContainText("SB-000021");
+  await size.selectOption("10");
+  await expect(rows).toHaveCount(10);
+  await expect(nav.getByRole("status")).toContainText("第 1 / 6 页");
+  await nav.getByRole("button", { name: "末页", exact: true }).click();
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText("SB-000051");
+  await size.selectOption("50");
+  await expect(rows).toHaveCount(50);
+  await expect(nav.getByRole("status")).toContainText("第 1 / 2 页");
+  await nav.getByRole("button", { name: "末页", exact: true }).click();
+  await expect(rows).toHaveCount(1);
+  await nav.getByRole("button", { name: "首页", exact: true }).click();
+  await expect(rows.first()).toContainText("SB-000001");
+  await size.selectOption("100");
+  await expect(rows).toHaveCount(51);
+  await expect(nav.getByRole("status")).toContainText("第 1 / 1 页");
+  await expect(
+    nav.getByRole("button", { name: "末页", exact: true }),
+  ).toBeDisabled();
+  expect(state.calls.filter((c) => c.name === "list_assets")).toHaveLength(
+    requests,
+  );
+});
+
+test("a filtered ledger resets its page and keeps global counts for single and empty results", async ({
+  page,
+}) => {
+  const state = await fixture(page, "viewer");
+  state.assets.splice(0, state.assets.length, ...paginationAssets());
+  await login(page);
+  const nav = page.getByRole("navigation", { name: "设备分页" });
+  const rows = page.locator(".inventory-table tbody tr");
+  await nav.getByRole("button", { name: "末页", exact: true }).click();
+  await expect(nav.getByRole("status")).toContainText("第 3 / 3 页");
+  state.filterResults([state.assets[50]]);
+  await page.getByLabel("搜索设备", { exact: true }).fill("SB-000051");
+  await page.getByRole("button", { name: "查询", exact: true }).click();
+  await expect(rows).toHaveCount(1);
+  await expect(nav.getByRole("status")).toContainText(
+    "第 1 / 1 页，显示第 1 至 1 条，共 1 条",
+  );
+  await expect(
+    page.getByText("有效设备总数：51", { exact: true }),
+  ).toBeVisible();
+  state.filterResults([]);
+  await page.getByLabel("搜索设备", { exact: true }).fill("没有匹配项");
+  await page.getByRole("button", { name: "查询", exact: true }).click();
+  await expect(rows).toHaveCount(0);
+  await expect(nav.getByRole("status")).toContainText("第 1 / 1 页，共 0 条");
+  await expect(
+    nav.getByRole("button", { name: "下一页", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    nav.getByRole("button", { name: "上一页", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByText("没有符合当前条件的设备，请调整查询条件。", { exact: true }),
+  ).toBeVisible();
+  state.filterResults(undefined);
+  await page.getByLabel("搜索设备", { exact: true }).fill("");
+  await page.getByRole("button", { name: "查询", exact: true }).click();
+  await expect(rows).toHaveCount(20);
+  await expect(nav.getByRole("status")).toContainText("第 1 / 3 页");
+});
 
 test("inventory is closed by default and never queries business RPCs", async ({
   page,

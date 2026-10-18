@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, reactive, ref, watch } from "vue";
+import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { account, safeError } from "../accounts";
 import {
   inventoryAccess,
@@ -21,11 +21,34 @@ const filters = reactive({
 const data = ref<AssetList | null>(null);
 const loading = ref(false);
 const error = ref("");
+const pageSizes = [10, 20, 50, 100];
+const pageSize = ref(20);
+const page = ref(1);
+const pageCount = computed(() =>
+  Math.max(1, Math.ceil((data.value?.items.length || 0) / pageSize.value)),
+);
+const pageStart = computed(() =>
+  data.value?.items.length ? (page.value - 1) * pageSize.value + 1 : 0,
+);
+const pageEnd = computed(() =>
+  Math.min(page.value * pageSize.value, data.value?.items.length || 0),
+);
+const pageItems = computed(
+  () =>
+    data.value?.items.slice(
+      (page.value - 1) * pageSize.value,
+      page.value * pageSize.value,
+    ) || [],
+);
+watch(pageSize, () => {
+  page.value = 1;
+});
 let generation = 0;
 async function load() {
   const current = ++generation;
   data.value = null;
   error.value = "";
+  page.value = 1;
   if (!inventoryAccess.value) return;
   loading.value = true;
   try {
@@ -122,6 +145,54 @@ onBeforeUnmount(() => generation++);
       <p class="muted">
         符合当前条件：{{ data.matched }} 件。日期按东八区显示。
       </p>
+      <nav class="inventory-pagination" aria-label="设备分页">
+        <label
+          >每页显示<select v-model.number="pageSize">
+            <option v-for="size in pageSizes" :key="size" :value="size">
+              {{ size }} 条
+            </option>
+          </select></label
+        >
+        <p role="status">
+          第 {{ page }} / {{ pageCount }} 页<span v-if="data.items.length"
+            >，显示第 {{ pageStart }} 至 {{ pageEnd }} 条</span
+          >，共 {{ data.matched }} 条
+        </p>
+        <div class="pagination-actions">
+          <button
+            class="quiet"
+            type="button"
+            :disabled="page === 1"
+            @click="page = 1"
+          >
+            首页
+          </button>
+          <button
+            class="quiet"
+            type="button"
+            :disabled="page === 1"
+            @click="page--"
+          >
+            上一页
+          </button>
+          <button
+            class="quiet"
+            type="button"
+            :disabled="page >= pageCount"
+            @click="page++"
+          >
+            下一页
+          </button>
+          <button
+            class="quiet"
+            type="button"
+            :disabled="page >= pageCount"
+            @click="page = pageCount"
+          >
+            末页
+          </button>
+        </div>
+      </nav>
       <div v-if="data.items.length" class="table-scroll">
         <table class="inventory-table">
           <thead>
@@ -136,7 +207,7 @@ onBeforeUnmount(() => generation++);
             </tr>
           </thead>
           <tbody>
-            <tr v-for="asset in data.items" :key="asset.id">
+            <tr v-for="asset in pageItems" :key="asset.id">
               <td>
                 <RouterLink :to="'/assets/' + asset.id"
                   >{{ asset.asset_code }} · {{ asset.name }}</RouterLink
