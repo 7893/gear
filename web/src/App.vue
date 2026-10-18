@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { account, signOut, safeError } from "./accounts";
+import { inventoryAccess } from "./inventory";
 async function logout() {
   try {
     await signOut();
@@ -13,7 +14,8 @@ async function logout() {
     <RouterLink to="/" class="brand">设备簿 <span>gear</span></RouterLink>
     <nav aria-label="主导航">
       <template v-if="account.signedIn">
-        <RouterLink to="/">我的账号</RouterLink>
+        <RouterLink v-if="inventoryAccess" to="/assets">设备台账</RouterLink>
+        <RouterLink to="/account">我的账号</RouterLink>
         <RouterLink
           v-if="
             account.profile?.email_verified &&

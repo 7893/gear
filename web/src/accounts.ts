@@ -25,6 +25,7 @@ export type Member = Membership & {
 export const account = reactive({
   enabled: false,
   recoveryEnabled: false,
+  inventoryEnabled: false,
   initializing: true,
   loading: false,
   signedIn: false,
@@ -62,6 +63,19 @@ const messages: Record<string, string> = {
   invalid_new_password: "新密码长度应为 12 至 128 个字符。",
   password_mismatch: "两次输入的新密码不一致。",
   shared_password_confirmation_required: "请先确认共享账号密码变更的影响。",
+  inventory_unavailable: "设备台账尚未开放。",
+  inventory_access_denied: "当前账号没有此设备操作权限，请刷新账号状态。",
+  invalid_asset: "设备资料不符合要求，请核对名称、分类、状况和字段长度。",
+  invalid_party: "人员或团队资料不符合要求，请核对填写内容。",
+  responsible_person_required:
+    "请选择有效的个人负责人；个人持有时负责人应为本人。",
+  holder_unavailable: "所选持有方已不可用，请刷新名单后重新选择。",
+  invalid_placement: "请核对持有方、使用期限和预计归还日期。",
+  invalid_inventory_date: "日期无效；历史起始日期不能晚于业务当天。",
+  invalid_inventory_filter: "查询条件无效，请调整后重试。",
+  legacy_code_duplicate:
+    "已有设备使用相同旧编号，请核对是否为不同实物，再确认继续登记。",
+  asset_not_found: "未找到该设备，请返回台账核对。",
 };
 export function safeError(error: unknown): string {
   const message =
@@ -148,6 +162,7 @@ export async function initializeAccounts(): Promise<void> {
     const config = await configuration();
     account.enabled = config.accountsEnabled;
     account.recoveryEnabled = config.recoveryEnabled;
+    account.inventoryEnabled = config.inventoryEnabled;
     if (!account.enabled) return;
     client = makeClient(config.apiUrl, config.publishableKey);
     if (code) {
@@ -233,6 +248,22 @@ export async function listMembers(): Promise<Member[]> {
   const { data, error } = await service().rpc("list_members");
   if (error) throw error;
   return data as Member[];
+}
+export async function inventoryRpc(
+  name:
+    | "list_assets"
+    | "get_asset"
+    | "list_parties"
+    | "create_party"
+    | "initialize_asset",
+  parameters: Record<string, unknown> = {},
+): Promise<unknown> {
+  if (!account.inventoryEnabled) throw new Error("inventory_unavailable");
+  const { data, error } = await service()
+    .rpc(name, parameters)
+    .abortSignal(AbortSignal.timeout(15000));
+  if (error) throw error;
+  return data;
 }
 export type NotificationStatus = {
   enabled: boolean;

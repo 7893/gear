@@ -2,7 +2,7 @@
 
 `migrations/202610170001_initial_schema.sql` 创建 `gear` 的十一张表、只读台账视图，以及 `gear_private` 的内部辅助函数。应用角色只有受 RLS 限制的读取权限，没有直接写表或取号权限。迁移不初始化管理员、人员或设备；唯一初始数据是通用设置，邮件开关关闭，提醒采用待启用的默认参数。
 
-迁移 001 只建立基础结构。迁移 002 已新增申请、审核、角色和停用等账号 RPC，详见[账号接入记录](../docs/account-implementation.md)。审核通知的接口已随迁移 004 获授权应用云端；建账、交接确认、作废、上传处理等事务 RPC 尚未实现，不能据此宣称业务闭环已经可用。内部设备编号和正式单号的显示格式仍待确定，当前只有独立序列和原子日流水辅助函数。
+迁移 001 只建立基础结构。迁移 002 已新增申请、审核、角色和停用等账号 RPC，详见[账号接入记录](../docs/account-implementation.md)。审核通知的接口已随迁移 004 获授权应用云端；存量建账及台账查询接口已在迁移 005 本地实现，尚未应用云端；交接确认、作废、上传处理等事务 RPC 尚未实现，不能据此宣称业务闭环已经可用。内部设备编号本地采用设计建议格式、首次真实使用前确认；正式单号格式仍待确定，当前只有原子日流水辅助函数。
 
 ## 隔离验证
 
@@ -11,6 +11,8 @@
 ```sh
 python3 database/tests/check_schema.py
 python3 database/tests/check_accounts.py
+python3 database/tests/check_notifications.py
+python3 database/tests/check_inventory.py
 ```
 
 脚本自动创建临时数据库集群，只监听权限受限的临时 Unix socket，不接受数据库 URL。清除继承的 `PG*` 连接参数；测试结束停止并删除集群。测试 Auth 表和身份函数是最小替身，所有人员、设备和邮箱均为虚构，不能替代真实 Supabase Auth 的集成验收。
@@ -36,3 +38,7 @@ python3 database/tests/check_accounts.py
 迁移 `202610180004_notifications.sql` 已完成本地隔离检查并获授权应用云端；它增加审核通知的处理令牌、只授予服务端的领取与回执接口、管理员只读诊断，以及拥有者专用的带审计开关。`check_notifications.py` 覆盖权限、并发领取、旧任务取消、过期租约、结果不明、重试上限和当前收件人复核，已加入 CI。
 
 `schedule_account_notifications.sql` 是单独的拥有者安装脚本，需要已安装的 Cron、HTTP 及 Vault 扩展，不属于通用迁移，不自动开启邮件。本次扩展和专用调度已获授权部署，实际任务发送及收件待本人验收，见[审核通知接入](../docs/notification-implementation.md)。
+
+## 存量建账与台账迁移
+
+迁移 `202610180005_inventory.sql` 增加五个受角色控制的名单、建账和查询接口，不新增业务表、不导入数据、不创建交接单，也不修改共享 Auth。当前只在一次性数据库验证，尚未应用云端。验证包含幂等请求、原编号文本、团队负责人、未知日期、临时期限及当前权限。详见[本轮接入记录](../docs/inventory-implementation.md)。

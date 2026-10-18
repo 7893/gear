@@ -1,6 +1,6 @@
 # 最小数据关系设计
 
-状态：依据已确认业务整理的逻辑模型。已在共用亚太 Supabase 项目的独立 `gear` schema 建立表结构、权限基础及账号事务 RPC，隔离验证及云端元数据复查通过；设备流转事务与完整业务验收尚未实施。字段与实施范围见[数据库模式设计](database-schema.md)及[账号实施记录](account-implementation.md)。
+状态：依据已确认业务整理的逻辑模型。已在共用亚太 Supabase 项目的独立 `gear` schema 建立表结构、权限基础及账号事务 RPC，隔离验证及云端元数据复查通过；存量建账及台账查询接口已本地实现，正式流转事务与完整业务验收尚未实施。字段与实施范围见[数据库模式设计](database-schema.md)及[账号实施记录](account-implementation.md)。
 
 ## 1. 逻辑对象
 

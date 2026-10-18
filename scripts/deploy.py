@@ -157,6 +157,7 @@ def deploy(env):
         'release': env['GITHUB_SHA'],
         'accountsEnabled': env.get('GEAR_ACCOUNTS_ENABLED') == 'true',
         'recoveryEnabled': env.get('GEAR_RECOVERY_ENABLED') == 'true',
+        'inventoryEnabled': env.get('GEAR_INVENTORY_ENABLED') == 'true',
     }) + '\n')
     files = public_files(dist)
     # Verify AWS trust before making any publication changes.

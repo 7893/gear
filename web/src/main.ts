@@ -6,6 +6,10 @@ import StatusView from "./views/StatusView.vue";
 import MembersView from "./views/MembersView.vue";
 import DiagnosticsView from "./views/DiagnosticsView.vue";
 import RecoveryView from "./views/RecoveryView.vue";
+import HomeView from "./views/HomeView.vue";
+import InventoryView from "./views/InventoryView.vue";
+import AssetCreateView from "./views/AssetCreateView.vue";
+import AssetDetailView from "./views/AssetDetailView.vue";
 import { initializeAccounts } from "./accounts";
 import "./style.css";
 
@@ -14,7 +18,11 @@ async function start() {
   const router = createRouter({
     history: createWebHashHistory(),
     routes: [
-      { path: "/", component: StatusView },
+      { path: "/", component: HomeView },
+      { path: "/account", component: StatusView },
+      { path: "/assets", component: InventoryView },
+      { path: "/assets/new", component: AssetCreateView },
+      { path: "/assets/:id", component: AssetDetailView },
       { path: "/login", component: AuthView, props: { mode: "login" } },
       { path: "/register", component: AuthView, props: { mode: "register" } },
       { path: "/verify", component: AuthView, props: { mode: "verify" } },

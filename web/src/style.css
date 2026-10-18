@@ -104,6 +104,7 @@ label {
   font-size: 14px;
   margin-bottom: 18px;
 }
+textarea,
 input,
 select {
   display: block;
@@ -116,6 +117,7 @@ select {
   color: #243247;
   margin-top: 6px;
 }
+textarea:focus,
 input:focus,
 select:focus {
   outline: 2px solid #4f82d5;
@@ -200,7 +202,95 @@ a:focus-visible {
 .row-actions {
   gap: 8px;
 }
+.inventory-filters {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr auto;
+  align-items: end;
+  gap: 12px;
+  margin: 24px 0;
+}
+.inventory-filters label {
+  margin: 0;
+}
+.inventory-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  padding: 16px 0;
+}
+.table-scroll {
+  overflow-x: auto;
+}
+.inventory-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+.inventory-table th,
+.inventory-table td {
+  padding: 14px 10px;
+  border-bottom: 1px solid #e1e7ef;
+  vertical-align: top;
+  min-width: 100px;
+  overflow-wrap: anywhere;
+}
+.inventory-table td:first-child {
+  min-width: 210px;
+}
+.inventory-table small {
+  display: block;
+  color: #64738a;
+}
+.form-grid,
+.asset-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 24px;
+}
+.form-wide {
+  grid-column: 1 / -1;
+}
+.recipient-editor {
+  margin: 24px 0;
+  padding: 16px;
+  border: 1px solid #e1e7ef;
+  border-radius: 8px;
+}
+.recipient-editor summary {
+  cursor: pointer;
+  margin-bottom: 16px;
+  color: #245fbd;
+}
+.asset-fields > div {
+  padding: 12px 0;
+  border-bottom: 1px solid #e1e7ef;
+}
+.asset-fields dt {
+  color: #64738a;
+  font-size: 13px;
+}
+.asset-fields dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+.preserve-text {
+  white-space: pre-wrap;
+}
+.asset-history {
+  padding-left: 24px;
+}
+.asset-history li {
+  padding: 12px 0;
+}
+.asset-history p {
+  margin: 4px 0;
+}
 @media (max-width: 760px) {
+  .inventory-filters,
+  .form-grid,
+  .asset-fields {
+    grid-template-columns: 1fr;
+  }
   .site-header {
     padding: 16px 20px;
   }

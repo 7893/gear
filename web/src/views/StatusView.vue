@@ -69,7 +69,13 @@ async function submit() {
                 : ""
             }}
           </p>
-          <p class="muted">账号已启用。设备台账将在下一步接入。</p>
+          <RouterLink
+            v-if="account.inventoryEnabled"
+            class="button"
+            to="/assets"
+            >查看设备台账</RouterLink
+          >
+          <p v-else class="muted">账号已启用。设备台账将在下一步接入。</p>
           <RouterLink
             v-if="account.profile.membership.role === 'admin'"
             class="button"
