@@ -17,7 +17,73 @@ test("health is public, uncached and does not reveal upstream configuration", as
   );
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("Cache-Control"), "no-store");
+  assert.match(response.headers.get("X-Robots-Tag") || "", /noindex/);
   assert.doesNotMatch(await response.text(), /upstream\.example/);
+});
+
+test("crawler policy stays readable without an API key and never calls upstream", async () => {
+  const stub = mock.method(globalThis, "fetch", async () => {
+    throw new Error("unexpected_upstream");
+  });
+  try {
+    for (const method of ["GET", "HEAD"]) {
+      const response = await gateway.fetch(
+        new Request("https://api.example.com/robots.txt", {
+          method,
+          headers: { "User-Agent": "OAI-SearchBot" },
+        }),
+        env,
+      );
+      assert.equal(response.status, 200);
+      assert.match(response.headers.get("Content-Type") || "", /text\/plain/);
+      assert.match(response.headers.get("X-Robots-Tag") || "", /noindex/);
+      const text = await response.text();
+      if (method === "HEAD") assert.equal(text, "");
+      else assert.match(text, /User-agent: \*\nDisallow: \//);
+    }
+    assert.equal(stub.mock.callCount(), 0);
+  } finally {
+    stub.mock.restore();
+  }
+});
+
+test("search, AI retrieval and training crawlers cannot reach the backend", async () => {
+  const stub = mock.method(globalThis, "fetch", async () => {
+    throw new Error("unexpected_upstream");
+  });
+  try {
+    for (const agent of [
+      "Googlebot",
+      "bingbot",
+      "Baiduspider",
+      "OAI-SearchBot",
+      "GPTBot",
+      "ChatGPT-User",
+      "ClaudeBot",
+      "Claude-SearchBot",
+      "Claude-User",
+      "PerplexityBot",
+      "Perplexity-User",
+      "GoogleOther",
+      "Bytespider",
+      "CCBot",
+    ]) {
+      const response = await gateway.fetch(
+        new Request("https://api.example.com/rest/v1/rpc/list_assets", {
+          method: "POST",
+          headers: { apikey: "fictional", "User-Agent": agent },
+          body: "{}",
+        }),
+        env,
+      );
+      assert.equal(response.status, 403, agent);
+      assert.equal((await response.json()).error, "crawler_not_allowed");
+      assert.match(response.headers.get("X-Robots-Tag") || "", /noindex/);
+    }
+    assert.equal(stub.mock.callCount(), 0);
+  } finally {
+    stub.mock.restore();
+  }
 });
 
 test("rejects other origins, admin APIs and other application resources", async () => {

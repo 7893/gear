@@ -12,7 +12,7 @@ server {
     if ($http_x_gear_origin_token != "${AWS_CLOUDFRONT_ORIGIN_HEADER_VALUE}") { return 403; }
     add_header Cache-Control "no-cache" always;
     add_header X-Content-Type-Options "nosniff" always;
-    add_header X-Robots-Tag "noindex, nofollow" always;
+    add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
     location = /healthz {
         default_type application/json;
         return 200 '{"status":"ready","service":"gear-origin","application":"not-deployed"}';
@@ -21,12 +21,14 @@ server {
         try_files $uri =404;
         add_header Cache-Control "public, max-age=3600";
         add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
     }
     # Future builds must use content hashes in asset filenames.
     location /assets/ {
         try_files $uri =404;
         add_header Cache-Control "public, max-age=31536000, immutable";
         add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
     }
     location / { try_files $uri $uri/ /index.html; }
 }

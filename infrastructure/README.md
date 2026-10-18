@@ -54,3 +54,7 @@ pnpm -C infrastructure/gateway run check
 当前开发机的专用用户定时器每日检查，配置与原始日志在私有环境保存。新证书部署成功后才更新部署指纹；部署失败保留重试条件，源站配置验证失败恢复旧证书文件。前端续期保留专用 ACM 资源的 ARN 及 CloudFront 绑定；客户端证书的实际生效需另行核对。
 
 更多接入状态、已知限制及授权边界见[技术记录](../docs/technical-proposal.md)。
+
+## 搜索与 AI 爬虫
+
+网站 robots 的唯一文件源位于 [web/public/robots.txt](../web/public/robots.txt)，随 Vite 构建提供，不另维护源站副本。后端网关提供同等禁抓取规则与禁止索引响应头。CloudFront 的 [viewer-request 函数](cloudfront/block-crawlers.js)在缓存之前拒绝已识别爬虫，单独测试和发布，不改变其他站点。完整部署边界见[抓取与索引规则](../docs/crawling-policy.md)。

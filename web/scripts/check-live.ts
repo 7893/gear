@@ -26,6 +26,27 @@ try {
   });
   assert.equal(response?.status(), 200);
   assert.match(response?.headers()["via"] || "", /cloudfront/i);
+  assert.match(response?.headers()["x-robots-tag"] || "", /noindex/);
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
+    "content",
+    /noindex/,
+  );
+  const robots = await page.request.get(
+    new URL("/robots.txt", base).toString(),
+  );
+  assert.equal(robots.status(), 200);
+  assert.match(await robots.text(), /User-agent: \*\s+Disallow: \//);
+  const apiPolicy = await page.evaluate(async () => {
+    const config = (await (
+      await fetch("/runtime-config.json", { cache: "no-store" })
+    ).json()) as { apiUrl: string };
+    const response = await fetch(
+      config.apiUrl.replace(/\/$/, "") + "/robots.txt",
+    );
+    return { status: response.status, body: await response.text() };
+  });
+  assert.equal(apiPolicy.status, 200);
+  assert.match(apiPolicy.body, /User-agent: \*\s+Disallow: \//);
   await expect(page.locator("#page-status")).toHaveAttribute(
     "data-state",
     "success",

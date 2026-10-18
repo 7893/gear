@@ -211,7 +211,7 @@ def deploy(env):
 
     distribution = env['AWS_CLOUDFRONT_DISTRIBUTION_ID']
     result = json.loads(run('CDN entry refresh', ['aws', 'cloudfront', 'create-invalidation',
-        '--distribution-id', distribution, '--paths', '/', '/index.html', '/runtime-config.json',
+        '--distribution-id', distribution, '--paths', '/', '/index.html', '/runtime-config.json', '/robots.txt',
         '--output', 'json'], env=aws_env))
     invalidation = result['Invalidation']['Id']
     for _ in range(36):

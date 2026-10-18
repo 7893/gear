@@ -1,4 +1,6 @@
 const METHODS = "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS";
+const CRAWLER =
+  /bot|crawler|spider|slurp|bingpreview|googleother|google-inspectiontool|google-extended|chatgpt-user|claude-user|claude-web|anthropic-ai|perplexity-user|cohere-ai|meta-externalagent|meta-externalfetcher|facebookexternalhit/i;
 const REQUEST_HEADERS = [
   "accept",
   "accept-profile",
@@ -52,6 +54,7 @@ function responseHeaders(origin: string | null, env: Env): Headers {
     "Cloudflare-CDN-Cache-Control": "no-store",
     Vary: "Origin",
     "X-Content-Type-Options": "nosniff",
+    "X-Robots-Tag": "noindex, nofollow, noarchive, nosnippet, noimageindex",
   });
   if (origin === env.FRONTEND_ORIGIN) {
     headers.set("Access-Control-Allow-Origin", origin);
@@ -80,6 +83,20 @@ export default {
       return new Response(null, { status: 204, headers });
     if (!METHODS.split(", ").includes(request.method))
       return error("method_not_allowed", 405);
+    if (
+      url.pathname === "/robots.txt" &&
+      ["GET", "HEAD"].includes(request.method)
+    ) {
+      headers.set("Content-Type", "text/plain; charset=utf-8");
+      return new Response(
+        request.method === "HEAD"
+          ? null
+          : "User-agent: *\nDisallow: /\n\nUser-agent: Google-Extended\nDisallow: /\n",
+        { headers },
+      );
+    }
+    if (CRAWLER.test(request.headers.get("User-Agent") || ""))
+      return error("crawler_not_allowed", 403);
     if (url.pathname === "/healthz" && request.method === "GET") {
       return Response.json(
         { status: "ready", service: "gear-api-gateway" },

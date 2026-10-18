@@ -30,6 +30,8 @@ jobs:
         run: '"$RUNNER_TEMP/gear-ci-tools/actionlint"'
       - name: Test repository validators
         run: python3 -m unittest discover -s tests -v
+      - name: Verify CDN crawler access rules
+        run: node --test tests/*.test.mjs
       - name: Check certificate tool syntax
         run: python3 -m py_compile infrastructure/certificates/renew.py
       - name: Validate public repository files

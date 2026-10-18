@@ -1,0 +1,7 @@
+# Private application: deny all automated crawling, search and AI retrieval.
+User-agent: *
+Disallow: /
+
+# This is a product control token, rather than a separate HTTP crawler.
+User-agent: Google-Extended
+Disallow: /
