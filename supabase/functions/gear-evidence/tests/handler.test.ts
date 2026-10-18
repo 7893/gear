@@ -2,18 +2,66 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PDFDocument, PDFName } from "pdf-lib";
 import { handle, type Environment } from "../handler.ts";
+import { platformKey } from "../keys.ts";
 import { hints, readBounded, verifyFile, MAX_FILE_BYTES } from "../files.ts";
 const id = (n: number) =>
   "00000000-0000-4000-8000-" + String(n).padStart(12, "0");
 const env: Environment = {
   SUPABASE_URL: "https://database.example.invalid/",
   GEAR_DB_SCHEMA: "example_app_2026",
-  SUPABASE_ANON_KEY: "example-anon",
-  SUPABASE_SERVICE_ROLE_KEY: "example-service",
+  SUPABASE_PUBLISHABLE_KEY: "sb_publishable_example",
+  SUPABASE_SECRET_KEY: "sb_secret_example",
   GEAR_STORAGE_BUCKET: "example-evidence",
   GEAR_EVIDENCE_APP_URL: "https://app.example.invalid/",
   GEAR_EVIDENCE_ENABLED: "true",
 };
+test("platform key maps accept a default or single named key and reject ambiguous configuration", () => {
+  assert.equal(
+    platformKey(
+      JSON.stringify({
+        default: "sb_secret_example",
+        other: "sb_secret_secondary",
+      }),
+      "sb_secret_",
+    ),
+    "sb_secret_example",
+  );
+  assert.equal(
+    platformKey(
+      JSON.stringify({ custom: "sb_publishable_example" }),
+      "sb_publishable_",
+    ),
+    "sb_publishable_example",
+  );
+  for (const value of [
+    undefined,
+    "not-json",
+    "[]",
+    JSON.stringify({ old: "legacy-jwt" }),
+    JSON.stringify({ a: "sb_secret_a", b: "sb_secret_b" }),
+  ])
+    assert.equal(platformKey(value, "sb_secret_"), "");
+});
+
+test("missing modern keys fail closed before any Auth, database or Storage request", async () => {
+  for (const key of ["", "legacy-jwt"]) {
+    let calls = 0;
+    const response = await handle(
+      new Request("https://api.example.invalid/functions/v1/gear-evidence", {
+        method: "OPTIONS",
+      }),
+      { ...env, SUPABASE_SECRET_KEY: key },
+      async () => {
+        calls++;
+        throw new Error("unexpected_network");
+      },
+    );
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error, "evidence_unavailable");
+    assert.equal(calls, 0);
+  }
+});
+
 async function pdf(pages = 2) {
   const p = await PDFDocument.create();
   for (let i = 0; i < pages; i++) p.addPage();
@@ -72,6 +120,7 @@ function fixture(bytes: Uint8Array) {
     assert.ok(url.startsWith(env.SUPABASE_URL));
     if (p === "/auth/v1/user") {
       assert.equal(headers.get("Authorization"), "Bearer example-user");
+      assert.equal(headers.get("apikey"), env.SUPABASE_PUBLISHABLE_KEY);
       return Response.json({ id: id(7) });
     }
     if (p === "/rest/v1/rpc/reserve_attachment") {
@@ -96,7 +145,8 @@ function fixture(bytes: Uint8Array) {
       });
     }
     if (p === "/rest/v1/rpc/commit_attachment") {
-      assert.equal(headers.get("Authorization"), "Bearer example-service");
+      assert.equal(headers.get("Authorization"), "");
+      assert.equal(headers.get("apikey"), env.SUPABASE_SECRET_KEY);
       const body = JSON.parse(String(init?.body));
       assert.equal(body.actor_auth_id, id(7));
       assert.equal(body.verified.size_bytes, bytes.length);
@@ -113,7 +163,8 @@ function fixture(bytes: Uint8Array) {
       return Response.json({ ...attachment, upload_state: "ready" });
     }
     if (p.startsWith("/storage/v1/object/")) {
-      assert.equal(headers.get("Authorization"), "Bearer example-service");
+      assert.equal(headers.get("Authorization"), "");
+      assert.equal(headers.get("apikey"), env.SUPABASE_SECRET_KEY);
       if (init?.method === "POST") {
         assert.equal(headers.get("x-upsert"), "false");
         if (failure) {

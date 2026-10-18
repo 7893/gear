@@ -6,7 +6,7 @@ const env = {
   SUPABASE_URL: "https://upstream.example.com",
   FRONTEND_ORIGIN: "https://app.example.com",
   GEAR_DB_SCHEMA: "example_app_2026",
-  GEAR_STORAGE_BUCKET: "gear-attachments",
+  GEAR_STORAGE_BUCKET: "example-evidence",
   GEAR_FUNCTION_PREFIX: "gear-",
 };
 
@@ -92,7 +92,7 @@ test("rejects other origins, admin APIs and other application resources", async 
     "/storage/v1/object/another-bucket/file.pdf",
     "/storage/v1/object/sign/another-bucket/file.pdf",
     "/functions/v1/another-function",
-    "/storage/v1/object/gear-attachments%2fanother/file.pdf",
+    "/storage/v1/object/example-evidence%2fanother/file.pdf",
   ]) {
     const response = await gateway.fetch(
       new Request("https://api.example.com" + path),
@@ -185,7 +185,7 @@ test("streams uploads into the dedicated bucket without following redirects", as
   try {
     const response = await gateway.fetch(
       new Request(
-        "https://api.example.com/storage/v1/object/gear-attachments/test.txt",
+        "https://api.example.com/storage/v1/object/example-evidence/test.txt",
         {
           method: "POST",
           headers: { apikey: "fictional", "Content-Type": "text/plain" },

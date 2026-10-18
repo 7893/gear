@@ -1,4 +1,4 @@
--- Run separately, only after authorization and creation of the private bucket via Storage API.
+-- Run separately after authorization, before creating the target private bucket via Storage API.
 -- Supply gear_storage_bucket privately with psql -v; never commit actual resource values.
 BEGIN;
 SET LOCAL lock_timeout = '5s';

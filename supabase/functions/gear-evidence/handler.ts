@@ -2,8 +2,8 @@ import { hints, MAX_FILE_BYTES, readBounded, verifyFile } from "./files.ts";
 export type Environment = Record<
   | "GEAR_DB_SCHEMA"
   | "SUPABASE_URL"
-  | "SUPABASE_ANON_KEY"
-  | "SUPABASE_SERVICE_ROLE_KEY"
+  | "SUPABASE_PUBLISHABLE_KEY"
+  | "SUPABASE_SECRET_KEY"
   | "GEAR_STORAGE_BUCKET"
   | "GEAR_EVIDENCE_APP_URL"
   | "GEAR_EVIDENCE_ENABLED",
@@ -52,6 +52,7 @@ export async function handle(
   const headers = new Headers({
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
+    "X-Robots-Tag": "noindex, nofollow, noarchive, nosnippet, noimageindex",
     "Content-Security-Policy": "sandbox; default-src 'none'",
     Vary: "Origin",
   });
@@ -70,6 +71,12 @@ export async function handle(
       "authorization, apikey, content-type, x-client-info",
     );
     headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    if (
+      !env.SUPABASE_PUBLISHABLE_KEY.startsWith("sb_publishable_") ||
+      !env.SUPABASE_SECRET_KEY.startsWith("sb_secret_") ||
+      !/^[a-z][a-z0-9_]{0,62}$/.test(env.GEAR_DB_SCHEMA)
+    )
+      throw new Error("evidence_unavailable");
     if (request.method === "OPTIONS")
       return new Response(null, { status: 204, headers });
     if (env.GEAR_EVIDENCE_ENABLED !== "true")
@@ -93,12 +100,14 @@ export async function handle(
         redirect: "error",
       });
     const userHeaders = {
-      apikey: env.SUPABASE_ANON_KEY,
+      apikey: env.SUPABASE_PUBLISHABLE_KEY,
       Authorization: authorization,
     };
     const serviceHeaders = {
-      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: "Bearer " + env.SUPABASE_SERVICE_ROLE_KEY,
+      apikey: env.SUPABASE_SECRET_KEY,
+      // An explicit empty field lets this project's gateway derive the server
+      // identity from apikey. The opaque secret key is never a Bearer JWT.
+      Authorization: "",
     };
     const identity = await upstream("/auth/v1/user", { headers: userHeaders });
     if (!identity.ok) throw new Error("login_required");
