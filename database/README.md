@@ -13,6 +13,7 @@ python3 database/tests/check_schema.py
 python3 database/tests/check_accounts.py
 python3 database/tests/check_notifications.py
 python3 database/tests/check_inventory.py
+python3 database/tests/check_demo_inventory.py
 ```
 
 脚本自动创建临时数据库集群，只监听权限受限的临时 Unix socket，不接受数据库 URL。清除继承的 `PG*` 连接参数；测试结束停止并删除集群。测试 Auth 表和身份函数是最小替身，所有人员、设备和邮箱均为虚构，不能替代真实 Supabase Auth 的集成验收。
@@ -42,3 +43,7 @@ python3 database/tests/check_inventory.py
 ## 存量建账与台账迁移
 
 迁移 `202610180005_inventory.sql` 增加五个受角色控制的名单、建账和查询接口，不新增业务表、不导入数据、不创建交接单，也不修改共享 Auth。已获授权应用云端，既有业务数据和编号序列保持不变，权限与有效管理员只读查询通过。隔离验证包含幂等请求、原编号文本、团队负责人、未知日期、临时期限及当前权限；真实设备登记待本人验收。详见[本轮接入记录](../docs/inventory-implementation.md)。
+
+## 演示数据
+
+[演示批次工具](demo/README.md) 可通过现有建账接口准备 50 台虚构设备，独立于迁移，不在部署或初始化时自动导入。实际执行须有单独的数据写入授权；实际批次、操作者和清理 ID 清单仅保存在已忽略的私有文件中。

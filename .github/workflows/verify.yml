@@ -104,6 +104,7 @@ jobs:
           python3 database/tests/check_accounts.py
           python3 database/tests/check_notifications.py
           python3 database/tests/check_inventory.py
+          python3 database/tests/check_demo_inventory.py
         env:
           PG_BINDIR: /usr/lib/postgresql/16/bin
 
