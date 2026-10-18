@@ -26,6 +26,7 @@ export const account = reactive({
   enabled: false,
   recoveryEnabled: false,
   inventoryEnabled: false,
+  flowsEnabled: false,
   initializing: true,
   loading: false,
   signedIn: false,
@@ -76,6 +77,18 @@ const messages: Record<string, string> = {
   legacy_code_duplicate:
     "已有设备使用相同旧编号，请核对是否为不同实物，再确认继续登记。",
   asset_not_found: "未找到该设备，请返回台账核对。",
+  flows_unavailable: "流转办理与单据尚未开放。",
+  invalid_document: "单据资料不符合要求，请核对字段与明细数量。",
+  invalid_document_item: "请核对设备明细、实际状况；故障设备须填写说明。",
+  invalid_document_date: "交接日期不能晚于今天，也不能早于设备最近一次流转。",
+  incomplete_document: "请补齐交接日期、实际移交人、接收人和设备明细。",
+  invalid_document_parties: "请核对交接双方、负责人及退回说明。",
+  document_not_found: "单据不存在，或当前账号无权读取。",
+  draft_access_denied: "只能处理有权访问的草稿，请返回单据列表核对。",
+  document_conflict: "草稿已被修改或确认，请重新读取后核对。",
+  asset_flow_conflict:
+    "设备资料、状态或负责人已变化。请刷新设备清单，移除并重新选择冲突设备，再保存草稿。",
+  duplicate_document_asset: "同一张单不能重复选择同一台设备。",
 };
 export function safeError(error: unknown): string {
   const message =
@@ -86,7 +99,42 @@ export function safeError(error: unknown): string {
     error && typeof error === "object" && "code" in error
       ? String(error.code)
       : "";
-  if (messages[message]) return messages[message];
+  if (messages[message]) {
+    let prefix = "";
+    if (
+      [
+        "asset_flow_conflict",
+        "invalid_document_date",
+        "legacy_code_duplicate",
+      ].includes(message) &&
+      error &&
+      typeof error === "object" &&
+      "details" in error &&
+      typeof error.details === "string" &&
+      error.details.length < 160
+    ) {
+      try {
+        const detail = JSON.parse(error.details) as Record<string, unknown>;
+        if (
+          detail &&
+          typeof detail.asset_code === "string" &&
+          /^SB-[0-9]{1,19}$/.test(detail.asset_code)
+        )
+          prefix = `设备 ${detail.asset_code}：`;
+        else if (
+          detail &&
+          typeof detail.line_no === "number" &&
+          Number.isInteger(detail.line_no) &&
+          detail.line_no >= 1 &&
+          detail.line_no <= 100
+        )
+          prefix = `第 ${detail.line_no} 件设备：`;
+      } catch {
+        /* Unexpected diagnostics remain hidden. */
+      }
+    }
+    return prefix + messages[message];
+  }
   if (["over_email_send_rate_limit", "over_request_rate_limit"].includes(code))
     return "请求较频繁，请稍后再试。";
   if (["otp_expired", "otp_disabled"].includes(code))
@@ -163,6 +211,7 @@ export async function initializeAccounts(): Promise<void> {
     account.enabled = config.accountsEnabled;
     account.recoveryEnabled = config.recoveryEnabled;
     account.inventoryEnabled = config.inventoryEnabled;
+    account.flowsEnabled = config.flowsEnabled;
     if (!account.enabled) return;
     client = makeClient(config.apiUrl, config.publishableKey);
     if (code) {
@@ -255,10 +304,18 @@ export async function inventoryRpc(
     | "get_asset"
     | "list_parties"
     | "create_party"
-    | "initialize_asset",
+    | "initialize_asset"
+    | "list_documents"
+    | "get_document"
+    | "save_document"
+    | "delete_document"
+    | "confirm_document",
   parameters: Record<string, unknown> = {},
 ): Promise<unknown> {
   if (!account.inventoryEnabled) throw new Error("inventory_unavailable");
+  if (name.endsWith("document") || name === "list_documents") {
+    if (!account.flowsEnabled) throw new Error("flows_unavailable");
+  }
   const { data, error } = await service()
     .rpc(name, parameters)
     .abortSignal(AbortSignal.timeout(15000));

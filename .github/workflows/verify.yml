@@ -105,6 +105,7 @@ jobs:
           python3 database/tests/check_notifications.py
           python3 database/tests/check_inventory.py
           python3 database/tests/check_demo_inventory.py
+          python3 database/tests/check_flows.py
         env:
           PG_BINDIR: /usr/lib/postgresql/16/bin
 
@@ -167,6 +168,7 @@ jobs:
           GEAR_ACCOUNTS_ENABLED: ${{ vars.GEAR_ACCOUNTS_ENABLED }}
           GEAR_RECOVERY_ENABLED: ${{ vars.GEAR_RECOVERY_ENABLED }}
           GEAR_INVENTORY_ENABLED: ${{ vars.GEAR_INVENTORY_ENABLED }}
+          GEAR_FLOWS_ENABLED: ${{ vars.GEAR_FLOWS_ENABLED }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
           CI_DEPLOY_USER: ${{ secrets.CI_DEPLOY_USER }}

@@ -36,6 +36,7 @@ export type Party = {
 };
 export type Asset = {
   id: string;
+  version?: number;
   asset_code: string;
   legacy_code: string | null;
   serial_number: string | null;
@@ -70,7 +71,7 @@ export type AssetDetails = {
     recorded_at: string;
     actor_label: string;
     reason: string | null;
-    after_data: Partial<Asset>;
+    after_data: Partial<Asset> & { document_id?: string; document_no?: string };
   }[];
 };
 export type AssetList = {

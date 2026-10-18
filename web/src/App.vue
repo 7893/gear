@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { account, signOut, safeError } from "./accounts";
 import { inventoryAccess } from "./inventory";
+import { flowAccess, flowWriteAccess } from "./flows";
 async function logout() {
   try {
     await signOut();
@@ -15,6 +16,8 @@ async function logout() {
     <nav aria-label="主导航">
       <template v-if="account.signedIn">
         <RouterLink v-if="inventoryAccess" to="/assets">设备台账</RouterLink>
+        <RouterLink v-if="flowWriteAccess" to="/flows">流转办理</RouterLink>
+        <RouterLink v-if="flowAccess" to="/documents">单据记录</RouterLink>
         <RouterLink to="/account">我的账号</RouterLink>
         <RouterLink
           v-if="

@@ -142,7 +142,9 @@ onBeforeUnmount(() => generation++);
           <strong>{{
             event.event_type === "asset_initialized"
               ? "登记已有设备"
-              : "设备变更记录"
+              : event.event_type === "document_confirmed"
+                ? "交接确认"
+                : "设备变更记录"
           }}</strong>
           <p>
             历史日期：{{ event.occurred_on || "未知，未补造日期" }}；记录于
@@ -156,6 +158,11 @@ onBeforeUnmount(() => generation++);
             }}
           </p>
           <p v-if="event.reason">说明：{{ event.reason }}</p>
+          <RouterLink
+            v-if="event.after_data.document_id && account.flowsEnabled"
+            :to="'/documents/' + event.after_data.document_id"
+            >{{ event.after_data.document_no || "查看交接单" }}</RouterLink
+          >
         </li>
       </ol>
       <p v-else>暂无设备事件记录。</p>

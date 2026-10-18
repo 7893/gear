@@ -1,6 +1,6 @@
 # 数据库模式设计
 
-状态：依据[统一业务规则](business-rules.md)、[账号流程](account-design.md)和[逻辑模型](data-model.md)细化的第一版物理设计。已获用户授权，于 2026-10-17 应用[初始结构迁移](../database/migrations/202610170001_initial_schema.sql)：创建十一张表、约束、索引、只读视图和权限基础；账号、找回与审核通知接口已上线；存量建账 RPC 已随迁移 005 获授权上线，其他设备流转、附件存储和完整业务验收仍待完成。适用于不足一百件设备、约十名系统用户，保留单一单位、固定角色和统一库存。
+状态：依据[统一业务规则](business-rules.md)、[账号流程](account-design.md)和[逻辑模型](data-model.md)细化的第一版物理设计。已获用户授权，于 2026-10-17 应用[初始结构迁移](../database/migrations/202610170001_initial_schema.sql)：创建十一张表、约束、索引、只读视图和权限基础；账号、找回与审核通知接口已上线；存量建账 RPC 已随迁移 005 获授权上线，领入、分发、退回及编号打印单已本地实现，迁移 006 尚未上云；其他设备操作、附件存储和完整业务验收仍待完成。适用于不足一百件设备、约十名系统用户，保留单一单位、固定角色和统一库存。
 
 ## 1. 范围和共同约定
 
@@ -146,6 +146,7 @@ erDiagram
 | `from_person_id / to_person_id` | 名单外键，可空 | 已登记的实际移交、接收个人，区别于系统账号 |
 | `from_label / to_label / sender_name / receiver_name` | `text`，草稿可空 | 实际双方和签字人文字，外部对象可直接填写 |
 | `usage_kind / due_on` | 使用类型、日期，可空 | 新分发和持有方转交共用的使用期限 |
+| `remarks` | 可空文本，最多 2000 字符 | 用途或整单备注；确认退回时要求原因，迁移 006 本地新增，尚未上云 |
 | `header_snapshot / parties_snapshot` | `jsonb`，确认后必填 | 单位抬头、双方及实际交接人、经办姓名和期限的打印快照 |
 | `evidence_state` | `awaiting_upload / awaiting_review / archived`，可空 | 确认后独立维护，草稿为空，作废后保留但不列待办 |
 | `created_by / confirmed_by / confirmed_at` | 成员外键及时间点，后两者可空 | 操作与确认记录 |
@@ -166,6 +167,7 @@ erDiagram
 | `id / document_id / line_no` | `uuid` 主键、单据外键、正整数 | `document_id + line_no` 唯一，保持打印顺序 |
 | `asset_id` | 设备外键，草稿可空 | `document_id + asset_id` 唯一；确认后必填 |
 | `new_asset_data` | `jsonb`，可空 | 仅新领入草稿保存待核对资料，服务端按固定字段验证 |
+| `allow_legacy_duplicate` | 布尔，默认否 | 新领入旧编号重复时，明确确认是另一件实物；迁移 006 本地新增，尚未上云 |
 | `expected_asset_version` | 正整数，可空 | 选择既有设备时的版本；新设备确认前为空 |
 | `condition_on_handover / location / note` | 状况、文本，可空 | 逐件交接状况和位置；故障须有说明 |
 | `asset_snapshot` | `jsonb`，确认后必填 | 当时编号、旧编号、名称、类别、品牌型号和序列号 |

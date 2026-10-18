@@ -12,7 +12,7 @@ pnpm -C web run dev
 
 ## 配置与路由
 
-构建产物不包含部署地址。运行时从 `/runtime-config.json` 读取 `apiUrl`、`publishableKey`、`release`、`accountsEnabled`、`recoveryEnabled`、`inventoryEnabled`；实际文件由已获授权的发布流程注入并忽略。只有公开 publishable key 可进入浏览器，管理密钥和发件令牌不进入本目录。
+构建产物不包含部署地址。运行时从 `/runtime-config.json` 读取 `apiUrl`、`publishableKey`、`release`、`accountsEnabled`、`recoveryEnabled`、`inventoryEnabled`、`flowsEnabled`；实际文件由已获授权的发布流程注入并忽略。只有公开 publishable key 可进入浏览器，管理密钥和发件令牌不进入本目录。
 
 `accountsEnabled` 只有明确的 `true` 才开启账号服务。共享认证配置已获准接入，账号发布开关已开启；关闭时不创建 Auth 客户端，不发送登录、注册或会话刷新请求。GitHub 发布步骤通过仓库变量 `GEAR_ACCOUNTS_ENABLED` 控制此项：共享配置获准并检查通过后，开放入口供指定管理员本人注册、验证，再由部署者初始化权限并完成真实流程验收；不能以切换此变量替代共享配置审批或验收。
 
@@ -46,3 +46,7 @@ pnpm -C web run dev
 ## 存量建账与台账
 
 台账、已有设备登记及设备详情已获授权通过既有 CI/CD 发布；`GEAR_INVENTORY_ENABLED` 控制运行配置的 `inventoryEnabled`，缺省关闭，本次在迁移和权限检查通过后开启。只有有权账号且开关开启时首页进入台账；账号状态保留在 `/#/account`。迁移 005、权限、未知日期、编号及上线边界见[本轮接入记录](../docs/inventory-implementation.md)。
+
+## 流转与打印
+
+本地新增领入、分发、退回、草稿、单据查询和冻结快照打印；`GEAR_FLOWS_ENABLED` 控制 `flowsEnabled`，缺省关闭，尚未上线。办理入口 `/#/flows`，记录入口 `/#/documents`，详情和打印 `/#/documents/:id`。正式单据只读保存时的快照；草稿有显著标记。二维码本地生成 SVG，单据编号和页码使用打印页边距，桌面 Chromium 已检查五十条明细 PDF。接口、编号建议、权限与待授权范围见[流转实施记录](../docs/flows-implementation.md)。

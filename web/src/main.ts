@@ -10,6 +10,9 @@ import HomeView from "./views/HomeView.vue";
 import InventoryView from "./views/InventoryView.vue";
 import AssetCreateView from "./views/AssetCreateView.vue";
 import AssetDetailView from "./views/AssetDetailView.vue";
+import DocumentsView from "./views/DocumentsView.vue";
+import DocumentFormView from "./views/DocumentFormView.vue";
+import DocumentDetailView from "./views/DocumentDetailView.vue";
 import { initializeAccounts } from "./accounts";
 import "./style.css";
 
@@ -23,6 +26,11 @@ async function start() {
       { path: "/assets", component: InventoryView },
       { path: "/assets/new", component: AssetCreateView },
       { path: "/assets/:id", component: AssetDetailView },
+      { path: "/flows", component: DocumentsView, props: { manage: true } },
+      { path: "/documents", component: DocumentsView },
+      { path: "/documents/new", component: DocumentFormView },
+      { path: "/documents/:id/edit", component: DocumentFormView },
+      { path: "/documents/:id", component: DocumentDetailView },
       { path: "/login", component: AuthView, props: { mode: "login" } },
       { path: "/register", component: AuthView, props: { mode: "register" } },
       { path: "/verify", component: AuthView, props: { mode: "verify" } },

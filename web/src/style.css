@@ -309,3 +309,187 @@ a:focus-visible {
     gap: 10px;
   }
 }
+
+fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.flow-grid,
+.flow-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: end;
+}
+.flow-filters {
+  grid-template-columns: 2fr 1fr 1fr auto;
+  margin: 24px 0;
+}
+.flow-item {
+  border-top: 1px solid #d8e1ef;
+  padding: 18px 0;
+}
+.asset-picker {
+  max-height: 280px;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid #d8e1ef;
+}
+.print-sheet {
+  margin-top: 28px;
+  color: #111;
+  background: white;
+}
+.print-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 12px;
+}
+.print-table th,
+.print-table td {
+  border: 1px solid #888;
+  padding: 6px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  vertical-align: top;
+}
+.print-table th {
+  background: white;
+  color: #111;
+}
+.print-table p {
+  margin: 0 0 4px;
+}
+.print-table col:nth-child(1),
+.print-table col:nth-child(5) {
+  width: 5%;
+}
+.print-table col:nth-child(2) {
+  width: 18%;
+}
+.print-table col:nth-child(3) {
+  width: 14%;
+}
+.print-table col:nth-child(4) {
+  width: 17%;
+}
+.print-table col:nth-child(6) {
+  width: 8%;
+}
+.print-table col:nth-child(7) {
+  width: 12%;
+}
+.print-table col:nth-child(8) {
+  width: 21%;
+}
+.document-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  text-align: left;
+}
+.document-number {
+  font-size: 14px;
+}
+.document-watermark {
+  font-size: 22px;
+}
+.print-parties {
+  text-align: left;
+  font-weight: 400;
+}
+.print-summary {
+  margin: 18px 0;
+  overflow-wrap: anywhere;
+}
+.print-signatures {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  break-inside: avoid;
+  margin-top: 28px;
+}
+.print-record {
+  font-size: 10px;
+}
+@media (max-width: 700px) {
+  .flow-grid,
+  .flow-filters {
+    grid-template-columns: 1fr;
+  }
+  .print-sheet {
+    overflow-x: auto;
+  }
+  .print-table {
+    min-width: 680px;
+  }
+}
+@page {
+  size: A4;
+  margin: 12mm 10mm 18mm;
+  @top-left {
+    content: var(--gear-print-id, "");
+    font-size: 8pt;
+  }
+  @bottom-center {
+    content: "第 " counter(page) " 页 / 共 " counter(pages) " 页";
+    font-size: 9pt;
+  }
+}
+@media print {
+  body {
+    background: white;
+    color: #111;
+  }
+  .site-header,
+  .print-controls,
+  .page > .notice {
+    display: none !important;
+  }
+  .page {
+    margin: 0;
+    padding: 0;
+    max-width: none;
+  }
+  .document-detail {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+  }
+  .print-sheet {
+    margin: 0;
+    overflow: visible;
+  }
+  .print-table {
+    min-width: 0;
+    font-size: 9pt;
+    line-height: 1.35;
+  }
+  .document-heading svg {
+    width: 18mm;
+    height: 18mm;
+  }
+  .print-table .print-parties p {
+    margin-bottom: 2px;
+  }
+  .print-table thead {
+    display: table-header-group;
+    break-inside: avoid;
+  }
+  .print-table tfoot {
+    display: table-footer-group;
+  }
+  .print-table tr {
+    break-inside: avoid;
+  }
+  .print-summary {
+    break-inside: auto;
+  }
+  .print-summary p {
+    margin: 0 0 6pt;
+  }
+}
