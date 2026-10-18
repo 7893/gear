@@ -49,4 +49,4 @@ pnpm -C web run dev
 
 ## 流转与打印
 
-本地新增领入、分发、退回、草稿、单据查询和冻结快照打印；`GEAR_FLOWS_ENABLED` 控制 `flowsEnabled`，缺省关闭，尚未上线。办理入口 `/#/flows`，记录入口 `/#/documents`，详情和打印 `/#/documents/:id`。正式单据只读保存时的快照；草稿有显著标记。二维码本地生成 SVG，单据编号和页码使用打印页边距，桌面 Chromium 已检查五十条明细 PDF。接口、编号建议、权限与待授权范围见[流转实施记录](../docs/flows-implementation.md)。
+已实现并获授权发布领入、分发、退回、草稿、单据查询和冻结快照打印；`GEAR_FLOWS_ENABLED` 控制 `flowsEnabled`，缺省关闭，本次上线已开启。办理入口 `/#/flows`，记录入口 `/#/documents`，详情和打印 `/#/documents/:id`。正式单据只读保存时的快照；草稿有显著标记。二维码本地生成 SVG，单据编号和页码使用打印页边距，桌面 Chromium 已检查五十条明细 PDF。接口、已确认编号、权限与上线范围见[流转实施记录](../docs/flows-implementation.md)。
