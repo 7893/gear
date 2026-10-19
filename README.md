@@ -6,7 +6,7 @@
 
 临时使用延期和到期查询已获授权上线，迁移 009 已应用，页面随本轮发布，见[临时使用实施](docs/temporary-use-implementation.md)。归还提醒邮件仍待后续接入。
 
-设备转交和团队负责人交接已在本地实现，迁移 010 和页面尚未上线，见[转交实施](docs/transfers-implementation.md)。
+设备转交和团队负责人交接已获授权上线，迁移 010 已应用，页面随本轮发布，见[转交实施](docs/transfers-implementation.md)。
 
 ## 当前阶段
 
