@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onBeforeUnmount, reactive, ref, watch } from "vue";
-import { account, safeError } from "../accounts";
+import { computed, reactive } from "vue";
+import { useAuthorizedQuery } from "../useAuthorizedQuery";
 import { timestamp } from "../inventory";
 import {
   flowAccess,
@@ -8,59 +8,26 @@ import {
   flowKinds,
   documentStates,
   listDocuments,
-  type FlowDocument,
 } from "../flows";
 import FlowGate from "../components/FlowGate.vue";
 import ActionGroup from "../components/ActionGroup.vue";
 const props = defineProps<{ manage?: boolean }>();
-const rows = ref<FlowDocument[]>([]);
-const loading = ref(false);
-const error = ref("");
 const filters = reactive({
   search: "",
   kind: "",
   state: props.manage ? "draft" : "",
 });
-let generation = 0;
-async function load() {
-  const current = ++generation;
-  rows.value = [];
-  error.value = "";
-  if (!flowAccess.value) return;
-  loading.value = true;
-  try {
-    const result = await listDocuments({
+const { data, loading, error, load } = useAuthorizedQuery(
+  flowAccess,
+  () =>
+    listDocuments({
       search: filters.search,
       kind: filters.kind || null,
       state: filters.state || null,
-    });
-    if (current === generation && flowAccess.value) rows.value = result;
-  } catch (failure) {
-    if (current === generation && flowAccess.value)
-      error.value = safeError(failure);
-  } finally {
-    if (current === generation) loading.value = false;
-  }
-}
-watch(
-  [
-    flowAccess,
-    () => account.profile?.membership?.id,
-    () => account.profile?.membership?.role,
-    () => props.manage,
-  ],
-  () => {
-    if (flowAccess.value) void load();
-    else {
-      generation++;
-      rows.value = [];
-      error.value = "";
-      loading.value = false;
-    }
-  },
-  { immediate: true },
+    }),
+  [() => props.manage],
 );
-onBeforeUnmount(() => generation++);
+const rows = computed(() => data.value || []);
 </script>
 <template>
   <section v-if="flowAccess" class="card">

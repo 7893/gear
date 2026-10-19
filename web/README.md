@@ -61,6 +61,8 @@ pnpm -C web run dev
 
 ## 公共界面与临时领用
 
+接收对象创建已本地统一到 `PartyQuickCreate.vue`，由调用页面提供权限；建账无需启用流转。五个读取入口复用 `useAuthorizedQuery.ts`，集中处理加载、中文错误、失权清空及迟到响应；本轮未增加依赖，发布待单独授权，详见[公共界面实施](../docs/shared-ui-implementation.md)。
+
 操作按钮使用 `components/ActionGroup.vue`；公共样式集中在 `src/style.css`，按钮组统一十二像素间距并允许换行。账号页、账号管理、单据操作及分页已复用，现有链接操作区也采用相同间距规则。
 
 台账与 `/#/due` 到期列表使用 `components/ListPagination.vue`，共享首页、上一页、下一页、末页、范围计数和页码重置；`src/pagination.ts` 统一条数选项与默认值。页面只提供当前授权数据和每页条数状态，通过插槽呈现业务列，不复制分页逻辑。角色、请求和业务表单仍使用已有业务模块。

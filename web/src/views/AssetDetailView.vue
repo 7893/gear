@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import { account, safeError } from "../accounts";
+import { account } from "../accounts";
+import { useAuthorizedQuery } from "../useAuthorizedQuery";
 import {
   inventoryAccess,
   inventoryWriteAccess,
@@ -12,15 +13,17 @@ import {
   dueLabel,
   timestamp,
   type Asset,
-  type AssetDetails,
 } from "../inventory";
 import InventoryGate from "../components/InventoryGate.vue";
 import ExtensionForm from "../components/ExtensionForm.vue";
 import AssetConditionForm from "../components/AssetConditionForm.vue";
 const route = useRoute();
-const data = ref<AssetDetails | null>(null);
-const error = ref("");
-const loading = ref(false);
+const detailAccess = computed(() => inventoryAccess.value && !!route.params.id);
+const { data, error, loading, load } = useAuthorizedQuery(
+  detailAccess,
+  () => getAsset(String(route.params.id)),
+  [() => route.params.id],
+);
 const message = ref("");
 const conditionEarliestOn = computed(
   () =>
@@ -48,23 +51,6 @@ function extended() {
   message.value = "延期已记录，原分发单和签字件保留。";
   void load();
 }
-let generation = 0;
-async function load() {
-  const current = ++generation;
-  data.value = null;
-  error.value = "";
-  if (!inventoryAccess.value) return;
-  loading.value = true;
-  try {
-    const result = await getAsset(String(route.params.id));
-    if (current === generation && inventoryAccess.value) data.value = result;
-  } catch (failure) {
-    if (current === generation && inventoryAccess.value)
-      error.value = safeError(failure);
-  } finally {
-    if (current === generation) loading.value = false;
-  }
-}
 watch(
   [
     inventoryAccess,
@@ -73,17 +59,8 @@ watch(
   ],
   () => {
     message.value = "";
-    if (inventoryAccess.value) void load();
-    else {
-      generation++;
-      data.value = null;
-      error.value = "";
-      loading.value = false;
-    }
   },
-  { immediate: true },
 );
-onBeforeUnmount(() => generation++);
 </script>
 <template>
   <section v-if="inventoryAccess" class="card">

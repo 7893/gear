@@ -133,6 +133,9 @@ async function fixture(
   let confirmConflict = false;
   const calls: { name: string; body: Record<string, unknown> }[] = [];
   const stock = [asset(1), asset(2), asset(3, true), asset(4, true)];
+  const recipients = [person, nextPerson, team];
+  const createdParties = new Map<string, Party>();
+  let partyUncertain = false;
   const confirmations = new Map<string, FlowDocument>();
   await page.route("**/runtime-config.json", (route) =>
     route.fulfill({
@@ -196,8 +199,24 @@ async function fixture(
           },
         },
       });
-    if (name === "list_parties")
-      return route.fulfill({ json: [person, nextPerson, team] });
+    if (name === "list_parties") return route.fulfill({ json: recipients });
+    if (name === "create_party") {
+      const requestId = String(body.request_id);
+      let created = createdParties.get(requestId);
+      if (!created) {
+        created = {
+          ...(body.details as Party),
+          id: id(500 + recipients.length),
+        };
+        recipients.push(created);
+        createdParties.set(requestId, created);
+      }
+      if (partyUncertain) {
+        partyUncertain = false;
+        return route.abort("failed");
+      }
+      return route.fulfill({ json: created });
+    }
     if (name === "list_assets")
       return route.fulfill({
         json: {
@@ -321,6 +340,7 @@ async function fixture(
     disable: () => (active = false),
     holdDetail: () => (hold = true),
     releaseDetail: () => release?.(),
+    losePartyAcknowledgement: () => (partyUncertain = true),
   };
 }
 async function login(page: Page) {
@@ -450,6 +470,9 @@ test("team temporary issue saves per-asset versions and explicit responsibility"
   await page
     .getByRole("button", { name: "保存并核对交接", exact: true })
     .click();
+  await expect(page.getByRole("region", { name: "交接确认" })).toContainText(
+    "2 件",
+  );
   const call = f.calls.find((c) => c.name === "save_document")!;
   expect(call.body.details).toMatchObject({
     to_party_id: team.id,
@@ -460,9 +483,6 @@ test("team temporary issue saves per-asset versions and explicit responsibility"
   expect(
     (call.body.items as FlowItem[]).map((i) => i.expected_asset_version),
   ).toEqual([2, 2]);
-  await expect(page.getByRole("region", { name: "交接确认" })).toContainText(
-    "2 件",
-  );
   f.conflictConfirmation();
   await page.getByRole("button", { name: "确认实际交接", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("设备 SB-000001");
@@ -756,6 +776,54 @@ test("draft conflict preserves form and draft deletion requires confirmation", a
   ).toBeVisible();
   expect(f.calls.filter((c) => c.name === "delete_document")).toHaveLength(1);
 });
+test("handover uses the shared receiver form for person/team creation and lost acknowledgements", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  await login(page);
+  await expect(
+    page.getByRole("heading", { name: "设备台账", exact: true }),
+  ).toBeVisible();
+  await page.goto("/#/documents/new?kind=issue");
+  await page.getByText("新增个人或团队", { exact: true }).click();
+  await page.getByLabel("对象名称", { exact: true }).fill("示例新增领取人");
+  f.losePartyAcknowledgement();
+  await page.getByRole("button", { name: "新增接收对象", exact: true }).click();
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.getByLabel("对象名称", { exact: true })).toHaveValue(
+    "示例新增领取人",
+  );
+  await page.getByRole("button", { name: "新增接收对象", exact: true }).click();
+  await expect(
+    page.getByText("已新增接收对象，请选择后继续。", { exact: true }),
+  ).toBeVisible();
+  const calls = f.calls.filter((c) => c.name === "create_party");
+  expect(calls).toHaveLength(2);
+  expect(calls[0]!.body).toEqual(calls[1]!.body);
+  await expect(
+    page.getByRole("combobox", { name: "接收对象", exact: true }),
+  ).toHaveValue(id(503));
+  await page
+    .getByRole("combobox", { name: "对象类型", exact: true })
+    .selectOption("team");
+  await page.getByLabel("对象名称", { exact: true }).fill("示例新增接收团队");
+  await page
+    .getByRole("combobox", { name: "团队默认负责人", exact: true })
+    .selectOption(id(503));
+  await page.getByRole("button", { name: "新增接收对象", exact: true }).click();
+  await expect(
+    page.getByRole("combobox", { name: "接收对象", exact: true }),
+  ).toHaveValue(id(504));
+  await expect(
+    page.getByRole("combobox", { name: "接收负责人", exact: true }),
+  ).toHaveValue(id(503));
+  expect(
+    f.calls.filter((c) =>
+      ["save_document", "confirm_document"].includes(c.name),
+    ),
+  ).toHaveLength(0);
+});
+
 test("late document response cannot restore content after permission loss", async ({
   page,
 }) => {

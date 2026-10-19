@@ -1,17 +1,23 @@
 <script setup lang="ts">
-import { reactive, ref } from "vue";
+import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { account, safeError } from "../accounts";
 import {
   createParty,
+  inventoryWriteAccess,
+  partyLabel,
   personTypes,
   requestFor,
   type Party,
   type PartyInput,
 } from "../inventory";
-import { flowWriteAccess } from "../flows";
-const props = defineProps<{ people: Party[]; disabled?: boolean }>();
+import ActionGroup from "./ActionGroup.vue";
+const props = defineProps<{
+  people: Party[];
+  allowed: boolean;
+  disabled?: boolean;
+}>();
 const emit = defineEmits<{ created: [Party] }>();
-const form = reactive<PartyInput>({
+const blank = (): PartyInput => ({
   kind: "person",
   name: "",
   person_type: "staff",
@@ -19,13 +25,39 @@ const form = reactive<PartyInput>({
   default_responsible_id: null,
   note: "",
 });
-const busy = ref(false);
+const form = reactive(blank());
+const busy = defineModel<boolean>("busy", { default: false });
+const canCreate = computed(() => props.allowed && inventoryWriteAccess.value);
 const error = ref("");
 const notice = ref("");
 const requests = new Map<string, string>();
+let generation = 0;
+watch(
+  [canCreate, () => account.profile?.membership?.id],
+  () => {
+    generation++;
+    busy.value = false;
+    error.value = "";
+    notice.value = "";
+    Object.assign(form, blank());
+    requests.clear();
+  },
+  { flush: "sync" },
+);
+watch(
+  () => form.kind,
+  (kind) => {
+    form.person_type = kind === "person" ? "staff" : null;
+    form.default_responsible_id = null;
+  },
+);
+onBeforeUnmount(() => {
+  generation++;
+  busy.value = false;
+});
 async function save() {
-  if (busy.value || props.disabled || !flowWriteAccess.value) return;
-  const owner = account.profile?.membership?.id;
+  if (busy.value || props.disabled || !canCreate.value) return;
+  const current = generation;
   busy.value = true;
   error.value = "";
   notice.value = "";
@@ -37,25 +69,25 @@ async function save() {
   };
   try {
     const result = await createParty(data, requestFor(requests, data));
-    if (flowWriteAccess.value && owner === account.profile?.membership?.id) {
+    if (current === generation && canCreate.value) {
       emit("created", result);
       form.name = "";
       form.note = "";
       notice.value = "已新增接收对象，请选择后继续。";
     }
   } catch (failure) {
-    if (flowWriteAccess.value && owner === account.profile?.membership?.id)
+    if (current === generation && canCreate.value)
       error.value = safeError(failure);
   } finally {
-    busy.value = false;
+    if (current === generation) busy.value = false;
   }
 }
 </script>
 <template>
-  <details>
-    <summary>没有接收对象？新增个人或团队</summary>
+  <details v-if="canCreate" class="recipient-editor">
+    <summary>新增个人或团队</summary>
     <form @submit.prevent="save">
-      <fieldset :disabled="busy || disabled">
+      <fieldset class="form-grid" :disabled="busy || disabled">
         <label
           >对象类型<select v-model="form.kind">
             <option value="person">个人</option>
@@ -89,14 +121,23 @@ async function save() {
               :key="person.id"
               :value="person.id"
             >
-              {{ person.name }}
+              {{ partyLabel(person) }}
             </option>
           </select></label
         >
-        <label>对象备注<textarea v-model="form.note" maxlength="2000" /></label
-        ><button type="submit">新增接收对象</button>
-        <p v-if="error" class="notice error" role="alert">{{ error }}</p>
-        <p v-if="notice" role="status">{{ notice }}</p>
+        <label>对象备注<textarea v-model="form.note" maxlength="2000" /></label>
+        <div class="form-wide">
+          <p v-if="form.kind === 'team'" class="hint">
+            负责人需先登记为个人。默认负责人只作填表参考，不改动已有设备的责任人。
+          </p>
+          <p v-if="error" class="notice error" role="alert">{{ error }}</p>
+          <p v-if="notice" role="status">{{ notice }}</p>
+          <ActionGroup aria-label="新增接收对象操作">
+            <button type="submit">
+              {{ busy ? "添加中…" : "新增接收对象" }}
+            </button>
+          </ActionGroup>
+        </div>
       </fieldset>
     </form>
   </details>

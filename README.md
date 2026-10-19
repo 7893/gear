@@ -25,6 +25,7 @@
 ## 文档
 
 - [当前实现与验收状态](docs/implementation-status.md)：已上线、本地待上线、未实现和真实验收边界。
+- [公共界面实施](docs/shared-ui-implementation.md)：接收对象表单与授权查询的复用范围、验证和待发布边界。
 - [存量建账与台账接入](docs/inventory-implementation.md)：本轮代码、接口、编号与上线范围。
 - [领入、分发、退回与打印](docs/flows-implementation.md)：流转、草稿、原子确认及单据上线范围。
 - [签字件与人工归档](docs/evidence-implementation.md)：本地上传、识别候选、私有原件、核对更正及待授权范围。

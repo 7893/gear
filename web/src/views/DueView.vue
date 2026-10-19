@@ -1,52 +1,20 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from "vue";
-import { account, safeError } from "../accounts";
+import { ref } from "vue";
+import { useAuthorizedQuery } from "../useAuthorizedQuery";
 import {
   inventoryAccess,
   listDueAssets,
   dueStates,
   type DueState,
-  type DueAssetList,
 } from "../inventory";
 import InventoryGate from "../components/InventoryGate.vue";
 import ListPagination from "../components/ListPagination.vue";
 import { defaultPageSize } from "../pagination";
 const state = ref<DueState | "">("");
-const data = ref<DueAssetList | null>(null);
-const error = ref("");
-const loading = ref(false);
 const pageSize = ref(defaultPageSize);
-let generation = 0;
-async function load() {
-  const current = ++generation;
-  data.value = null;
-  error.value = "";
-  if (!inventoryAccess.value) return;
-  loading.value = true;
-  try {
-    const result = await listDueAssets(state.value || null);
-    if (current === generation && inventoryAccess.value) data.value = result;
-  } catch (failure) {
-    if (current === generation && inventoryAccess.value)
-      error.value = safeError(failure);
-  } finally {
-    if (current === generation) loading.value = false;
-  }
-}
-watch(
-  [inventoryAccess, () => account.profile?.membership?.id],
-  () => {
-    if (inventoryAccess.value) void load();
-    else {
-      generation++;
-      data.value = null;
-      loading.value = false;
-      error.value = "";
-    }
-  },
-  { immediate: true },
+const { data, error, loading, load } = useAuthorizedQuery(inventoryAccess, () =>
+  listDueAssets(state.value || null),
 );
-onBeforeUnmount(() => generation++);
 </script>
 <template>
   <section v-if="inventoryAccess" class="card">

@@ -44,6 +44,7 @@ const parties = ref<Party[]>([]);
 const loading = ref(false);
 const ready = ref(false);
 const busy = ref(false);
+const partyBusy = ref(false);
 const error = ref("");
 const notice = ref("");
 const reviewing = ref(false);
@@ -214,7 +215,7 @@ async function load() {
   }
 }
 async function refreshAssets() {
-  if (busy.value || !flowWriteAccess.value) return;
+  if (busy.value || partyBusy.value || !flowWriteAccess.value) return;
   const current = generation;
   busy.value = true;
   error.value = "";
@@ -413,7 +414,13 @@ function details() {
   return data;
 }
 async function save(review = false) {
-  if (busy.value || loading.value || !ready.value || !flowWriteAccess.value)
+  if (
+    busy.value ||
+    partyBusy.value ||
+    loading.value ||
+    !ready.value ||
+    !flowWriteAccess.value
+  )
     return;
   const data = details();
   if (
@@ -542,7 +549,10 @@ async function confirm() {
     >
       重新读取
     </button>
-    <fieldset v-if="!loading && ready" :disabled="busy || reviewing">
+    <fieldset
+      v-if="!loading && ready"
+      :disabled="busy || reviewing || partyBusy"
+    >
       <div class="flow-grid">
         <label
           >办理类型<select
@@ -692,7 +702,9 @@ async function confirm() {
         </div>
         <PartyQuickCreate
           v-if="!responsibility"
+          v-model:busy="partyBusy"
           :people="people"
+          :allowed="flowWriteAccess"
           :disabled="busy || reviewing"
           @created="createdParty"
         />

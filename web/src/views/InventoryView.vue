@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onBeforeUnmount, reactive, ref, watch } from "vue";
-import { account, safeError } from "../accounts";
+import { reactive, ref } from "vue";
+import { useAuthorizedQuery } from "../useAuthorizedQuery";
 import {
   inventoryAccess,
   inventoryWriteAccess,
@@ -9,7 +9,6 @@ import {
   assetStates,
   holderLabel,
   dueLabel,
-  type AssetList,
 } from "../inventory";
 import InventoryGate from "../components/InventoryGate.vue";
 import ListPagination from "../components/ListPagination.vue";
@@ -20,46 +19,15 @@ const filters = reactive({
   state: "",
   holder_kind: "",
 });
-const data = ref<AssetList | null>(null);
-const loading = ref(false);
-const error = ref("");
 const pageSize = ref(defaultPageSize);
-let generation = 0;
-async function load() {
-  const current = ++generation;
-  data.value = null;
-  error.value = "";
-  if (!inventoryAccess.value) return;
-  loading.value = true;
-  try {
-    const result = await listAssets({
-      search: filters.search,
-      category: filters.category || null,
-      state: filters.state || null,
-      holder_kind: filters.holder_kind || null,
-    });
-    if (current === generation && inventoryAccess.value) data.value = result;
-  } catch (failure) {
-    if (current === generation && inventoryAccess.value)
-      error.value = safeError(failure);
-  } finally {
-    if (current === generation) loading.value = false;
-  }
-}
-watch(
-  [inventoryAccess, () => account.profile?.membership?.id],
-  () => {
-    if (inventoryAccess.value) void load();
-    else {
-      generation++;
-      data.value = null;
-      loading.value = false;
-      error.value = "";
-    }
-  },
-  { immediate: true },
+const { data, loading, error, load } = useAuthorizedQuery(inventoryAccess, () =>
+  listAssets({
+    search: filters.search,
+    category: filters.category || null,
+    state: filters.state || null,
+    holder_kind: filters.holder_kind || null,
+  }),
 );
-onBeforeUnmount(() => generation++);
 </script>
 <template>
   <section v-if="inventoryAccess" class="card">

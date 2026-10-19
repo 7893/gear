@@ -46,6 +46,10 @@ async function fixture(
   let uncertain = false;
   let release: (() => void) | undefined;
   let hold = false;
+  let holdParty = false;
+  let releaseParty: (() => void) | undefined;
+  let holdDetail = false;
+  let releaseDetail: (() => void) | undefined;
   const calls: { name: string; body: Record<string, unknown> }[] = [];
   const authCalls: string[] = [];
   const assets = [structuredClone(base)];
@@ -71,6 +75,7 @@ async function fixture(
     },
   ];
   const saved = new Map<string, Asset>();
+  const createdParties = new Map<string, Party>();
   const extensions = new Map<string, Asset>();
   const conditionChanges = new Map<string, Asset>();
   const history: Record<string, unknown[]> = {};
@@ -144,6 +149,7 @@ async function fixture(
         },
       });
     if (name === "list_assets") {
+      const resultItems = structuredClone(listResults ?? assets);
       if (hold) {
         hold = false;
         await new Promise<void>((resolve) => (release = resolve));
@@ -155,8 +161,8 @@ async function fixture(
         });
       return route.fulfill({
         json: {
-          items: listResults ?? assets,
-          matched: (listResults ?? assets).length,
+          items: resultItems,
+          matched: resultItems.length,
           summary: {
             total: assets.length,
             in_use: assets.length,
@@ -172,13 +178,26 @@ async function fixture(
     }
     if (name === "list_parties") return route.fulfill({ json: parties });
     if (name === "create_party") {
-      const created = {
-        ...(body.details as object),
-        id:
-          "00000000-0000-4000-8000-" +
-          String(100 + parties.length).padStart(12, "0"),
-      } as Party;
-      parties.push(created);
+      const requestId = String(body.request_id);
+      let created = createdParties.get(requestId);
+      if (!created) {
+        created = {
+          ...(body.details as object),
+          id:
+            "00000000-0000-4000-8000-" +
+            String(100 + parties.length).padStart(12, "0"),
+        } as Party;
+        parties.push(created);
+        createdParties.set(requestId, created);
+      }
+      if (holdParty) {
+        holdParty = false;
+        await new Promise<void>((resolve) => (releaseParty = resolve));
+      }
+      if (uncertain) {
+        uncertain = false;
+        return route.abort("failed");
+      }
       return route.fulfill({ json: created });
     }
     if (name === "initialize_asset") {
@@ -226,7 +245,11 @@ async function fixture(
       return route.fulfill({ json: asset });
     }
     if (name === "get_asset") {
-      const asset = assets.find((a) => a.id === body.asset_id);
+      const asset = structuredClone(assets.find((a) => a.id === body.asset_id));
+      if (holdDetail) {
+        holdDetail = false;
+        await new Promise<void>((resolve) => (releaseDetail = resolve));
+      }
       return asset
         ? route.fulfill({
             json: {
@@ -377,6 +400,10 @@ async function fixture(
     disable: () => (active = false),
     holdNextList: () => (hold = true),
     releaseList: () => release?.(),
+    holdNextParty: () => (holdParty = true),
+    releaseParty: () => releaseParty?.(),
+    holdNextDetail: () => (holdDetail = true),
+    releaseDetail: () => releaseDetail?.(),
   };
 }
 async function login(page: Page) {
@@ -1042,25 +1069,21 @@ test("create receivers without accounts and initialize temporary team use with a
   const state = await fixture(page);
   await login(page);
   await page.getByRole("link", { name: "登记已有设备", exact: true }).click();
-  await page.getByText("新增人员或团队", { exact: true }).click();
-  await page.getByLabel("人员或团队名称", { exact: true }).fill("示例借调人员");
+  await page.getByText("新增个人或团队", { exact: true }).click();
+  await page.getByLabel("对象名称", { exact: true }).fill("示例借调人员");
   await page
     .getByRole("combobox", { name: "人员类型", exact: true })
     .selectOption("seconded");
-  await page
-    .getByRole("button", { name: "添加人员或团队", exact: true })
-    .click();
-  await expect(page.getByText("已添加，可继续登记设备。")).toBeVisible();
+  await page.getByRole("button", { name: "新增接收对象", exact: true }).click();
+  await expect(page.getByText("已新增接收对象，请选择后继续。")).toBeVisible();
   await page
     .getByRole("combobox", { name: "对象类型", exact: true })
     .selectOption("team");
-  await page.getByLabel("人员或团队名称", { exact: true }).fill("示例新团队");
+  await page.getByLabel("对象名称", { exact: true }).fill("示例新团队");
   await page
     .getByRole("combobox", { name: "团队默认负责人", exact: true })
     .selectOption({ label: "示例借调人员" });
-  await page
-    .getByRole("button", { name: "添加人员或团队", exact: true })
-    .click();
+  await page.getByRole("button", { name: "新增接收对象", exact: true }).click();
   await expect(
     page.getByRole("combobox", { name: "持有方", exact: true }),
   ).toHaveValue("00000000-0000-4000-8000-000000000103");
@@ -1086,6 +1109,169 @@ test("create receivers without accounts and initialize temporary team use with a
     due_on: "2030-03-04",
   });
   expect(state.authCalls.some((path) => path.includes("signup"))).toBe(false);
+});
+
+test("shared receiver form works without flows and retries the original request", async ({
+  page,
+}) => {
+  const state = await fixture(page);
+  await login(page);
+  await page.getByRole("link", { name: "登记已有设备", exact: true }).click();
+  await page.getByText("新增个人或团队", { exact: true }).click();
+  await page.getByLabel("对象名称", { exact: true }).fill("示例临时人员");
+  state.loseNextAcknowledgement();
+  await page.getByRole("button", { name: "新增接收对象", exact: true }).click();
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.getByLabel("对象名称", { exact: true })).toHaveValue(
+    "示例临时人员",
+  );
+  await page.getByRole("button", { name: "新增接收对象", exact: true }).click();
+  await expect(
+    page.getByText("已新增接收对象，请选择后继续。", { exact: true }),
+  ).toBeVisible();
+  const calls = state.calls.filter((c) => c.name === "create_party");
+  expect(calls).toHaveLength(2);
+  expect(calls[0]!.body).toEqual(calls[1]!.body);
+  await expect(
+    page.getByRole("combobox", { name: "持有方", exact: true }),
+  ).toHaveValue("00000000-0000-4000-8000-000000000102");
+  await expect(
+    page
+      .getByRole("combobox", { name: "持有方", exact: true })
+      .getByRole("option", { name: "示例临时人员", exact: true }),
+  ).toHaveCount(1);
+  expect(state.calls.filter((c) => c.name.endsWith("document"))).toHaveLength(
+    0,
+  );
+});
+
+test("pending receiver creation blocks asset save and cannot restore a form after access loss", async ({
+  page,
+}) => {
+  const state = await fixture(page);
+  await login(page);
+  await page.getByRole("link", { name: "登记已有设备", exact: true }).click();
+  await page.getByText("新增个人或团队", { exact: true }).click();
+  await page.getByLabel("对象名称", { exact: true }).fill("示例迟到人员");
+  state.holdNextParty();
+  await page.getByRole("button", { name: "新增接收对象", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "添加中…", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "保存并查看设备", exact: true }),
+  ).toBeDisabled();
+  state.disable();
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(
+    page.getByText("当前账号无法执行此操作，请登录或查看账号状态。", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  const response = page.waitForResponse((r) =>
+    r.url().endsWith("/rpc/create_party"),
+  );
+  state.releaseParty();
+  await (await response).finished();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+  );
+  await expect(
+    page.getByText("已新增接收对象，请选择后继续。", { exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByLabel("对象名称", { exact: true })).toHaveCount(0);
+  expect(state.calls.filter((c) => c.name === "initialize_asset")).toHaveLength(
+    0,
+  );
+});
+
+test("permission refresh loads a new query and discards the older in-flight ledger", async ({
+  page,
+}) => {
+  const state = await fixture(page, "viewer");
+  await login(page);
+  await expect(
+    page.getByRole("link", { name: "SB-000001 · 示例打印机", exact: true }),
+  ).toBeVisible();
+  state.holdNextList();
+  await page.getByRole("button", { name: "查询", exact: true }).click();
+  await expect(page.getByText("正在读取台账…", { exact: true })).toBeVisible();
+  state.filterResults([
+    {
+      ...base,
+      id: newAssetId,
+      name: "示例新查询结果",
+      asset_code: "SB-000002",
+    },
+  ]);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  const fresh = page.getByRole("link", {
+    name: "SB-000002 · 示例新查询结果",
+    exact: true,
+  });
+  await expect(fresh).toBeVisible();
+  const response = page.waitForResponse((r) =>
+    r.url().endsWith("/rpc/list_assets"),
+  );
+  state.releaseList();
+  await (await response).finished();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+  );
+  await expect(fresh).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "SB-000001 · 示例打印机", exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByText("正在读取台账…", { exact: true })).toHaveCount(0);
+});
+
+test("switching device routes discards the previous detail response", async ({
+  page,
+}) => {
+  const state = await fixture(page, "viewer");
+  state.assets.push({
+    ...base,
+    id: newAssetId,
+    asset_code: "SB-000002",
+    name: "示例第二台设备",
+  });
+  await login(page);
+  await expect(
+    page.getByRole("heading", { name: "设备台账", exact: true }),
+  ).toBeVisible();
+  state.holdNextDetail();
+  await page.goto("/#/assets/" + assetId);
+  await expect(page.getByText("正在读取设备…", { exact: true })).toBeVisible();
+  await page.goto("/#/assets/" + newAssetId);
+  const fresh = page.getByRole("heading", {
+    name: "SB-000002 · 示例第二台设备",
+    exact: true,
+  });
+  await expect(fresh).toBeVisible();
+  const response = page.waitForResponse((r) =>
+    r.url().endsWith("/rpc/get_asset"),
+  );
+  state.releaseDetail();
+  await (await response).finished();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+  );
+  await expect(fresh).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "SB-000001 · 示例打印机", exact: true }),
+  ).toHaveCount(0);
+  await page.goto("/#/assets");
+  await expect(
+    page.getByRole("heading", { name: "设备台账", exact: true }),
+  ).toBeVisible();
+  expect(
+    state.calls
+      .filter((c) => c.name === "get_asset")
+      .every((c) => [assetId, newAssetId].includes(String(c.body.asset_id))),
+  ).toBe(true);
 });
 
 test("query failure stays distinct from an empty ledger and raw diagnostics are hidden", async ({

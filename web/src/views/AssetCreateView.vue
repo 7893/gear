@@ -1,24 +1,23 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { account, safeError } from "../accounts";
 import {
   inventoryWriteAccess,
   listParties,
-  createParty,
   initializeAsset,
   categories,
-  personTypes,
   partyLabel,
   businessToday,
   requestFor,
   type Party,
-  type PartyInput,
   type AssetInput,
   type Category,
   type Placement,
 } from "../inventory";
 import InventoryGate from "../components/InventoryGate.vue";
+import PartyQuickCreate from "../components/PartyQuickCreate.vue";
+import { useAuthorizedQuery } from "../useAuthorizedQuery";
 const router = useRouter();
 const form = reactive<
   Omit<AssetInput, "category" | "condition"> & {
@@ -42,58 +41,23 @@ const responsibleId = ref("");
 const usage = ref<"long_term" | "temporary">("long_term");
 const knownOn = ref("");
 const dueOn = ref("");
-const parties = ref<Party[]>([]);
-const partyLoading = ref(false);
-const partyError = ref("");
+const {
+  data: partyData,
+  loading: partyLoading,
+  error: partyError,
+  load: loadParties,
+} = useAuthorizedQuery(inventoryWriteAccess, listParties);
+const parties = computed(() => partyData.value || []);
 const people = computed(() => parties.value.filter((p) => p.kind === "person"));
 const holders = computed(() =>
   parties.value.filter((p) => p.kind === holderMode.value),
 );
-const party = reactive<PartyInput>({
-  kind: "person",
-  name: "",
-  person_type: "staff",
-  organization_name: "",
-  default_responsible_id: null,
-  note: "",
-});
 const partyBusy = ref(false);
-const partyNotice = ref("");
 const busy = ref(false);
 const error = ref("");
 const duplicatePrompt = ref(false);
 const acknowledged = ref(false);
 const requests = new Map<string, string>();
-const partyRequests = new Map<string, string>();
-let generation = 0;
-async function loadParties() {
-  const current = ++generation;
-  partyError.value = "";
-  partyLoading.value = true;
-  try {
-    const result = await listParties();
-    if (current === generation && inventoryWriteAccess.value)
-      parties.value = result;
-  } catch (failure) {
-    if (current === generation && inventoryWriteAccess.value)
-      partyError.value = safeError(failure);
-  } finally {
-    if (current === generation) partyLoading.value = false;
-  }
-}
-watch(
-  inventoryWriteAccess,
-  (value) => {
-    if (value) void loadParties();
-    else {
-      generation++;
-      parties.value = [];
-      partyError.value = "";
-      partyLoading.value = false;
-    }
-  },
-  { immediate: true },
-);
 watch(
   holderMode,
   () => {
@@ -123,45 +87,13 @@ watch(
     duplicatePrompt.value = false;
   },
 );
-watch(
-  () => party.kind,
-  (kind) => {
-    party.person_type = kind === "person" ? "staff" : null;
-    party.default_responsible_id = null;
-  },
-);
-onBeforeUnmount(() => generation++);
-async function saveParty() {
-  if (!inventoryWriteAccess.value || partyBusy.value || busy.value) return;
-  const owner = account.profile?.membership?.id;
-  partyBusy.value = true;
-  partyError.value = "";
-  partyNotice.value = "";
-  const details = { ...party };
-  try {
-    const created = await createParty(
-      details,
-      requestFor(partyRequests, details),
-    );
-    if (
-      !inventoryWriteAccess.value ||
-      owner !== account.profile?.membership?.id
-    )
-      return;
-    parties.value = [
-      ...parties.value.filter((p) => p.id !== created.id),
-      created,
-    ];
-    holderMode.value = created.kind;
-    holderId.value = created.id;
-    partyNotice.value = "已添加，可继续登记设备。";
-    party.name = "";
-    party.note = "";
-  } catch (failure) {
-    if (inventoryWriteAccess.value) partyError.value = safeError(failure);
-  } finally {
-    partyBusy.value = false;
-  }
+function createdParty(created: Party) {
+  partyData.value = [
+    ...parties.value.filter((p) => p.id !== created.id),
+    created,
+  ];
+  holderMode.value = created.kind;
+  holderId.value = created.id;
 }
 async function save() {
   if (
@@ -224,55 +156,13 @@ async function save() {
     <p class="muted">
       记录当前真实情况。已有编号原样保留；内部编号由系统生成。未知历史日期留空，建账不会生成历史交接单。
     </p>
-    <details class="recipient-editor">
-      <summary>新增人员或团队</summary>
-      <form class="form-grid" @submit.prevent="saveParty">
-        <label
-          >对象类型<select v-model="party.kind">
-            <option value="person">个人</option>
-            <option value="team">团队</option>
-          </select></label
-        >
-        <label
-          >人员或团队名称<input v-model="party.name" required maxlength="80"
-        /></label>
-        <label v-if="party.kind === 'person'"
-          >人员类型<select v-model="party.person_type">
-            <option
-              v-for="(label, code) in personTypes"
-              :key="code"
-              :value="code"
-            >
-              {{ label }}
-            </option>
-          </select></label
-        >
-        <label
-          >所属单位<input v-model="party.organization_name" maxlength="120"
-        /></label>
-        <label v-if="party.kind === 'team'"
-          >团队默认负责人<select
-            v-model="party.default_responsible_id"
-            required
-          >
-            <option :value="null">请选择已登记的个人</option>
-            <option v-for="p in people" :key="p.id" :value="p.id">
-              {{ partyLabel(p) }}
-            </option>
-          </select></label
-        >
-        <label>对象备注<input v-model="party.note" maxlength="2000" /></label>
-        <div class="form-wide">
-          <p v-if="party.kind === 'team'" class="hint">
-            负责人需先登记为个人。默认负责人只作填表参考，不改动已有设备的责任人。
-          </p>
-          <p v-if="partyNotice" role="status">{{ partyNotice }}</p>
-          <button type="submit" :disabled="partyBusy || busy">
-            {{ partyBusy ? "添加中…" : "添加人员或团队" }}
-          </button>
-        </div>
-      </form>
-    </details>
+    <PartyQuickCreate
+      v-model:busy="partyBusy"
+      :people="people"
+      :allowed="inventoryWriteAccess"
+      :disabled="busy || partyLoading"
+      @created="createdParty"
+    />
     <p v-if="partyLoading" role="status">正在读取人员与团队…</p>
     <div v-if="partyError" class="notice error" role="alert">
       <p>{{ partyError }}</p>
