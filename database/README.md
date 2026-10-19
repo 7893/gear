@@ -91,4 +91,4 @@ python3 database/tests/check_schema_year.py
 
 ## 设备基本资料更正
 
-迁移 `202610190013_asset_details.sql` 已本地实现，尚待单独授权应用正式数据库。仅新增两层 `update_asset_details` 函数，限定八项描述字段，使用既有版本、事件和去重机制；不改表、原有权限、分配、单据及编号序列。隔离检查运行 `python3 database/tests/check_asset_details.py`，覆盖前后记录、重复编号确认、权限、重试与并发及原单保留，已加入 CI；详见[资料更正实施](../docs/asset-details-implementation.md)。
+迁移 `202610190013_asset_details.sql` 已完成本地隔离验证并获授权应用正式数据库。仅新增两层 `update_asset_details` 函数，限定八项描述字段，使用既有版本、事件和去重机制；不改表、原有权限、分配、单据及编号序列。隔离检查运行 `python3 database/tests/check_asset_details.py`，覆盖前后记录、重复编号确认、权限、重试与并发及原单保留，已加入 CI。迁移前后原有数据、函数、权限、序列及共享配置保留，匿名拒绝与只读查询通过，本轮未更正实际设备；详见[资料更正实施](../docs/asset-details-implementation.md)。

@@ -10,7 +10,7 @@
 
 ## 当前阶段
 
-设备基本资料更正已本地实现，建账和更正共用字段组件；迁移 013 与页面待单独授权上线，见[资料更正实施](docs/asset-details-implementation.md)。实体打印及签字闭环验收按最新决定暂缓。
+设备基本资料更正已获授权接入，建账和更正共用字段组件；迁移 013 已应用，页面随本轮既有 CI/CD 发布，见[资料更正实施](docs/asset-details-implementation.md)。实体打印及签字闭环验收按最新决定暂缓。
 
 故障登记与维修恢复已获授权上线，保留设备编号、持有方和期限；迁移 011 已应用，页面随本轮既有 CI/CD 发布，真实业务待本人验收，见[故障实施](docs/asset-condition-implementation.md)。
 
@@ -26,7 +26,7 @@
 
 ## 文档
 
-- [设备基本资料更正](docs/asset-details-implementation.md)：公共字段表单、前后记录、权限与待上线范围。
+- [设备基本资料更正](docs/asset-details-implementation.md)：公共字段表单、前后记录、权限与真实验收边界。
 - [演示数据验收](docs/demo-acceptance.md)：本轮只读结果、实际打印签字上传的操作顺序及小范围邮件约定。
 - [当前实现与验收状态](docs/implementation-status.md)：已上线、本地待上线、未实现和真实验收边界。
 - [公共界面实施](docs/shared-ui-implementation.md)：接收对象表单与授权查询的复用范围、验证和待发布边界。

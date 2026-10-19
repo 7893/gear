@@ -91,4 +91,4 @@ pnpm -C web run dev
 
 ## 设备基本资料更正
 
-设备详情已本地接入 `AssetDetailsForm.vue`，管理员和经办人可以核对描述性资料并填写更正原因；建账和更正共用 `AssetFields.vue` 及字段默认值。原状况、持有关系、期限和正式快照保持，历史列出前后值；失权或离开后的迟到响应丢弃。全部八十七项前端检查通过。迁移 013、推送发布待单独授权，真实更正待本人验收，详见[资料更正实施](../docs/asset-details-implementation.md)。
+设备详情已获授权接入 `AssetDetailsForm.vue`，管理员和经办人可以核对描述性资料并填写更正原因；建账和更正共用 `AssetFields.vue` 及字段默认值。原状况、持有关系、期限和正式快照保持，历史列出前后值；失权或离开后的迟到响应丢弃。全部八十七项前端检查通过。迁移 013 已获授权应用，页面随本轮既有 CI/CD 发布，真实更正待本人验收，详见[资料更正实施](../docs/asset-details-implementation.md)。
