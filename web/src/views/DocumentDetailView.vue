@@ -24,6 +24,7 @@ import {
 } from "../flows";
 import FlowGate from "../components/FlowGate.vue";
 import EvidencePanel from "../components/EvidencePanel.vue";
+import DocumentReview from "../components/DocumentReview.vue";
 const route = useRoute();
 const router = useRouter();
 const data = ref<FlowDocument | null>(null);
@@ -239,6 +240,12 @@ async function remove() {
         </p>
       </template>
     </div>
+    <DocumentReview
+      v-if="data && data.status !== 'draft'"
+      :key="data.id + ':' + data.version"
+      :document="data"
+      @changed="load"
+    />
     <EvidencePanel
       v-if="data && data.status !== 'draft'"
       :document="data"

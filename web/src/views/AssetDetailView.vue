@@ -173,7 +173,9 @@ watch(
                     ? "登记故障"
                     : event.event_type === "asset_repaired"
                       ? "维修恢复正常"
-                      : "设备变更记录"
+                      : event.event_type === "document_voided"
+                        ? "单据作废恢复"
+                        : "设备变更记录"
           }}</strong>
           <p>
             历史日期：{{ event.occurred_on || "未知，未补造日期" }}；记录于

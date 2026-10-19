@@ -38,6 +38,9 @@ def main():
         assert before_data == data(db, 'gear_2026')
         db.run(migration.read_text(), fail='condition_source_mismatch')
         assert json.loads(db.run(catalog)) == after
+        for path in sorted((ROOT/'database/migrations').glob('*.sql')):
+            if path > migration:
+                db.run(path.read_text())
         for role in ['anon', 'service_role']:
             db.run('SET ROLE '+role+'; SELECT gear_2026.change_asset_condition(NULL,NULL,NULL,NULL,NULL,NULL)', fail='permission denied')
         print('PASS migration preserves data, identities and ACLs; two new functions, one guarded confirmation body')

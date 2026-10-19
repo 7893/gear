@@ -8,6 +8,9 @@ export const flowAccess = computed(
 export const flowWriteAccess = computed(
   () => inventoryWriteAccess.value && account.flowsEnabled,
 );
+export const flowAdminAccess = computed(
+  () => flowWriteAccess.value && account.profile?.membership?.role === "admin",
+);
 export * from "./flows-model";
 import type { FlowDocument, FlowItem, FlowDetails } from "./flows-model";
 export async function listDocuments(filters: {
@@ -54,5 +57,26 @@ export async function deleteDocument(
     document_id: draft.id,
     expected_version: draft.version,
     request_id: requestId,
+  });
+}
+export async function reviewDocument(
+  doc: FlowDocument,
+  action: "void_document" | "correct_document",
+  reason: string,
+  correctionText: string,
+  replacementId: string | null,
+  requestId: string,
+): Promise<void> {
+  await inventoryRpc(action, {
+    document_id: doc.id,
+    expected_version: doc.version,
+    reason,
+    request_id: requestId,
+    ...(action === "correct_document"
+      ? {
+          correction_text: correctionText,
+          replacement_document_id: replacementId,
+        }
+      : {}),
   });
 }

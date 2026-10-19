@@ -127,9 +127,20 @@ const messages: Record<string, string> = {
   invalid_document_parties: "请核对交接双方、负责人及退回说明。",
   invalid_transfer_parties:
     "普通转交须更换持有方；负责人交接须为同一团队的不同负责人。请核对双方和负责人。",
+  document_admin_required: "只有当前有效管理员可以作废或更正正式单据。",
+  document_not_confirmed: "仅可处理已确认的正式单据，请刷新后核对。",
+  invalid_document_void: "请填写作废原因，长度不超过两千字。",
+  invalid_document_correction:
+    "请填写更正原因和更正说明，原因不超过两千字，说明不超过四千字。",
+  invalid_replacement_document:
+    "替代单须为后续确认的同类型正式单据，不能关联自身、草稿或作废单。",
+  document_has_dependencies:
+    "单据已有后续设备变更或被引用为替代单，不能直接作废。请核对历史，不要倒退真实去向。",
+  document_state_conflict:
+    "设备当前情况与原单结果不一致，整单未作废，请刷新并核对。",
   document_not_found: "单据不存在，或当前账号无权读取。",
   draft_access_denied: "只能处理有权访问的草稿，请返回单据列表核对。",
-  document_conflict: "草稿已被修改或确认，请重新读取后核对。",
+  document_conflict: "单据已被修改或处理，请重新读取后核对。",
   asset_flow_conflict:
     "设备资料、状态或负责人已变化。请刷新设备清单，移除并重新选择冲突设备，再保存草稿。",
   duplicate_document_asset: "同一张单不能重复选择同一台设备。",
@@ -150,6 +161,8 @@ export function safeError(error: unknown): string {
         "asset_flow_conflict",
         "invalid_document_date",
         "legacy_code_duplicate",
+        "document_has_dependencies",
+        "document_state_conflict",
       ].includes(message) &&
       error &&
       typeof error === "object" &&
@@ -362,6 +375,8 @@ export async function inventoryRpc(
     | "save_document"
     | "delete_document"
     | "confirm_document"
+    | "void_document"
+    | "correct_document"
     | "list_evidence"
     | "get_attachment"
     | "match_evidence"

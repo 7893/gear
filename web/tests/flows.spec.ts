@@ -137,6 +137,17 @@ async function fixture(
   const createdParties = new Map<string, Party>();
   let partyUncertain = false;
   const confirmations = new Map<string, FlowDocument>();
+  const reviews = new Map<string, unknown>();
+  let reviewFailure = "";
+  let reviewUncertain = false;
+  let holdReview = false;
+  let releaseReview: (() => void) | undefined;
+  const replacement = {
+    ...document(),
+    id: id(51),
+    document_no: "FF-20200101-0002",
+    confirmed_at: "2020-01-02T00:00:00Z",
+  };
   await page.route("**/runtime-config.json", (route) =>
     route.fulfill({
       json: {
@@ -236,7 +247,10 @@ async function fixture(
       });
     if (name === "list_documents")
       return route.fulfill({
-        json: [{ ...saved, item_count: saved.items.length }],
+        json: [
+          { ...saved, item_count: saved.items.length },
+          ...(body.state === "confirmed" ? [replacement] : []),
+        ],
       });
     if (name === "get_document") {
       if (hold) {
@@ -325,6 +339,59 @@ async function fixture(
       }
       return route.fulfill({ json: confirmations.get(key) });
     }
+    if (["void_document", "correct_document"].includes(name)) {
+      if (reviewFailure)
+        return route.fulfill({
+          status: 409,
+          json: {
+            message: reviewFailure,
+            details: JSON.stringify({ asset_code: "SB-000001" }),
+          },
+        });
+      const requestId = String(body.request_id);
+      let result = reviews.get(requestId);
+      if (!result) {
+        saved = {
+          ...saved,
+          status: name === "void_document" ? "voided" : "confirmed",
+          version: saved.version + 1,
+          void_reason: name === "void_document" ? String(body.reason) : null,
+          changes: [
+            ...(saved.changes || []),
+            {
+              id: String(saved.version + 1),
+              event_type:
+                name === "void_document"
+                  ? "document_voided"
+                  : "document_corrected",
+              actor_label: "示例管理员",
+              recorded_at: "2020-01-03T00:00:00Z",
+              reason: String(body.reason),
+              correction_text:
+                name === "correct_document"
+                  ? String(body.correction_text)
+                  : null,
+              replacement_document_id:
+                (body.replacement_document_id as string) || null,
+              replacement_document_no: body.replacement_document_id
+                ? replacement.document_no
+                : null,
+            },
+          ],
+        };
+        result = { id: saved.id, version: saved.version, status: saved.status };
+        reviews.set(requestId, result);
+      }
+      if (holdReview) {
+        holdReview = false;
+        await new Promise<void>((resolve) => (releaseReview = resolve));
+      }
+      if (reviewUncertain) {
+        reviewUncertain = false;
+        return route.abort("failed");
+      }
+      return route.fulfill({ json: result });
+    }
     if (name === "delete_document")
       return route.fulfill({ json: { deleted: true, id: saved.id } });
     throw new Error("Unexpected flow RPC: " + name);
@@ -341,6 +408,10 @@ async function fixture(
     holdDetail: () => (hold = true),
     releaseDetail: () => release?.(),
     losePartyAcknowledgement: () => (partyUncertain = true),
+    failReview: (message: string) => (reviewFailure = message),
+    loseReviewAcknowledgement: () => (reviewUncertain = true),
+    holdReview: () => (holdReview = true),
+    releaseReview: () => releaseReview?.(),
   };
 }
 async function login(page: Page) {
@@ -763,7 +834,7 @@ test("draft conflict preserves form and draft deletion requires confirmation", a
   expect(saves[0].body).toEqual(saves[1].body);
   f.failSave();
   await page.getByRole("button", { name: "保存草稿", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("草稿已被修改");
+  await expect(page.getByRole("alert")).toContainText("单据已被修改");
   await expect(page.getByLabel("实际移交人", { exact: true })).toHaveValue(
     "示例改名",
   );
@@ -847,6 +918,215 @@ test("late document response cannot restore content after permission loss", asyn
     page.getByRole("button", { name: "打印单据 / 另存 PDF", exact: true }),
   ).toHaveCount(0);
 });
+test("administrator void retries once and keeps the frozen original with a watermark", async ({
+  page,
+}) => {
+  const f = await fixture(page, "admin");
+  await login(page);
+  await page.goto("/#/documents/" + id(50));
+  const controls = page.getByRole("region", {
+    name: "管理员单据处理",
+    exact: true,
+  });
+  await controls
+    .getByRole("button", { name: "作废误录单据", exact: true })
+    .click();
+  await controls
+    .getByLabel("处理原因", { exact: true })
+    .fill("示例重复录入，实际没有第二次交接");
+  await controls.getByRole("checkbox").check();
+  f.loseReviewAcknowledgement();
+  await controls
+    .getByRole("button", { name: "确认作废整单", exact: true })
+    .click();
+  await expect(controls.getByRole("alert")).toBeVisible();
+  await expect(controls.getByLabel("处理原因", { exact: true })).toHaveValue(
+    "示例重复录入，实际没有第二次交接",
+  );
+  await controls
+    .getByRole("button", { name: "确认作废整单", exact: true })
+    .click();
+  await expect(controls).toHaveCount(0);
+  const sheet = page.getByRole("article", { name: "交接单据", exact: true });
+  await expect(sheet).toContainText("已作废");
+  await expect(sheet).toContainText("FF-20200101-0001");
+  await expect(sheet).toContainText("冻结的示例团队");
+  await expect(
+    page.getByRole("region", { name: "单据处理记录", exact: true }),
+  ).toContainText("示例重复录入");
+  const calls = f.calls.filter((c) => c.name === "void_document");
+  expect(calls).toHaveLength(2);
+  expect(calls[0].body).toEqual(calls[1].body);
+});
+
+test("administrator correction is a printed supplement and can link a newer replacement", async ({
+  page,
+}) => {
+  const f = await fixture(page, "admin");
+  await login(page);
+  await page.goto("/#/documents/" + id(50));
+  const controls = page.getByRole("region", {
+    name: "管理员单据处理",
+    exact: true,
+  });
+  await controls
+    .getByRole("button", { name: "追加更正说明", exact: true })
+    .click();
+  await controls.getByLabel("处理原因", { exact: true }).fill("示例姓名笔误");
+  await controls
+    .getByLabel("更正说明", { exact: true })
+    .fill("第1件设备实际接收人姓名应为示例更正姓名 <script>示例文字</script>");
+  await controls
+    .getByRole("combobox", { name: "关联替代单（可选）", exact: true })
+    .selectOption(id(51));
+  await controls
+    .getByRole("button", { name: "保存更正说明", exact: true })
+    .click();
+  const record = page.getByRole("region", {
+    name: "单据处理记录",
+    exact: true,
+  });
+  await expect(record).toContainText("实际接收人姓名应为示例更正姓名");
+  await expect(
+    record.getByRole("link", {
+      name: "关联替代单：FF-20200101-0002",
+      exact: true,
+    }),
+  ).toHaveAttribute("href", "#/documents/" + id(51));
+  await expect(
+    page.getByRole("article", { name: "交接单据", exact: true }),
+  ).toContainText("示例接收人");
+  expect(
+    f.calls.filter((c) => c.name === "correct_document")[0].body,
+  ).toMatchObject({ expected_version: 3, replacement_document_id: id(51) });
+  await page.emulateMedia({ media: "print" });
+  await expect(record).toBeVisible();
+  await expect(record).toContainText("<script>示例文字</script>");
+  await expect(controls).not.toBeVisible();
+});
+
+test("blocked void and version conflicts keep the form and never change the original", async ({
+  page,
+}) => {
+  const f = await fixture(page, "admin");
+  await login(page);
+  await page.goto("/#/documents/" + id(50));
+  const controls = page.getByRole("region", {
+    name: "管理员单据处理",
+    exact: true,
+  });
+  await controls
+    .getByRole("button", { name: "作废误录单据", exact: true })
+    .click();
+  await controls.getByLabel("处理原因", { exact: true }).fill("   ");
+  await controls.getByRole("checkbox").check();
+  await controls
+    .getByRole("button", { name: "确认作废整单", exact: true })
+    .click();
+  await expect(controls.getByRole("alert")).toContainText("请填写作废原因");
+  expect(f.calls.filter((c) => c.name === "void_document")).toHaveLength(0);
+  await controls.getByLabel("处理原因", { exact: true }).fill("示例误录核查");
+  for (const failure of [
+    "document_has_dependencies",
+    "document_state_conflict",
+    "document_conflict",
+  ]) {
+    f.failReview(failure);
+    await controls
+      .getByRole("button", { name: "确认作废整单", exact: true })
+      .click();
+    await expect(controls.getByRole("alert")).toContainText(
+      failure === "document_conflict"
+        ? "单据已被修改"
+        : failure === "document_state_conflict"
+          ? "当前情况"
+          : "后续设备变更",
+    );
+    await expect(controls.getByLabel("处理原因", { exact: true })).toHaveValue(
+      "示例误录核查",
+    );
+  }
+  await expect(
+    page.getByRole("article", { name: "交接单据", exact: true }),
+  ).not.toContainText("已作废");
+});
+
+test("operator and viewer can read supplements but never get document administration controls", async ({
+  page,
+}) => {
+  const f = await fixture(page, "operator");
+  f.setDocument({
+    ...document(),
+    changes: [
+      {
+        id: "1",
+        event_type: "document_corrected",
+        actor_label: "示例管理员",
+        recorded_at: "2020-01-03T00:00:00Z",
+        reason: "示例原因",
+        correction_text: "示例补充事实",
+        replacement_document_id: null,
+        replacement_document_no: null,
+      },
+    ],
+  });
+  await login(page);
+  await page.goto("/#/documents/" + id(50));
+  await expect(
+    page.getByRole("region", { name: "单据处理记录", exact: true }),
+  ).toContainText("示例补充事实");
+  await expect(
+    page.getByRole("region", { name: "管理员单据处理", exact: true }),
+  ).toHaveCount(0);
+  expect(
+    f.calls.filter((c) =>
+      ["void_document", "correct_document"].includes(c.name),
+    ),
+  ).toHaveLength(0);
+});
+
+test("a late administration response cannot restore private data after access loss", async ({
+  page,
+}) => {
+  const f = await fixture(page, "admin");
+  await login(page);
+  await page.goto("/#/documents/" + id(50));
+  const controls = page.getByRole("region", {
+    name: "管理员单据处理",
+    exact: true,
+  });
+  await controls
+    .getByRole("button", { name: "追加更正说明", exact: true })
+    .click();
+  await controls.getByLabel("处理原因", { exact: true }).fill("示例误填");
+  await controls.getByLabel("更正说明", { exact: true }).fill("示例更正事实");
+  f.holdReview();
+  await controls
+    .getByRole("button", { name: "保存更正说明", exact: true })
+    .click();
+  await expect(
+    controls.getByRole("button", { name: "正在处理…", exact: true }),
+  ).toBeDisabled();
+  f.disable();
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(controls).toHaveCount(0);
+  const response = page.waitForResponse((r) =>
+    r.url().endsWith("/rpc/correct_document"),
+  );
+  f.releaseReview();
+  await (await response).finished();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+  );
+  await expect(
+    page.getByRole("article", { name: "交接单据", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("region", { name: "单据处理记录", exact: true }),
+  ).toHaveCount(0);
+});
+
 test("fifty-line A4 PDF uses repeated header, page counters, preserved codes and signatures", async ({
   page,
 }, testInfo) => {

@@ -15,6 +15,16 @@ export const documentStates = {
   confirmed: "已确认",
   voided: "已作废",
 };
+export type DocumentChange = {
+  id: string;
+  event_type: "document_voided" | "document_corrected";
+  recorded_at: string;
+  actor_label: string;
+  reason: string;
+  correction_text: string | null;
+  replacement_document_id: string | null;
+  replacement_document_no: string | null;
+};
 export type FlowKind = keyof typeof flowKinds;
 export type FlowDetails = {
   kind: FlowKind;
@@ -84,6 +94,7 @@ export type FlowDocument = FlowDetails & {
   void_reason: string | null;
   items: DocumentItem[];
   item_count?: number;
+  changes?: DocumentChange[];
 };
 export function blankDetails(kind: FlowKind): FlowDetails {
   return {
