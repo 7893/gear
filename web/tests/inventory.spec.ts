@@ -77,6 +77,10 @@ async function fixture(
   ];
   const saved = new Map<string, Asset>();
   const createdParties = new Map<string, Party>();
+  const partyEdits = new Map<string, Party>();
+  const lifecycleEdits = new Map<string, Asset>();
+  const partyHistory: Record<string, unknown[]> = {};
+  let maintenanceFailure = "";
   const extensions = new Map<string, Asset>();
   const conditionChanges = new Map<string, Asset>();
   const detailChanges = new Map<string, Asset>();
@@ -181,7 +185,155 @@ async function fixture(
         },
       });
     }
-    if (name === "list_parties") return route.fulfill({ json: parties });
+    if (name === "list_parties")
+      return route.fulfill({
+        json: parties.filter((p) => p.is_active !== false),
+      });
+    if (name === "list_party_records")
+      return route.fulfill({
+        json: parties.map((p) => ({
+          ...p,
+          version: p.version || 1,
+          is_active: p.is_active !== false,
+          current_asset_count: assets.filter(
+            (a) =>
+              a.holder_party_id === p.id || a.responsible_person_id === p.id,
+          ).length,
+          default_team_count: parties.filter(
+            (t) => t.default_responsible_id === p.id && t.is_active !== false,
+          ).length,
+        })),
+      });
+    if (name === "get_party") {
+      const p = parties.find((p) => p.id === body.party_id)!;
+      return route.fulfill({
+        json: {
+          party: {
+            ...p,
+            version: p.version || 1,
+            is_active: p.is_active !== false,
+          },
+          history: partyHistory[p.id] || [],
+        },
+      });
+    }
+    if (name === "update_party") {
+      if (maintenanceFailure)
+        return route.fulfill({
+          status: 400,
+          json: { message: maintenanceFailure },
+        });
+      const key = String(body.request_id);
+      let result = partyEdits.get(key);
+      const p = parties.find((p) => p.id === body.party_id)!;
+      if (!result) {
+        const before = structuredClone(p);
+        Object.assign(p, body.details, {
+          is_active: body.active,
+          version: (p.version || 1) + 1,
+        });
+        result = structuredClone(p);
+        partyEdits.set(key, result);
+        partyHistory[p.id] = [
+          {
+            id: "8",
+            event_type: "party_updated",
+            recorded_at: "2026-01-02T00:00:00Z",
+            actor_label: "示例经办人",
+            reason: body.reason,
+            before_data: before,
+            after_data: result,
+          },
+          ...(partyHistory[p.id] || []),
+        ];
+      }
+      if (holdUpdate) {
+        holdUpdate = false;
+        await new Promise<void>((resolve) => (releaseUpdate = resolve));
+      }
+      if (uncertain) {
+        uncertain = false;
+        return route.abort("failed");
+      }
+      return route.fulfill({ json: result });
+    }
+    if (name === "change_asset_lifecycle") {
+      if (maintenanceFailure)
+        return route.fulfill({
+          status: 400,
+          json: { message: maintenanceFailure },
+        });
+      const key = String(body.request_id);
+      let result = lifecycleEdits.get(key);
+      const asset = assets.find((a) => a.id === body.asset_id)!;
+      if (!result) {
+        const before = structuredClone(asset);
+        const details = body.details as Record<string, string | null>;
+        asset.management_status =
+          body.action === "found"
+            ? "managed"
+            : body.action === "invalidate"
+              ? "managed"
+              : String(body.action);
+        asset.version = (asset.version || 1) + 1;
+        asset.holder_party_id =
+          body.action === "found" ? details.holder_party_id : null;
+        const holder = parties.find((p) => p.id === asset.holder_party_id);
+        asset.holder_name = holder?.name || null;
+        asset.holder_kind = holder?.kind || null;
+        asset.responsible_person_id =
+          body.action === "found" ? details.responsible_person_id : null;
+        asset.responsible_name =
+          parties.find((p) => p.id === asset.responsible_person_id)?.name ||
+          null;
+        asset.due_on = body.action === "found" ? details.due_on : null;
+        asset.usage_kind = (
+          body.action === "found" ? details.usage_kind : null
+        ) as Asset["usage_kind"];
+        if (body.action === "found") {
+          asset.condition = details.condition as Asset["condition"];
+          asset.location = details.location;
+          asset.started_on = String(body.occurred_on);
+        }
+        if (body.action === "invalidate")
+          asset.invalidated_at = "2026-01-02T00:00:00Z";
+        asset.display_status =
+          asset.management_status === "managed"
+            ? asset.holder_party_id
+              ? "in_use"
+              : asset.condition === "normal"
+                ? "inventory_available"
+                : "inventory_faulty"
+            : (asset.management_status as Asset["display_status"]);
+        result = structuredClone(asset);
+        lifecycleEdits.set(key, result);
+        history[asset.id] = [
+          {
+            id: "10",
+            event_type:
+              body.action === "invalidate"
+                ? "asset_invalidated"
+                : "asset_" + String(body.action),
+            occurred_on: body.occurred_on,
+            recorded_at: "2026-01-02T00:00:00Z",
+            actor_label: "示例管理员",
+            reason: body.reason,
+            before_data: before,
+            after_data: result,
+          },
+          ...(history[asset.id] || []),
+        ];
+      }
+      if (holdUpdate) {
+        holdUpdate = false;
+        await new Promise<void>((resolve) => (releaseUpdate = resolve));
+      }
+      if (uncertain) {
+        uncertain = false;
+        return route.abort("failed");
+      }
+      return route.fulfill({ json: result });
+    }
     if (name === "create_party") {
       const requestId = String(body.request_id);
       let created = createdParties.get(requestId);
@@ -435,6 +587,8 @@ async function fixture(
     calls,
     authCalls,
     assets,
+    parties,
+    failMaintenance: (message: string) => (maintenanceFailure = message),
     conflictExtension: (value: boolean) => (extensionConflict = value),
     conflictCondition: (value: boolean) => (conditionConflict = value),
     filterResults: (items: Asset[] | undefined) => (listResults = items),
@@ -471,6 +625,311 @@ async function fillAsset(page: Page, name = "待登记碎纸机") {
   await page
     .getByRole("combobox", { name: "设备状况", exact: true })
     .selectOption("normal");
+}
+
+async function openPartyEditor(page: Page, id = teamId) {
+  await page.goto("/#/parties/" + id);
+  await page
+    .getByRole("button", { name: "修改资料或启用状态", exact: true })
+    .click();
+}
+async function openLifecycle(page: Page) {
+  await page.goto("/#/assets/" + assetId);
+  await page
+    .getByRole("button", { name: "办理遗失、报废或找回", exact: true })
+    .click();
+  return page.getByRole("region", { name: "设备退出与找回", exact: true });
+}
+async function loginReady(page: Page) {
+  await login(page);
+  await expect(
+    page.getByRole("heading", { name: "设备台账", exact: true }),
+  ).toBeVisible();
+}
+
+test("recipient editor shares fields and retries identical updates without reassigning devices", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  await loginReady(page);
+  const before = structuredClone(f.assets);
+  await openPartyEditor(page);
+  await expect(
+    page.getByRole("combobox", { name: "对象类型", exact: true }),
+  ).toBeDisabled();
+  await page.getByLabel("对象名称", { exact: true }).fill("示例更新团队");
+  await page.getByLabel("联系方式", { exact: true }).fill("示例联系方式");
+  await page.getByLabel("修改原因", { exact: true }).fill("示例核对团队资料");
+  f.loseNextAcknowledgement();
+  await page
+    .getByRole("button", { name: "保存人员或团队", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.getByLabel("对象名称", { exact: true })).toHaveValue(
+    "示例更新团队",
+  );
+  await page
+    .getByRole("button", { name: "保存人员或团队", exact: true })
+    .click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "修改已记录" }),
+  ).toBeVisible();
+  const calls = f.calls.filter((c) => c.name === "update_party");
+  expect(calls).toHaveLength(2);
+  expect(calls[0].body).toEqual(calls[1].body);
+  expect(f.assets).toEqual(before);
+  await expect(
+    page.getByText("示例团队 → 示例更新团队", { exact: false }),
+  ).toBeVisible();
+});
+
+test("recipient disable and restore stay separate from equipment return", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  await loginReady(page);
+  const before = structuredClone(f.assets);
+  for (const active of ["false", "true"]) {
+    await openPartyEditor(page);
+    await page
+      .getByRole("combobox", { name: "启用状态", exact: true })
+      .selectOption(active);
+    await page.getByLabel("修改原因", { exact: true }).fill("示例启用状态核对");
+    await page
+      .getByRole("button", { name: "保存人员或团队", exact: true })
+      .click();
+    await expect(
+      page.getByRole("status").filter({ hasText: "修改已记录" }),
+    ).toBeVisible();
+    expect(f.assets).toEqual(before);
+  }
+  expect(f.parties.find((p) => p.id === teamId)?.is_active).toBe(true);
+});
+
+test("recipient version conflicts retain entered details and show actionable reason", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  await loginReady(page);
+  await openPartyEditor(page);
+  await page.getByLabel("对象名称", { exact: true }).fill("示例待核对团队");
+  await page.getByLabel("修改原因", { exact: true }).fill("示例冲突检查");
+  f.failMaintenance("party_conflict");
+  await page
+    .getByRole("button", { name: "保存人员或团队", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText("资料已变化");
+  await expect(page.getByLabel("对象名称", { exact: true })).toHaveValue(
+    "示例待核对团队",
+  );
+});
+
+test("recipient listing paginates, includes inactive records on request and stays read-only for viewers", async ({
+  page,
+}) => {
+  const f = await fixture(page, "viewer");
+  f.parties.push(
+    ...Array.from({ length: 50 }, (_, i) => ({
+      ...f.parties[0]!,
+      id: String(i),
+      name: "示例扩展人员" + i,
+      is_active: i !== 0,
+    })),
+  );
+  await loginReady(page);
+  await page.goto("/#/parties");
+  await expect(
+    page.getByRole("navigation", { name: "人员与团队分页", exact: true }),
+  ).toContainText("共 51 条");
+  await page
+    .getByRole("combobox", { name: "对象状态", exact: true })
+    .selectOption("");
+  await expect(
+    page.getByRole("navigation", { name: "人员与团队分页", exact: true }),
+  ).toContainText("共 52 条");
+  await page.getByRole("button", { name: "末页", exact: true }).click();
+  await expect(page.getByRole("table").getByRole("row")).toHaveCount(13);
+  await page.goto("/#/parties/" + teamId);
+  await expect(
+    page.getByRole("heading", { name: "人员或团队详情", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "修改资料或启用状态" }),
+  ).toHaveCount(0);
+  expect(
+    f.calls.some((c) => c.name === "update_party" || c.name === "create_party"),
+  ).toBe(false);
+});
+
+for (const operation of ["lost", "scrapped", "invalidate"] as const) {
+  test(`administrator records ${operation} with explicit acknowledgement and stable retry`, async ({
+    page,
+  }) => {
+    const f = await fixture(page, "admin");
+    await loginReady(page);
+    const region = await openLifecycle(page);
+    await region
+      .getByRole("combobox", { name: "处理类型", exact: true })
+      .selectOption(operation);
+    await region
+      .getByLabel("处理原因", { exact: true })
+      .fill("示例实际情况核对");
+    const save = region.getByRole("button", { name: /^确认/ });
+    await expect(save).toBeDisabled();
+    await region.getByRole("checkbox").check();
+    f.loseNextAcknowledgement();
+    await save.click();
+    await expect(region.getByRole("alert")).toBeVisible();
+    await save.click();
+    await expect(
+      page
+        .getByRole("status")
+        .filter({ hasText: "已记录，内部编号和历史单据保留" }),
+    ).toBeVisible();
+    const writes = f.calls.filter((c) => c.name === "change_asset_lifecycle");
+    expect(writes).toHaveLength(2);
+    expect(writes[0].body).toEqual(writes[1].body);
+    expect(f.assets[0].asset_code).toBe(base.asset_code);
+    expect(f.assets[0].holder_party_id).toBeNull();
+    if (operation !== "invalidate")
+      await expect(
+        page.getByText("退出前持有方：", { exact: false }),
+      ).toBeVisible();
+    else
+      await expect(
+        page.getByText("此建账记录已标记无效，保留历史供核对。", {
+          exact: true,
+        }),
+      ).toBeVisible();
+  });
+}
+
+test("recovered device requires fresh placement and supports faulty temporary team use", async ({
+  page,
+}) => {
+  const f = await fixture(page, "admin");
+  Object.assign(f.assets[0], {
+    management_status: "lost",
+    display_status: "lost",
+    holder_party_id: null,
+    responsible_person_id: null,
+    holder_name: null,
+    due_on: null,
+  });
+  await loginReady(page);
+  const region = await openLifecycle(page);
+  await expect(
+    region.getByRole("combobox", { name: "当前持有情况", exact: true }),
+  ).toHaveValue("inventory");
+  await region
+    .getByRole("combobox", { name: "找回时状况", exact: true })
+    .selectOption("faulty");
+  await region
+    .getByRole("combobox", { name: "当前持有情况", exact: true })
+    .selectOption("team");
+  await region
+    .getByRole("combobox", { name: "持有方", exact: true })
+    .selectOption(teamId);
+  await region
+    .getByRole("combobox", { name: "使用期限", exact: true })
+    .selectOption("temporary");
+  await expect(region.getByLabel("预计归还日期", { exact: true })).toHaveValue(
+    "",
+  );
+  await region.getByLabel("预计归还日期", { exact: true }).fill("2099-01-01");
+  await region
+    .getByLabel("处理原因", { exact: true })
+    .fill("示例确认同一实物和新使用期限");
+  await region.getByRole("checkbox").check();
+  await region
+    .getByRole("button", { name: "确认登记找回", exact: true })
+    .click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "登记找回已记录" }),
+  ).toBeVisible();
+  const details = f.calls.find((c) => c.name === "change_asset_lifecycle")!.body
+    .details;
+  expect(details).toMatchObject({
+    condition: "faulty",
+    holder_party_id: teamId,
+    responsible_person_id: personId,
+    usage_kind: "temporary",
+    due_on: "2099-01-01",
+  });
+});
+
+for (const role of ["operator", "viewer"]) {
+  test(`${role} cannot open asset exit or recovery actions`, async ({
+    page,
+  }) => {
+    const f = await fixture(page, role);
+    await loginReady(page);
+    await page.goto("/#/assets/" + assetId);
+    await expect(
+      page.getByRole("heading", { name: "设备详情", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "设备退出与找回", exact: true }),
+    ).toHaveCount(0);
+    expect(f.calls.some((c) => c.name === "change_asset_lifecycle")).toBe(
+      false,
+    );
+  });
+}
+
+for (const feature of ["party", "lifecycle"]) {
+  test(`late ${feature} update is discarded after account revocation`, async ({
+    page,
+  }) => {
+    const f = await fixture(page, "admin");
+    await loginReady(page);
+    if (feature === "party") {
+      await openPartyEditor(page);
+      await page.getByLabel("对象名称", { exact: true }).fill("示例迟到资料");
+      await page.getByLabel("修改原因", { exact: true }).fill("示例异步检查");
+      f.holdUpdate();
+      await page
+        .getByRole("button", { name: "保存人员或团队", exact: true })
+        .click();
+    } else {
+      const region = await openLifecycle(page);
+      await region.getByLabel("处理原因", { exact: true }).fill("示例迟到处置");
+      await region.getByRole("checkbox").check();
+      f.holdUpdate();
+      await region
+        .getByRole("button", { name: "确认登记遗失", exact: true })
+        .click();
+    }
+    await expect(
+      page.getByRole("button", {
+        name: feature === "party" ? "正在保存…" : "正在记录…",
+        exact: true,
+      }),
+    ).toBeDisabled();
+    f.disable();
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(
+      page.getByText("当前账号无法执行此操作，请登录或查看账号状态。", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    const response = page.waitForResponse((r) =>
+      r
+        .url()
+        .endsWith(
+          "/rpc/" +
+            (feature === "party" ? "update_party" : "change_asset_lifecycle"),
+        ),
+    );
+    f.releaseUpdate();
+    await (await response).finished();
+    await expect(page.getByText("示例迟到资料", { exact: true })).toHaveCount(
+      0,
+    );
+    await expect(
+      page.getByRole("status").filter({ hasText: "已记录" }),
+    ).toHaveCount(0);
+  });
 }
 
 function paginationAssets() {

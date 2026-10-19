@@ -7,7 +7,6 @@ import {
   listParties,
   initializeAsset,
   assetFields,
-  partyLabel,
   businessToday,
   requestFor,
   type Party,
@@ -17,6 +16,7 @@ import {
 } from "../inventory";
 import InventoryGate from "../components/InventoryGate.vue";
 import PartyQuickCreate from "../components/PartyQuickCreate.vue";
+import PlacementFields from "../components/PlacementFields.vue";
 import AssetFields from "../components/AssetFields.vue";
 import { useAuthorizedQuery } from "../useAuthorizedQuery";
 const router = useRouter();
@@ -40,9 +40,6 @@ const {
 } = useAuthorizedQuery(inventoryWriteAccess, listParties);
 const parties = computed(() => partyData.value || []);
 const people = computed(() => parties.value.filter((p) => p.kind === "person"));
-const holders = computed(() =>
-  parties.value.filter((p) => p.kind === holderMode.value),
-);
 const partyBusy = ref(false);
 const busy = ref(false);
 const error = ref("");
@@ -175,44 +172,16 @@ async function save() {
           </select></label
         >
       </AssetFields>
-      <label
-        >当前持有情况<select v-model="holderMode">
-          <option value="inventory">经办人库存</option>
-          <option value="person">个人持有</option>
-          <option value="team">团队持有</option>
-        </select></label
-      >
-      <template v-if="holderMode !== 'inventory'">
-        <label
-          >持有方<select v-model="holderId" required>
-            <option value="">请选择，或在上方新增</option>
-            <option v-for="p in holders" :key="p.id" :value="p.id">
-              {{ partyLabel(p) }}
-            </option>
-          </select></label
-        >
-        <label v-if="holderMode === 'team'"
-          >本设备负责人<select v-model="responsibleId" required>
-            <option value="">请选择个人负责人</option>
-            <option v-for="p in people" :key="p.id" :value="p.id">
-              {{ partyLabel(p) }}
-            </option>
-          </select></label
-        >
-        <label
-          >使用期限<select v-model="usage">
-            <option value="long_term">长期使用</option>
-            <option value="temporary">临时使用</option>
-          </select></label
-        >
-        <label v-if="usage === 'temporary'"
-          >预计归还日期<input
-            v-model="dueOn"
-            type="date"
-            required
-            :min="knownOn || undefined"
-        /></label>
-      </template>
+      <PlacementFields
+        v-model:mode="holderMode"
+        v-model:holder-id="holderId"
+        v-model:responsible-id="responsibleId"
+        v-model:usage="usage"
+        v-model:due-on="dueOn"
+        :parties="parties"
+        :min-date="knownOn"
+        :disabled="busy || partyBusy"
+      />
       <label
         >{{ holderMode === "inventory" ? "已知到手日期" : "已知领用起始日期"
         }}<input v-model="knownOn" type="date" :max="businessToday()" /><span

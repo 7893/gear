@@ -11,6 +11,10 @@ import type {
   Placement,
   DueState,
   DueAssetList,
+  PartyRecord,
+  PartyDetails,
+  LifecycleAction,
+  RecoveryPlacement,
 } from "./inventory-model";
 export * from "./inventory-model";
 
@@ -104,6 +108,46 @@ export async function extendAssignment(
 }
 export async function listParties(): Promise<Party[]> {
   return (await inventoryRpc("list_parties")) as Party[];
+}
+export async function listPartyRecords(): Promise<PartyRecord[]> {
+  return (await inventoryRpc("list_party_records")) as PartyRecord[];
+}
+export async function getParty(id: string): Promise<PartyDetails> {
+  return (await inventoryRpc("get_party", { party_id: id })) as PartyDetails;
+}
+export async function updateParty(
+  party: Party,
+  details: PartyInput,
+  active: boolean,
+  reason: string,
+  requestId: string,
+): Promise<Party> {
+  return (await inventoryRpc("update_party", {
+    party_id: party.id,
+    expected_version: party.version,
+    details,
+    active,
+    reason,
+    request_id: requestId,
+  })) as Party;
+}
+export async function changeAssetLifecycle(
+  asset: Asset,
+  action: LifecycleAction,
+  occurredOn: string,
+  details: RecoveryPlacement | Record<string, never>,
+  reason: string,
+  requestId: string,
+): Promise<Asset> {
+  return (await inventoryRpc("change_asset_lifecycle", {
+    asset_id: asset.id,
+    expected_version: asset.version,
+    action,
+    occurred_on: occurredOn,
+    details,
+    reason,
+    request_id: requestId,
+  })) as Asset;
 }
 export async function changeAssetCondition(
   asset: Asset,

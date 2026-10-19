@@ -33,6 +33,28 @@ export type Party = {
   organization_name: string | null;
   default_responsible_id: string | null;
   note: string | null;
+  contact?: string | null;
+  version?: number;
+  is_active?: boolean;
+  default_responsible_name?: string | null;
+};
+export type PartyRecord = Party & {
+  version: number;
+  is_active: boolean;
+  current_asset_count: number;
+  default_team_count: number;
+};
+export type PartyDetails = {
+  party: Party & { version: number; is_active: boolean };
+  history: {
+    id: string;
+    event_type: string;
+    recorded_at: string;
+    actor_label: string;
+    reason: string | null;
+    before_data: Party | null;
+    after_data: Party;
+  }[];
 };
 export type Asset = {
   id: string;
@@ -71,6 +93,7 @@ export type AssetDetails = {
     recorded_at: string;
     actor_label: string;
     reason: string | null;
+    before_data?: Partial<Asset> | null;
     after_data: Partial<Asset> & {
       previous_details?: Partial<Asset>;
       document_id?: string;
@@ -168,4 +191,31 @@ export type PartyInput = {
   organization_name: string;
   default_responsible_id: string | null;
   note: string;
+  contact?: string;
+};
+export function partyFields(party?: Party): PartyInput {
+  return {
+    kind: party?.kind || "person",
+    name: party?.name || "",
+    person_type: party?.kind === "team" ? null : party?.person_type || "staff",
+    organization_name: party?.organization_name || "",
+    default_responsible_id: party?.default_responsible_id || null,
+    contact: party?.contact || "",
+    note: party?.note || "",
+  };
+}
+export const lifecycleActions = {
+  lost: "登记遗失",
+  scrapped: "登记报废",
+  found: "登记找回",
+  invalidate: "作废误建台账",
+};
+export type LifecycleAction = keyof typeof lifecycleActions;
+export type RecoveryPlacement = {
+  condition: Asset["condition"];
+  location: string;
+  holder_party_id: string | null;
+  responsible_person_id: string | null;
+  usage_kind: "long_term" | "temporary" | null;
+  due_on: string | null;
 };

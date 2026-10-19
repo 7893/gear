@@ -103,6 +103,22 @@ const messages: Record<string, string> = {
   asset_details_unavailable: "无效建账记录不能更正资料，历史记录仍可查阅。",
   asset_details_unchanged: "设备资料没有变化，无需保存更正。",
   invalid_party: "人员或团队资料不符合要求，请核对填写内容。",
+  party_not_found: "未找到该人员或团队，请返回名单核对。",
+  party_conflict: "人员或团队资料已变化，请刷新后重新核对。",
+  party_kind_permanent: "个人与团队的类型不能互相修改，请核对接收对象。",
+  party_unchanged: "资料和启用状态没有变化，无需保存。",
+  party_default_in_use:
+    "此人仍是有效团队的默认负责人，请先更换这些团队的默认负责人。",
+  asset_lifecycle_admin_required:
+    "只有当前有效管理员可以办理遗失、报废、找回或误建作废。",
+  invalid_asset_lifecycle: "请核对处理类型、找回后的实际情况并填写处理原因。",
+  invalid_lifecycle_date:
+    "日期无效；不能晚于今天或早于已有记录，找回后的期限不能早于找回日期。",
+  asset_lifecycle_conflict: "设备情况已变化，请刷新后重新核对。",
+  asset_lifecycle_transition:
+    "当前设备状态不支持此操作；只有遗失设备可以登记找回。",
+  asset_invalidation_dependency:
+    "此设备已有流转、处置或关联单据，不能直接作废初始建账，请先核对依赖记录。",
   responsible_person_required:
     "请选择有效的个人负责人；个人持有时负责人应为本人。",
   holder_unavailable: "所选持有方已不可用，请刷新名单后重新选择。",
@@ -371,6 +387,10 @@ export async function inventoryRpc(
     | "get_asset"
     | "list_parties"
     | "create_party"
+    | "list_party_records"
+    | "get_party"
+    | "update_party"
+    | "change_asset_lifecycle"
     | "initialize_asset"
     | "list_due_assets"
     | "extend_assignment"

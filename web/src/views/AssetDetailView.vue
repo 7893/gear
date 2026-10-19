@@ -14,11 +14,14 @@ import {
   timestamp,
   type Asset,
   assetDetailsChanges,
+  lifecycleActions,
+  type LifecycleAction,
 } from "../inventory";
 import InventoryGate from "../components/InventoryGate.vue";
 import ExtensionForm from "../components/ExtensionForm.vue";
 import AssetConditionForm from "../components/AssetConditionForm.vue";
 import AssetDetailsForm from "../components/AssetDetailsForm.vue";
+import AssetLifecycleForm from "../components/AssetLifecycleForm.vue";
 const route = useRoute();
 const detailAccess = computed(() => inventoryAccess.value && !!route.params.id);
 const { data, error, loading, load } = useAuthorizedQuery(
@@ -34,7 +37,14 @@ const conditionEarliestOn = computed(
       data.value?.asset.started_on,
       ...(data.value?.history || [])
         .filter((event) =>
-          ["asset_fault_reported", "asset_repaired"].includes(event.event_type),
+          [
+            "asset_initialized",
+            "asset_fault_reported",
+            "asset_repaired",
+            "asset_lost",
+            "asset_scrapped",
+            "asset_found",
+          ].includes(event.event_type),
         )
         .map((event) => event.occurred_on),
     ]
@@ -51,6 +61,10 @@ function conditionChanged(condition: Asset["condition"]) {
 }
 function extended() {
   message.value = "延期已记录，原分发单和签字件保留。";
+  void load();
+}
+function lifecycleUpdated(action: LifecycleAction) {
+  message.value = lifecycleActions[action] + "已记录，内部编号和历史单据保留。";
   void load();
 }
 function detailsUpdated() {
@@ -170,6 +184,12 @@ watch(
         :asset="data.asset"
         @updated="extended"
       />
+      <AssetLifecycleForm
+        :key="'lifecycle:' + data.asset.id + ':' + data.asset.version"
+        :asset="data.asset"
+        :earliest-on="conditionEarliestOn"
+        @updated="lifecycleUpdated"
+      />
       <h3>历史记录</h3>
       <ol v-if="data.history.length" class="asset-history">
         <li v-for="event in data.history" :key="event.id">
@@ -188,7 +208,15 @@ watch(
                         ? "维修恢复正常"
                         : event.event_type === "document_voided"
                           ? "单据作废恢复"
-                          : "设备变更记录"
+                          : event.event_type === "asset_lost"
+                            ? "登记遗失"
+                            : event.event_type === "asset_scrapped"
+                              ? "登记报废"
+                              : event.event_type === "asset_found"
+                                ? "登记找回"
+                                : event.event_type === "asset_invalidated"
+                                  ? "作废误建台账"
+                                  : "设备变更记录"
           }}</strong>
           <p>
             历史日期：{{ event.occurred_on || "未知，未补造日期" }}；记录于
@@ -200,6 +228,17 @@ watch(
             当时持有方：{{ event.after_data.holder_name }}；负责人：{{
               event.after_data.responsible_name
             }}
+          </p>
+          <p
+            v-if="
+              ['asset_lost', 'asset_scrapped', 'asset_invalidated'].includes(
+                event.event_type,
+              ) && event.before_data?.holder_name
+            "
+          >
+            退出前持有方：{{ event.before_data.holder_name }}；最后负责人：{{
+              event.before_data.responsible_name
+            }}；原预计归还日期：{{ event.before_data.due_on || "长期使用" }}。
           </p>
           <p v-if="event.reason">说明：{{ event.reason }}</p>
           <ul v-if="event.event_type === 'asset_updated'">

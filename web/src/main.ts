@@ -11,6 +11,8 @@ import InventoryView from "./views/InventoryView.vue";
 import DueView from "./views/DueView.vue";
 import AssetCreateView from "./views/AssetCreateView.vue";
 import AssetDetailView from "./views/AssetDetailView.vue";
+import PartiesView from "./views/PartiesView.vue";
+import PartyDetailView from "./views/PartyDetailView.vue";
 import DocumentsView from "./views/DocumentsView.vue";
 import DocumentFormView from "./views/DocumentFormView.vue";
 import DocumentDetailView from "./views/DocumentDetailView.vue";
@@ -28,6 +30,8 @@ async function start() {
       { path: "/due", component: DueView },
       { path: "/assets/new", component: AssetCreateView },
       { path: "/assets/:id", component: AssetDetailView },
+      { path: "/parties", component: PartiesView },
+      { path: "/parties/:id", component: PartyDetailView },
       { path: "/flows", component: DocumentsView, props: { manage: true } },
       { path: "/documents", component: DocumentsView },
       { path: "/documents/new", component: DocumentFormView },

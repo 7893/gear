@@ -10,6 +10,8 @@
 
 ## 当前阶段
 
+人员团队维护及设备遗失、报废、找回和误建作废已本地实现；迁移 014、015 与页面尚待本轮授权上线，见[实施与发布范围](docs/recipient-lifecycle-implementation.md)。既有线上功能与数据保持。
+
 设备基本资料更正已获授权接入，建账和更正共用字段组件；迁移 013 已应用，页面随本轮既有 CI/CD 发布，见[资料更正实施](docs/asset-details-implementation.md)。实体打印及签字闭环验收按最新决定暂缓。
 
 故障登记与维修恢复已获授权上线，保留设备编号、持有方和期限；迁移 011 已应用，页面随本轮既有 CI/CD 发布，真实业务待本人验收，见[故障实施](docs/asset-condition-implementation.md)。
