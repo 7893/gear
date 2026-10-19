@@ -24,6 +24,7 @@
 
 ## 文档
 
+- [演示数据验收](docs/demo-acceptance.md)：本轮只读结果、实际打印签字上传的操作顺序及小范围邮件约定。
 - [当前实现与验收状态](docs/implementation-status.md)：已上线、本地待上线、未实现和真实验收边界。
 - [公共界面实施](docs/shared-ui-implementation.md)：接收对象表单与授权查询的复用范围、验证和待发布边界。
 - [单据处理实施](docs/document-review-implementation.md)：管理员作废、更正说明、原件保留及真实验收边界。
