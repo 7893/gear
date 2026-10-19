@@ -97,6 +97,11 @@ const messages: Record<string, string> = {
   inventory_unavailable: "设备台账尚未开放。",
   inventory_access_denied: "当前账号没有此设备操作权限，请刷新账号状态。",
   invalid_asset: "设备资料不符合要求，请核对名称、分类、状况和字段长度。",
+  invalid_asset_details: "请核对设备基本资料并填写更正原因，原因不超过两千字。",
+  asset_details_conflict:
+    "设备资料或流转情况已变化，请刷新设备后重新核对更正。",
+  asset_details_unavailable: "无效建账记录不能更正资料，历史记录仍可查阅。",
+  asset_details_unchanged: "设备资料没有变化，无需保存更正。",
   invalid_party: "人员或团队资料不符合要求，请核对填写内容。",
   responsible_person_required:
     "请选择有效的个人负责人；个人持有时负责人应为本人。",
@@ -370,6 +375,7 @@ export async function inventoryRpc(
     | "list_due_assets"
     | "extend_assignment"
     | "change_asset_condition"
+    | "update_asset_details"
     | "list_documents"
     | "get_document"
     | "save_document"

@@ -6,6 +6,7 @@ import type {
   AssetList,
   Party,
   AssetInput,
+  AssetDetailsInput,
   PartyInput,
   Placement,
   DueState,
@@ -128,6 +129,22 @@ export async function createParty(
     details,
     request_id: requestId,
   })) as Party;
+}
+export async function updateAssetDetails(
+  asset: Asset,
+  details: AssetDetailsInput,
+  reason: string,
+  requestId: string,
+  allowDuplicate: boolean,
+): Promise<Asset> {
+  return (await inventoryRpc("update_asset_details", {
+    asset_id: asset.id,
+    expected_version: asset.version,
+    details,
+    reason,
+    request_id: requestId,
+    allow_legacy_duplicate: allowDuplicate,
+  })) as Asset;
 }
 export async function initializeAsset(
   details: AssetInput,

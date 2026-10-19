@@ -13,10 +13,12 @@ import {
   dueLabel,
   timestamp,
   type Asset,
+  assetDetailsChanges,
 } from "../inventory";
 import InventoryGate from "../components/InventoryGate.vue";
 import ExtensionForm from "../components/ExtensionForm.vue";
 import AssetConditionForm from "../components/AssetConditionForm.vue";
+import AssetDetailsForm from "../components/AssetDetailsForm.vue";
 const route = useRoute();
 const detailAccess = computed(() => inventoryAccess.value && !!route.params.id);
 const { data, error, loading, load } = useAuthorizedQuery(
@@ -49,6 +51,10 @@ function conditionChanged(condition: Asset["condition"]) {
 }
 function extended() {
   message.value = "延期已记录，原分发单和签字件保留。";
+  void load();
+}
+function detailsUpdated() {
+  message.value = "设备资料更正已记录，原单快照和持有关系保持不变。";
   void load();
 }
 watch(
@@ -148,6 +154,11 @@ watch(
           <dd class="preserve-text">{{ data.asset.note || "未填写" }}</dd>
         </div>
       </dl>
+      <AssetDetailsForm
+        :key="'details:' + data.asset.id + ':' + data.asset.version"
+        :asset="data.asset"
+        @updated="detailsUpdated"
+      />
       <AssetConditionForm
         :key="'condition:' + data.asset.id + ':' + data.asset.version"
         :asset="data.asset"
@@ -165,17 +176,19 @@ watch(
           <strong>{{
             event.event_type === "asset_initialized"
               ? "登记已有设备"
-              : event.event_type === "document_confirmed"
-                ? "交接确认"
-                : event.event_type === "assignment_extended"
-                  ? "临时使用延期"
-                  : event.event_type === "asset_fault_reported"
-                    ? "登记故障"
-                    : event.event_type === "asset_repaired"
-                      ? "维修恢复正常"
-                      : event.event_type === "document_voided"
-                        ? "单据作废恢复"
-                        : "设备变更记录"
+              : event.event_type === "asset_updated"
+                ? "更正设备资料"
+                : event.event_type === "document_confirmed"
+                  ? "交接确认"
+                  : event.event_type === "assignment_extended"
+                    ? "临时使用延期"
+                    : event.event_type === "asset_fault_reported"
+                      ? "登记故障"
+                      : event.event_type === "asset_repaired"
+                        ? "维修恢复正常"
+                        : event.event_type === "document_voided"
+                          ? "单据作废恢复"
+                          : "设备变更记录"
           }}</strong>
           <p>
             历史日期：{{ event.occurred_on || "未知，未补造日期" }}；记录于
@@ -189,6 +202,15 @@ watch(
             }}
           </p>
           <p v-if="event.reason">说明：{{ event.reason }}</p>
+          <ul v-if="event.event_type === 'asset_updated'">
+            <li
+              v-for="change in assetDetailsChanges(event)"
+              :key="change.key"
+              class="preserve-text"
+            >
+              {{ change.label }}：{{ change.before }} → {{ change.after }}
+            </li>
+          </ul>
           <p v-if="event.event_type === 'assignment_extended'">
             原期限：{{ event.after_data.previous_due_on }}；新期限：{{
               event.after_data.due_on

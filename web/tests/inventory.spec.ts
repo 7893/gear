@@ -79,6 +79,10 @@ async function fixture(
   const createdParties = new Map<string, Party>();
   const extensions = new Map<string, Asset>();
   const conditionChanges = new Map<string, Asset>();
+  const detailChanges = new Map<string, Asset>();
+  let detailFailure = "";
+  let holdUpdate = false;
+  let releaseUpdate: (() => void) | undefined;
   const history: Record<string, unknown[]> = {};
   let extensionConflict = false;
   let conditionConflict = false;
@@ -271,6 +275,45 @@ async function fixture(
           })
         : route.fulfill({ status: 400, json: { message: "asset_not_found" } });
     }
+    if (name === "update_asset_details") {
+      if (detailFailure)
+        return route.fulfill({ status: 400, json: { message: detailFailure } });
+      if (duplicate && !body.allow_legacy_duplicate)
+        return route.fulfill({
+          status: 400,
+          json: { message: "legacy_code_duplicate" },
+        });
+      let result = detailChanges.get(String(body.request_id));
+      const asset = assets.find((a) => a.id === body.asset_id)!;
+      if (!result) {
+        const before = structuredClone(asset);
+        Object.assign(asset, body.details);
+        asset.version = (asset.version || 1) + 1;
+        result = structuredClone(asset);
+        detailChanges.set(String(body.request_id), result);
+        history[asset.id] = [
+          {
+            id: "9",
+            event_type: "asset_updated",
+            occurred_on: "2030-01-02",
+            recorded_at: "2030-01-02T00:00:00Z",
+            actor_label: "示例经办人",
+            reason: body.reason,
+            after_data: { ...result, previous_details: before },
+          },
+          ...(history[asset.id] || []),
+        ];
+      }
+      if (holdUpdate) {
+        holdUpdate = false;
+        await new Promise<void>((resolve) => (releaseUpdate = resolve));
+      }
+      if (uncertain) {
+        uncertain = false;
+        return route.abort("failed");
+      }
+      return route.fulfill({ json: result });
+    }
     if (name === "change_asset_condition") {
       if (conditionConflict)
         return route.fulfill({
@@ -405,6 +448,9 @@ async function fixture(
     releaseParty: () => releaseParty?.(),
     holdNextDetail: () => (holdDetail = true),
     releaseDetail: () => releaseDetail?.(),
+    failDetails: (message: string) => (detailFailure = message),
+    holdUpdate: () => (holdUpdate = true),
+    releaseUpdate: () => releaseUpdate?.(),
   };
 }
 async function login(page: Page) {
@@ -1501,3 +1547,275 @@ test("revoked access removes records and rejects a late ledger response", async 
     page.getByRole("link", { name: "SB-000001 · 示例打印机", exact: true }),
   ).toHaveCount(0);
 });
+
+for (const role of ["admin", "operator"]) {
+  test(`${role} corrects shared equipment fields with audited history and a stable retry request`, async ({
+    page,
+  }) => {
+    const f = await fixture(page, role);
+    const before = structuredClone(f.assets[0]);
+    await login(page);
+    await expect(
+      page.getByRole("heading", { name: "设备台账", exact: true }),
+    ).toBeVisible();
+    await page.goto("/#/assets/" + assetId);
+    const region = page.getByRole("region", {
+      name: "设备资料更正",
+      exact: true,
+    });
+    await region
+      .getByRole("button", { name: "更正基本资料", exact: true })
+      .click();
+    await expect(region.getByLabel("原资产编号", { exact: true })).toHaveValue(
+      "00001-A",
+    );
+    await expect(region.getByLabel("设备状况", { exact: true })).toHaveCount(0);
+    await expect(
+      region.getByLabel("当前持有情况", { exact: true }),
+    ).toHaveCount(0);
+    await region
+      .getByLabel("设备名称", { exact: true })
+      .fill("示例核对后的打印机");
+    await region.getByLabel("原资产编号", { exact: true }).fill("000007/旧");
+    await region.getByLabel("型号", { exact: true }).fill("示例型号甲");
+    await region
+      .getByLabel("设备备注", { exact: true })
+      .fill("<script>示例原样备注</script>");
+    await region.getByLabel("更正原因", { exact: true }).fill("示例核对铭牌");
+    f.loseNextAcknowledgement();
+    await region
+      .getByRole("button", { name: "保存资料更正", exact: true })
+      .click();
+    await expect(region.getByRole("alert")).toBeVisible();
+    await expect(region.getByLabel("设备名称", { exact: true })).toHaveValue(
+      "示例核对后的打印机",
+    );
+    await region
+      .getByRole("button", { name: "保存资料更正", exact: true })
+      .click();
+    await expect(
+      page.getByRole("status").filter({ hasText: "设备资料更正已记录" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", {
+        name: "SB-000001 · 示例核对后的打印机",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(page.locator(".asset-history")).toContainText(
+      "设备名称：示例打印机 → 示例核对后的打印机",
+    );
+    await expect(page.locator(".asset-history")).toContainText(
+      "原资产编号：00001-A → 000007/旧",
+    );
+    await expect(page.locator(".asset-history")).toContainText(
+      "<script>示例原样备注</script>",
+    );
+    expect(
+      await page.evaluate(
+        () => document.querySelectorAll(".asset-history script").length,
+      ),
+    ).toBe(0);
+    const writes = f.calls.filter((c) => c.name === "update_asset_details");
+    expect(writes).toHaveLength(2);
+    expect(writes[0].body).toEqual(writes[1].body);
+    expect(Object.keys(writes[0].body.details as object).sort()).toEqual([
+      "brand",
+      "category",
+      "legacy_code",
+      "location",
+      "model",
+      "name",
+      "note",
+      "serial_number",
+    ]);
+    for (const key of [
+      "holder_party_id",
+      "responsible_person_id",
+      "usage_kind",
+      "started_on",
+      "due_on",
+      "condition",
+      "asset_code",
+    ] as const)
+      expect(f.assets[0][key]).toBe(before[key]);
+    expect(f.assets[0].version).toBe(2);
+  });
+}
+
+test("equipment correction retains duplicate acknowledgement boundaries and conflicted inputs", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  await login(page);
+  await expect(
+    page.getByRole("heading", { name: "设备台账", exact: true }),
+  ).toBeVisible();
+  await page.goto("/#/assets/" + assetId);
+  const region = page.getByRole("region", {
+    name: "设备资料更正",
+    exact: true,
+  });
+  await region
+    .getByRole("button", { name: "更正基本资料", exact: true })
+    .click();
+  await region.getByLabel("设备名称", { exact: true }).fill("示例待核对资料");
+  await region
+    .getByLabel("更正原因", { exact: true })
+    .fill("示例重复旧编号核对");
+  f.requireDuplicateAck();
+  await region
+    .getByRole("button", { name: "保存资料更正", exact: true })
+    .click();
+  await expect(region.getByRole("alert")).toContainText("相同旧编号");
+  await expect(
+    region.getByRole("button", { name: "保存资料更正", exact: true }),
+  ).toBeDisabled();
+  await region.getByRole("checkbox").check();
+  await region.getByLabel("原资产编号", { exact: true }).fill("000009");
+  await expect(region.getByRole("checkbox")).toHaveCount(0);
+  await region
+    .getByRole("button", { name: "保存资料更正", exact: true })
+    .click();
+  await expect(region.getByRole("checkbox")).toBeVisible();
+  await region.getByRole("checkbox").check();
+  for (const message of ["asset_details_conflict", "asset_details_unchanged"]) {
+    f.failDetails(message);
+    await region
+      .getByRole("button", { name: "保存资料更正", exact: true })
+      .click();
+    await expect(region.getByRole("alert")).toContainText(
+      message === "asset_details_conflict"
+        ? "设备资料或流转情况已变化"
+        : "设备资料没有变化",
+    );
+    await expect(region.getByLabel("设备名称", { exact: true })).toHaveValue(
+      "示例待核对资料",
+    );
+  }
+  f.failDetails("");
+  await region
+    .getByRole("button", { name: "保存资料更正", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", {
+      name: "SB-000001 · 示例待核对资料",
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect(
+    f.calls.filter((c) => c.name === "update_asset_details").at(-1)?.body
+      .allow_legacy_duplicate,
+  ).toBe(true);
+});
+
+for (const mode of ["viewer", "invalidated"]) {
+  test(`${mode} cannot open equipment correction`, async ({ page }) => {
+    const f = await fixture(page, mode === "viewer" ? "viewer" : "admin");
+    if (mode === "invalidated")
+      f.assets[0].invalidated_at = "2030-01-01T00:00:00Z";
+    await login(page);
+    await expect(
+      page.getByRole("heading", { name: "设备台账", exact: true }),
+    ).toBeVisible();
+    await page.goto("/#/assets/" + assetId);
+    await expect(
+      page.getByRole("heading", { name: "设备详情", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "设备资料更正", exact: true }),
+    ).toHaveCount(0);
+    expect(f.calls.some((c) => c.name === "update_asset_details")).toBe(false);
+  });
+}
+
+test("exited equipment permits descriptive correction without reopening management", async ({
+  page,
+}) => {
+  const f = await fixture(page, "admin");
+  f.assets[0].management_status = "scrapped";
+  f.assets[0].display_status = "scrapped";
+  f.assets[0].holder_party_id = null;
+  await login(page);
+  await expect(
+    page.getByRole("heading", { name: "设备台账", exact: true }),
+  ).toBeVisible();
+  await page.goto("/#/assets/" + assetId);
+  const region = page.getByRole("region", {
+    name: "设备资料更正",
+    exact: true,
+  });
+  await region
+    .getByRole("button", { name: "更正基本资料", exact: true })
+    .click();
+  await region.getByLabel("型号", { exact: true }).fill("示例历史型号");
+  await region.getByLabel("更正原因", { exact: true }).fill("示例核对历史铭牌");
+  await region
+    .getByRole("button", { name: "保存资料更正", exact: true })
+    .click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "设备资料更正已记录" }),
+  ).toBeVisible();
+  expect(f.assets[0].management_status).toBe("scrapped");
+});
+
+for (const cause of ["revoked", "route changed"]) {
+  test(`late equipment correction response is discarded when ${cause}`, async ({
+    page,
+  }) => {
+    const f = await fixture(page);
+    await login(page);
+    await expect(
+      page.getByRole("heading", { name: "设备台账", exact: true }),
+    ).toBeVisible();
+    await page.goto("/#/assets/" + assetId);
+    const region = page.getByRole("region", {
+      name: "设备资料更正",
+      exact: true,
+    });
+    await region
+      .getByRole("button", { name: "更正基本资料", exact: true })
+      .click();
+    await region
+      .getByLabel("设备名称", { exact: true })
+      .fill("示例后台已保存但响应未到");
+    await region.getByLabel("更正原因", { exact: true }).fill("示例异步核对");
+    f.holdUpdate();
+    await region
+      .getByRole("button", { name: "保存资料更正", exact: true })
+      .click();
+    await expect(
+      region.getByRole("button", { name: "正在保存…", exact: true }),
+    ).toBeDisabled();
+    if (cause === "revoked") {
+      f.disable();
+      await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+      await expect(
+        page.getByText("当前账号无法执行此操作，请登录或查看账号状态。"),
+      ).toBeVisible();
+    } else {
+      await page
+        .getByRole("link", { name: "返回设备台账", exact: true })
+        .click();
+      await expect(
+        page.getByRole("heading", { name: "设备台账", exact: true }),
+      ).toBeVisible();
+    }
+    const response = page.waitForResponse((r) =>
+      r.url().endsWith("/rpc/update_asset_details"),
+    );
+    f.releaseUpdate();
+    await (await response).finished();
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    await expect(
+      page.getByText("设备资料更正已记录，原单快照和持有关系保持不变。", {
+        exact: true,
+      }),
+    ).toHaveCount(0);
+  });
+}

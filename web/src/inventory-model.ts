@@ -72,6 +72,7 @@ export type AssetDetails = {
     actor_label: string;
     reason: string | null;
     after_data: Partial<Asset> & {
+      previous_details?: Partial<Asset>;
       document_id?: string;
       document_no?: string;
       previous_due_on?: string;
@@ -107,6 +108,52 @@ export type AssetInput = {
   location: string;
   note: string;
 };
+export type AssetDetailsInput = Omit<AssetInput, "condition">;
+export const assetDetailsLabels = {
+  name: "设备名称",
+  category: "设备分类",
+  legacy_code: "原资产编号",
+  serial_number: "出厂序列号",
+  brand: "品牌",
+  model: "型号",
+  location: "位置",
+  note: "设备备注",
+};
+export function assetDetailsChanges(event: AssetDetails["history"][number]) {
+  const before = event.after_data.previous_details;
+  if (event.event_type !== "asset_updated" || !before) return [];
+  return (
+    Object.keys(assetDetailsLabels) as (keyof typeof assetDetailsLabels)[]
+  )
+    .filter((key) => (before[key] || "") !== (event.after_data[key] || ""))
+    .map((key) => {
+      const label = (value: string | null | undefined) =>
+        key === "category"
+          ? categories[value as Category] || value || "未填写"
+          : value || "未填写";
+      return {
+        key,
+        label: assetDetailsLabels[key],
+        before: label(before[key]),
+        after: label(event.after_data[key]),
+      };
+    });
+}
+export type AssetFieldsInput = Omit<AssetDetailsInput, "category"> & {
+  category: Category | "";
+};
+export function assetFields(asset?: Asset): AssetFieldsInput {
+  return {
+    name: asset?.name || "",
+    category: (asset?.category as Category) || "",
+    legacy_code: asset?.legacy_code || "",
+    serial_number: asset?.serial_number || "",
+    brand: asset?.brand || "",
+    model: asset?.model || "",
+    location: asset?.location || "",
+    note: asset?.note || "",
+  };
+}
 export type Placement = {
   holder_party_id: string | null;
   responsible_person_id: string | null;

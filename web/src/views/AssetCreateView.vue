@@ -6,34 +6,25 @@ import {
   inventoryWriteAccess,
   listParties,
   initializeAsset,
-  categories,
+  assetFields,
   partyLabel,
   businessToday,
   requestFor,
   type Party,
   type AssetInput,
-  type Category,
+  type AssetFieldsInput,
   type Placement,
 } from "../inventory";
 import InventoryGate from "../components/InventoryGate.vue";
 import PartyQuickCreate from "../components/PartyQuickCreate.vue";
+import AssetFields from "../components/AssetFields.vue";
 import { useAuthorizedQuery } from "../useAuthorizedQuery";
 const router = useRouter();
 const form = reactive<
-  Omit<AssetInput, "category" | "condition"> & {
-    category: Category | "";
-    condition: "" | "normal" | "faulty";
-  }
+  AssetFieldsInput & { condition: "" | "normal" | "faulty" }
 >({
-  name: "",
-  category: "",
+  ...assetFields(),
   condition: "",
-  legacy_code: "",
-  serial_number: "",
-  brand: "",
-  model: "",
-  location: "",
-  note: "",
 });
 const holderMode = ref<"inventory" | "person" | "team">("inventory");
 const holderId = ref("");
@@ -171,38 +162,19 @@ async function save() {
       </button>
     </div>
     <form class="form-grid" @submit.prevent="save">
-      <label
-        >设备名称<input v-model="form.name" maxlength="120" required
-      /></label>
-      <label
-        >设备分类<select v-model="form.category" required>
-          <option value="">请选择分类</option>
-          <option v-for="(label, code) in categories" :key="code" :value="code">
-            {{ label }}
-          </option>
-        </select></label
-      >
-      <label
-        >设备状况<select v-model="form.condition" required>
-          <option value="">请核对实际状况</option>
-          <option value="normal">正常</option>
-          <option value="faulty">故障</option>
-        </select></label
-      >
-      <label
-        >原资产编号<input
-          v-model="form.legacy_code"
-          aria-label="原资产编号"
-          maxlength="120"
-        /><span class="hint"
-          >可留空；保留原格式和前导零，不作为唯一编号。</span
-        ></label
-      >
-      <label>品牌<input v-model="form.brand" maxlength="120" /></label
-      ><label>型号<input v-model="form.model" maxlength="120" /></label>
-      <label
-        >出厂序列号<input v-model="form.serial_number" maxlength="120" /></label
-      ><label>位置<input v-model="form.location" maxlength="120" /></label>
+      <AssetFields :model-value="form" :disabled="busy || partyBusy">
+        <label
+          >设备状况<select
+            v-model="form.condition"
+            required
+            :disabled="busy || partyBusy"
+          >
+            <option value="">请核对实际状况</option>
+            <option value="normal">正常</option>
+            <option value="faulty">故障</option>
+          </select></label
+        >
+      </AssetFields>
       <label
         >当前持有情况<select v-model="holderMode">
           <option value="inventory">经办人库存</option>
@@ -248,14 +220,6 @@ async function save() {
           >历史日期不知道就留空，不使用今天代填。</span
         ></label
       >
-      <label class="form-wide"
-        >设备备注<textarea
-          v-model="form.note"
-          maxlength="2000"
-          rows="3"
-          placeholder="配件、外观、历史来源等"
-        />
-      </label>
       <div class="form-wide">
         <p v-if="error" class="notice error" role="alert">{{ error }}</p>
         <label v-if="duplicatePrompt" class="checkbox-row"

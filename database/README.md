@@ -88,3 +88,7 @@ python3 database/tests/check_schema_year.py
 已有服务滚动发布时，可在迁移事务内设置 `gear.rename_compatibility=on`，临时创建最小权限的旧名 RPC 转接；新安装缺省不创建。确认所有运行环境与 Data API 切换后，单独运行 [retire_schema_aliases.sql](retire_schema_aliases.sql)清理带精确标记的转接对象，遇到未知对象或依赖即回滚，不使用 CASCADE。隔离检查覆盖数据、序列、对象身份与权限保持、其他应用和调度不变，以及兼容和清理。
 
 当前数据库改名的执行状态见[统一命名记录](../docs/schema-naming.md)；迁移 008、Storage 与文件函数已在后续按单独授权部署。网站 CD 不执行这些脚本。
+
+## 设备基本资料更正
+
+迁移 `202610190013_asset_details.sql` 已本地实现，尚待单独授权应用正式数据库。仅新增两层 `update_asset_details` 函数，限定八项描述字段，使用既有版本、事件和去重机制；不改表、原有权限、分配、单据及编号序列。隔离检查运行 `python3 database/tests/check_asset_details.py`，覆盖前后记录、重复编号确认、权限、重试与并发及原单保留，已加入 CI；详见[资料更正实施](../docs/asset-details-implementation.md)。
