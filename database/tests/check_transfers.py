@@ -15,7 +15,7 @@ def main():
         setup(db)
         migration = ROOT/'database/migrations/202610190010_transfers.sql'
         for path in sorted((ROOT/'database/migrations').glob('*.sql')):
-            if path != migration and not path.name.endswith('initial_schema.sql'):
+            if path < migration and not path.name.endswith('initial_schema.sql'):
                 db.run(path.read_text())
         catalog = "SELECT jsonb_object_agg(p.oid::text,jsonb_build_array(n.nspname,p.proname,p.proowner,p.proacl,p.proconfig,p.prosecdef,md5(p.prosrc))) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname IN ('gear_2026','gear_private_2026')"
         before = json.loads(db.run(catalog)); before_data = data(db,'gear_2026')
@@ -30,6 +30,9 @@ def main():
         assert before_data==data(db,'gear_2026')
         db.run(migration.read_text(),fail='transfer_source_mismatch')
         assert json.loads(db.run(catalog))==after
+        for path in sorted((ROOT/'database/migrations').glob('*.sql')):
+            if path > migration:
+                db.run(path.read_text())
         today=date.fromisoformat(db.run("SELECT (now() AT TIME ZONE 'Asia/Shanghai')::date"))
         day=lambda n:(today+timedelta(days=n)).isoformat()
         get=lambda a:rpc(db,'operator','get_asset',quoted(a['id']))['asset']

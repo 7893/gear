@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { account, safeError } from "../accounts";
 import {
@@ -11,15 +11,39 @@ import {
   holderLabel,
   dueLabel,
   timestamp,
+  type Asset,
   type AssetDetails,
 } from "../inventory";
 import InventoryGate from "../components/InventoryGate.vue";
 import ExtensionForm from "../components/ExtensionForm.vue";
+import AssetConditionForm from "../components/AssetConditionForm.vue";
 const route = useRoute();
 const data = ref<AssetDetails | null>(null);
 const error = ref("");
 const loading = ref(false);
 const message = ref("");
+const conditionEarliestOn = computed(
+  () =>
+    [
+      data.value?.asset.last_flow_on,
+      data.value?.asset.started_on,
+      ...(data.value?.history || [])
+        .filter((event) =>
+          ["asset_fault_reported", "asset_repaired"].includes(event.event_type),
+        )
+        .map((event) => event.occurred_on),
+    ]
+      .filter((date): date is string => !!date)
+      .sort()
+      .at(-1) || "",
+);
+function conditionChanged(condition: Asset["condition"]) {
+  message.value =
+    condition === "faulty"
+      ? "故障已记录，持有关系保持不变。"
+      : "维修恢复已记录，设备编号和持有关系保持不变。";
+  void load();
+}
 function extended() {
   message.value = "延期已记录，原分发单和签字件保留。";
   void load();
@@ -147,6 +171,12 @@ onBeforeUnmount(() => generation++);
           <dd class="preserve-text">{{ data.asset.note || "未填写" }}</dd>
         </div>
       </dl>
+      <AssetConditionForm
+        :key="'condition:' + data.asset.id + ':' + data.asset.version"
+        :asset="data.asset"
+        :earliest-on="conditionEarliestOn"
+        @updated="conditionChanged"
+      />
       <ExtensionForm
         :key="data.asset.id + ':' + data.asset.version"
         :asset="data.asset"
@@ -162,7 +192,11 @@ onBeforeUnmount(() => generation++);
                 ? "交接确认"
                 : event.event_type === "assignment_extended"
                   ? "临时使用延期"
-                  : "设备变更记录"
+                  : event.event_type === "asset_fault_reported"
+                    ? "登记故障"
+                    : event.event_type === "asset_repaired"
+                      ? "维修恢复正常"
+                      : "设备变更记录"
           }}</strong>
           <p>
             历史日期：{{ event.occurred_on || "未知，未补造日期" }}；记录于

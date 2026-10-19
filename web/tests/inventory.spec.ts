@@ -72,8 +72,10 @@ async function fixture(
   ];
   const saved = new Map<string, Asset>();
   const extensions = new Map<string, Asset>();
+  const conditionChanges = new Map<string, Asset>();
   const history: Record<string, unknown[]> = {};
   let extensionConflict = false;
+  let conditionConflict = false;
   const user = {
     id: identity,
     email: "operator@example.invalid",
@@ -245,6 +247,46 @@ async function fixture(
           })
         : route.fulfill({ status: 400, json: { message: "asset_not_found" } });
     }
+    if (name === "change_asset_condition") {
+      if (conditionConflict)
+        return route.fulfill({
+          status: 400,
+          json: { message: "asset_condition_conflict" },
+        });
+      let result = conditionChanges.get(String(body.request_id));
+      const asset = assets.find((a) => a.id === body.asset_id)!;
+      if (!result) {
+        asset.condition = body.target_condition as Asset["condition"];
+        asset.display_status = asset.holder_party_id
+          ? "in_use"
+          : asset.condition === "faulty"
+            ? "inventory_faulty"
+            : "inventory_available";
+        asset.version = (asset.version || 1) + 1;
+        result = structuredClone(asset);
+        conditionChanges.set(String(body.request_id), result);
+        history[asset.id] = [
+          {
+            id: String(asset.version),
+            event_type:
+              asset.condition === "faulty"
+                ? "asset_fault_reported"
+                : "asset_repaired",
+            occurred_on: body.occurred_on,
+            recorded_at: "2030-01-01T00:00:00Z",
+            actor_label: "示例经办人",
+            reason: body.reason,
+            after_data: result,
+          },
+          ...(history[asset.id] || []),
+        ];
+      }
+      if (uncertain) {
+        uncertain = false;
+        return route.abort("failed");
+      }
+      return route.fulfill({ json: result });
+    }
     if (name === "extend_assignment") {
       if (extensionConflict)
         return route.fulfill({
@@ -327,6 +369,7 @@ async function fixture(
     authCalls,
     assets,
     conflictExtension: (value: boolean) => (extensionConflict = value),
+    conflictCondition: (value: boolean) => (conditionConflict = value),
     filterResults: (items: Asset[] | undefined) => (listResults = items),
     failList: (value: boolean) => (listFailure = value),
     requireDuplicateAck: () => (duplicate = true),
@@ -586,6 +629,161 @@ test("extension rejects an unchanged date and retains a conflicted form", async 
     "示例原因",
   );
   expect(state.assets[0]!.due_on).toBe("2030-01-01");
+});
+
+test("fault and repair preserve assignment, retry after lost acknowledgement and retain history", async ({
+  page,
+}) => {
+  await page.clock.setFixedTime(new Date("2030-01-02T00:00:00Z"));
+  const state = await fixture(page);
+  const original = structuredClone(state.assets[0]!);
+  await login(page);
+  await expect(
+    page.getByRole("heading", { name: "设备台账", exact: true }),
+  ).toBeVisible();
+  await page.goto("/#/assets/" + assetId);
+  const form = page.getByRole("region", { name: "故障与维修", exact: true });
+  await expect(
+    form.getByRole("heading", { name: "登记故障", exact: true }),
+  ).toBeVisible();
+  await form.getByLabel("故障发生日期", { exact: true }).fill("2030-01-01");
+  await form.getByLabel("故障说明", { exact: true }).fill("示例打印时卡纸");
+  state.loseNextAcknowledgement();
+  await form.getByRole("button", { name: "确认登记故障", exact: true }).click();
+  await expect(form.getByRole("alert")).toBeVisible();
+  await expect(form.getByLabel("故障说明", { exact: true })).toHaveValue(
+    "示例打印时卡纸",
+  );
+  await form.getByRole("button", { name: "确认登记故障", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("故障已记录");
+  await expect(
+    form.getByRole("heading", { name: "恢复正常", exact: true }),
+  ).toBeVisible();
+  expect(state.assets[0]!.version).toBe(2);
+  const calls = state.calls.filter((c) => c.name === "change_asset_condition");
+  expect(calls).toHaveLength(2);
+  expect(calls[0]!.body).toEqual(calls[1]!.body);
+  expect(calls[0]!.body).toMatchObject({
+    asset_id: assetId,
+    expected_version: 1,
+    target_condition: "faulty",
+    occurred_on: "2030-01-01",
+    reason: "示例打印时卡纸",
+  });
+  await expect(
+    form.getByLabel("恢复正常日期", { exact: true }),
+  ).toHaveAttribute("min", "2030-01-01");
+  await expect(
+    form.getByLabel("恢复正常日期", { exact: true }),
+  ).toHaveAttribute("max", "2030-01-02");
+  await form.getByLabel("恢复正常日期", { exact: true }).fill("2030-01-02");
+  await form
+    .getByLabel("维修处理结果", { exact: true })
+    .fill("示例清理进纸组件并试打正常");
+  await form.getByRole("button", { name: "确认恢复正常", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("维修恢复已记录");
+  await expect(
+    form.getByRole("heading", { name: "登记故障", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".asset-history")).toContainText("维修恢复正常");
+  await expect(page.locator(".asset-history")).toContainText("示例打印时卡纸");
+  await expect(page.locator(".asset-history")).toContainText(
+    "示例清理进纸组件并试打正常",
+  );
+  const { version, ...current } = state.assets[0]!;
+  const { version: initialVersion, ...before } = original;
+  expect(version).toBe(initialVersion! + 2);
+  expect(current).toEqual(before);
+});
+
+test("fault form rejects blank explanation and retains inputs on stale-version conflicts", async ({
+  page,
+}) => {
+  await page.clock.setFixedTime(new Date("2030-01-02T00:00:00Z"));
+  const state = await fixture(page);
+  state.assets[0]!.last_flow_on = "2030-01-01";
+  await login(page);
+  await expect(
+    page.getByRole("heading", { name: "设备台账", exact: true }),
+  ).toBeVisible();
+  await page.goto("/#/assets/" + assetId);
+  const form = page.getByRole("region", { name: "故障与维修", exact: true });
+  await expect(
+    form.getByLabel("故障发生日期", { exact: true }),
+  ).toHaveAttribute("min", "2030-01-01");
+  await form.getByLabel("故障说明", { exact: true }).fill("  ");
+  await form.getByRole("button", { name: "确认登记故障", exact: true }).click();
+  await expect(form.getByRole("alert")).toContainText(
+    "请填写故障说明或维修结果",
+  );
+  expect(
+    state.calls.filter((c) => c.name === "change_asset_condition"),
+  ).toHaveLength(0);
+  state.conflictCondition(true);
+  await form.getByLabel("故障说明", { exact: true }).fill("示例电源故障");
+  await form.getByRole("button", { name: "确认登记故障", exact: true }).click();
+  await expect(form.getByRole("alert")).toContainText("设备情况已变化");
+  await expect(form.getByLabel("故障说明", { exact: true })).toHaveValue(
+    "示例电源故障",
+  );
+  await page.getByRole("button", { name: "刷新设备情况", exact: true }).click();
+  await expect(form.getByLabel("故障说明", { exact: true })).toHaveValue("");
+  expect(state.assets[0]!.condition).toBe("normal");
+});
+
+test("fault actions require current write access and a managed valid asset", async ({
+  page,
+}) => {
+  const state = await fixture(page);
+  await login(page);
+  await expect(
+    page.getByRole("heading", { name: "设备台账", exact: true }),
+  ).toBeVisible();
+  state.assets[0]!.management_status = "returned_upstream";
+  await page.goto("/#/assets/" + assetId);
+  await expect(
+    page.getByRole("heading", { name: "设备详情", exact: true }),
+  ).toBeVisible();
+  const form = page.getByRole("region", { name: "故障与维修", exact: true });
+  await expect(form).toHaveCount(0);
+  state.assets[0]!.management_status = "managed";
+  state.assets[0]!.invalidated_at = "2030-01-01T00:00:00Z";
+  await page.getByRole("button", { name: "刷新设备情况", exact: true }).click();
+  await expect(
+    page.getByText("此建账记录已标记无效，保留历史供核对。", { exact: true }),
+  ).toBeVisible();
+  await expect(form).toHaveCount(0);
+  state.assets[0]!.invalidated_at = null;
+  await page.getByRole("button", { name: "刷新设备情况", exact: true }).click();
+  await expect(form).toBeVisible();
+  state.disable();
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(form).toHaveCount(0);
+  expect(
+    state.calls.filter((c) => c.name === "change_asset_condition"),
+  ).toHaveLength(0);
+});
+
+test("viewer can read fault history without repair controls", async ({
+  page,
+}) => {
+  const state = await fixture(page, "viewer");
+  state.assets[0]!.condition = "faulty";
+  await login(page);
+  await expect(
+    page.getByRole("heading", { name: "设备台账", exact: true }),
+  ).toBeVisible();
+  await page.goto("/#/assets/" + assetId);
+  await expect(
+    page.getByRole("heading", { name: "设备详情", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".asset-fields")).toContainText("使用中 / 故障");
+  await expect(
+    page.getByRole("region", { name: "故障与维修", exact: true }),
+  ).toHaveCount(0);
+  expect(
+    state.calls.filter((c) => c.name === "change_asset_condition"),
+  ).toHaveLength(0);
 });
 
 test("due ledger uses server business date, pages and filters without conflating empty and failure", async ({

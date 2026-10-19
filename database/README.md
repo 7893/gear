@@ -17,6 +17,7 @@ python3 database/tests/check_demo_inventory.py
 python3 database/tests/check_flows.py
 python3 database/tests/check_temporary_use.py
 python3 database/tests/check_transfers.py
+python3 database/tests/check_asset_condition.py
 python3 database/tests/check_evidence.py
 python3 database/tests/check_schema_year.py
 ```
@@ -70,6 +71,10 @@ python3 database/tests/check_schema_year.py
 ## 转交与团队负责人交接迁移
 
 迁移 `202610190010_transfers.sql` 已本地隔离验证并获授权应用正式数据库。扩展现有两个私有保存与确认函数，使用既有转交字段和约束，保留函数对象身份、权限和公开 RPC；不增加表或列，不写入交接记录。迁移先核对旧函数体指纹，遇到未知变更或重跑即整体失败。网站 CD 不执行 SQL；本轮先完成迁移、权限及只读核对，再发布依赖它的页面，详见[转交实施](../docs/transfers-implementation.md)。
+
+## 故障登记与维修恢复迁移
+
+迁移 `202610190011_asset_condition.sql` 已本地实现，尚待生产授权；新增一组受版本和角色控制的故障、维修接口，扩展既有确认函数的日期检查。复用现有事件，不增加表、列或触发器，不改变持有关系和期限。迁移核对旧确认函数体指纹，未知变更或重跑即回滚；网站 CD 不执行 SQL。隔离检查已加入 CI，详见[故障实施](../docs/asset-condition-implementation.md)。
 
 ## Schema 命名与配置
 

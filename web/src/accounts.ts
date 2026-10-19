@@ -110,12 +110,19 @@ const messages: Record<string, string> = {
   flows_unavailable: "流转办理与单据尚未开放。",
   invalid_due_filter: "请选择有效的到期情况。",
   invalid_extension: "请填写延期原因，长度不超过两千字。",
+  invalid_condition_change: "请填写故障说明或维修结果，长度不超过两千字。",
+  invalid_condition_date:
+    "实际日期须有效，不能晚于东八区今天，也不能早于最近交接或状况变更日期。",
+  asset_condition_conflict: "设备情况已变化，请刷新设备情况后重新核对。",
+  asset_condition_transition:
+    "仅可为在管有效设备登记故障或恢复正常，请刷新核对当前状况。",
   invalid_extension_date: "新期限须晚于原期限，且不能早于东八区今天。",
   assignment_not_temporary: "设备已不属于当前临时领用，请重新读取设备情况。",
   assignment_conflict: "设备或期限已变化，请刷新设备情况后重新核对延期。",
   invalid_document: "单据资料不符合要求，请核对字段与明细数量。",
   invalid_document_item: "请核对设备明细、实际状况；故障设备须填写说明。",
-  invalid_document_date: "交接日期不能晚于今天，也不能早于设备最近一次流转。",
+  invalid_document_date:
+    "交接日期不能晚于今天，也不能早于设备最近一次流转或故障、维修记录。",
   incomplete_document: "请补齐交接日期、实际移交人、接收人和设备明细。",
   invalid_document_parties: "请核对交接双方、负责人及退回说明。",
   invalid_transfer_parties:
@@ -349,6 +356,7 @@ export async function inventoryRpc(
     | "initialize_asset"
     | "list_due_assets"
     | "extend_assignment"
+    | "change_asset_condition"
     | "list_documents"
     | "get_document"
     | "save_document"

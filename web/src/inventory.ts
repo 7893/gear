@@ -104,6 +104,22 @@ export async function extendAssignment(
 export async function listParties(): Promise<Party[]> {
   return (await inventoryRpc("list_parties")) as Party[];
 }
+export async function changeAssetCondition(
+  asset: Asset,
+  targetCondition: Asset["condition"],
+  occurredOn: string,
+  reason: string,
+  requestId: string,
+): Promise<Asset> {
+  return (await inventoryRpc("change_asset_condition", {
+    asset_id: asset.id,
+    expected_version: asset.version,
+    target_condition: targetCondition,
+    occurred_on: occurredOn,
+    reason,
+    request_id: requestId,
+  })) as Asset;
+}
 export async function createParty(
   details: PartyInput,
   requestId: string,
