@@ -14,6 +14,7 @@ import {
   cancelEvidence,
   archiveEvidence,
   emptyHints,
+  evidenceStates,
   type Attachment,
   type EvidenceList,
   type EvidenceHints,
@@ -457,13 +458,8 @@ async function archive() {
     </button>
     <template v-if="records">
       <p>
-        凭证状态：{{
-          records.evidence_state === "archived"
-            ? "已归档"
-            : records.evidence_state === "awaiting_review"
-              ? "待核对"
-              : "待回传"
-        }}；有效原件 {{ activeFiles.length }} 个。
+        凭证状态：{{ evidenceStates[records.evidence_state] }}；有效原件
+        {{ activeFiles.length }} 个。
       </p>
       <div v-if="canEdit" class="evidence-upload">
         <h3>上传签字原件</h3>

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 import { blankDetails, type FlowDocument } from "../src/flows-model.js";
 import { extractHints, type Attachment } from "../src/evidence-model.js";
 const id = (n: number) =>
@@ -73,6 +74,10 @@ async function fixture(
   let release: (() => void) | undefined;
   let image: Buffer = Buffer.alloc(0);
   let denyDownload = false;
+  let exportDocs: FlowDocument[] | null = null;
+  const exportItems = new Map<string, Attachment[]>();
+  let exportFailure: string | null = null;
+  let versionDrift = false;
   const calls: { name: string; body: Record<string, unknown> }[] = [];
   const uploads: Buffer[] = [];
   const externalRequests: string[] = [];
@@ -190,11 +195,17 @@ async function fixture(
         hold = false;
         await new Promise<void>((resolve) => (release = resolve));
       }
+      if (body.document_id === exportFailure)
+        return route.fulfill({
+          status: 403,
+          json: { message: "private attachment diagnostic" },
+        });
+      const target = exportDocs?.find((d) => d.id === body.document_id) || doc;
       return route.fulfill({
         json: {
-          document_version: doc.version,
-          evidence_state: doc.evidence_state,
-          items,
+          document_version: target.version + (versionDrift ? 1 : 0),
+          evidence_state: target.evidence_state,
+          items: exportItems.get(String(body.document_id)) ?? items,
           history: [],
         },
       });
@@ -223,10 +234,23 @@ async function fixture(
       }));
       return route.fulfill({ json: { evidence_state: "archived" } });
     }
-    if (name === "list_documents")
+    if (name === "list_documents") {
+      const visible = exportDocs?.filter(
+        (d) =>
+          (d.status !== "draft" ||
+            role === "admin" ||
+            (role === "operator" && d.created_by === user.id)) &&
+          (!body.state || d.status === body.state) &&
+          (!body.kind || d.kind === body.kind) &&
+          (!body.search || d.document_no?.includes(String(body.search))),
+      );
       return route.fulfill({
-        json: [doc, { ...doc, id: id(11), document_no: "LR-20200101-0002" }],
+        json: visible ?? [
+          doc,
+          { ...doc, id: id(11), document_no: "LR-20200101-0002" },
+        ],
       });
+    }
     if (name === "update_attachment") {
       const changes = body.changes as Record<string, unknown>;
       items = items.map((a) => ({
@@ -263,6 +287,11 @@ async function fixture(
     disable: () => (active = false),
     setImage: (value: Buffer) => (image = value),
     denyDownload: () => (denyDownload = true),
+    setExportDocs: (value: FlowDocument[]) => (exportDocs = value),
+    setExportItems: (docId: string, value: Attachment[]) =>
+      exportItems.set(docId, value),
+    failExport: (docId: string | null) => (exportFailure = docId),
+    driftExport: (value: boolean) => (versionDrift = value),
   };
 }
 async function login(page: Page) {
@@ -541,3 +570,292 @@ test("recognition text is data and never parses arbitrary URLs as document ident
     ]),
   ).toEqual({ document_ids: [], document_numbers: ["FF-20200101-0002"] });
 });
+
+function exportDocuments(): FlowDocument[] {
+  const confirmed = {
+    ...document(),
+    evidence_state: "archived",
+    item_count: 7,
+    created_at: "2020-01-01T16:30:00Z",
+    remarks: "=1+1",
+  };
+  confirmed.parties_snapshot!.from_label = "冻结的交付方";
+  return [
+    confirmed,
+    {
+      ...document(),
+      id: id(11),
+      document_no: "LR-20200101-0002",
+      status: "voided",
+      void_reason: "示例误录",
+      evidence_state: "awaiting_review",
+      item_count: 2,
+    },
+    {
+      ...document(),
+      id: id(12),
+      document_no: null,
+      status: "draft",
+      confirmed_at: null,
+      parties_snapshot: null,
+      header_snapshot: null,
+      evidence_state: null,
+      item_count: 1,
+    },
+    {
+      ...document(),
+      id: id(13),
+      created_by: id(2),
+      document_no: null,
+      status: "draft",
+      confirmed_at: null,
+      parties_snapshot: null,
+      header_snapshot: null,
+      evidence_state: null,
+      item_count: 1,
+    },
+  ];
+}
+async function csvDownload(page: Page, name: string) {
+  const pending = page.waitForEvent("download");
+  await page.getByRole("button", { name, exact: true }).click();
+  const download = await pending;
+  const bytes = await readFile((await download.path())!);
+  expect([...bytes.subarray(0, 3)]).toEqual([239, 187, 191]);
+  return { text: bytes.toString("utf8"), name: download.suggestedFilename() };
+}
+for (const role of ["admin", "operator", "viewer"]) {
+  test(`${role} exports visible document snapshots and sends fresh filters without attachment requests`, async ({
+    page,
+  }) => {
+    const f = await fixture(page, role, false);
+    f.setExportDocs(exportDocuments());
+    await login(page);
+    await page.goto("/#/documents");
+    await expect(
+      page.getByRole("heading", { name: "单据记录", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "导出附件关联 CSV", exact: true }),
+    ).toHaveCount(0);
+    const before = f.calls.length;
+    const csv = await csvDownload(page, "导出单据 CSV");
+    expect(csv.name).toMatch(/^单据清单-\d{4}-\d{2}-\d{2}\.csv$/);
+    expect(csv.text).toContain('"LR-20200101-0001","领入","已确认"');
+    expect(csv.text).toContain('"冻结的交付方"');
+    expect(csv.text).toContain('"已归档"');
+    expect(csv.text).toContain('"7"');
+    expect(csv.text).toMatch(/2020年1月2日.*00:30/);
+    expect(csv.text).toContain('"\'=1+1"');
+    expect(csv.text).toContain('"示例误录"');
+    const rows = role === "admin" ? 4 : role === "operator" ? 3 : 2;
+    expect(csv.text.split("\r\n")).toHaveLength(rows + 2);
+    expect(csv.text.includes('"不适用（草稿）"')).toBe(role !== "viewer");
+    if (role !== "admin") expect(csv.text).not.toContain('"' + id(13) + '"');
+    expect(f.calls.slice(before).map((c) => c.name)).toEqual([
+      "list_documents",
+    ]);
+    await page.getByLabel("搜索单据", { exact: true }).fill("0002");
+    await page
+      .getByRole("combobox", { name: "单据状态", exact: true })
+      .selectOption("voided");
+    const filtered = await csvDownload(page, "导出单据 CSV");
+    expect(filtered.text).not.toContain("LR-20200101-0001");
+    expect(filtered.text).toContain("LR-20200101-0002");
+    expect(f.calls.at(-1)).toEqual({
+      name: "list_documents",
+      body: { search: "0002", kind: null, state: "voided" },
+    });
+  });
+}
+
+test("attachment CSV retains visible inactive and pending records with associations but no private paths or original downloads", async ({
+  page,
+}) => {
+  const f = await fixture(page, "admin");
+  f.setExportDocs(exportDocuments().slice(0, 2));
+  f.setExportItems(id(10), [
+    {
+      ...attachment(),
+      review_state: "accepted",
+      source_kind: "external",
+      external_reference: "00007/A",
+      original_name: '示例,"签字件".png',
+    },
+    {
+      ...attachment(),
+      id: id(21),
+      is_active: false,
+      review_state: "rejected",
+      original_name: "已替换.pdf",
+      correction_reason: "示例关联更正",
+    },
+    {
+      ...attachment(),
+      id: id(22),
+      upload_state: "pending",
+      uploaded_at: null,
+      size_bytes: null,
+      page_count: null,
+      sha256: null,
+      original_name: "=待上传.png",
+    },
+  ]);
+  f.setExportItems(id(11), [
+    {
+      ...attachment(),
+      id: id(23),
+      document_id: id(11),
+      original_name: "作废单原件.png",
+    },
+  ]);
+  await login(page);
+  await page.goto("/#/documents");
+  await expect(page.locator("tbody tr")).toHaveCount(2);
+  const before = f.calls.length;
+  const csv = await csvDownload(page, "导出附件关联 CSV");
+  expect(csv.name).toMatch(/^附件关联清单-\d{4}-\d{2}-\d{2}\.csv$/);
+  expect(csv.text.split("\r\n")).toHaveLength(6);
+  expect(csv.text).toContain(
+    '"示例,""签字件"".png","已上传","已核对","有效","外部凭证","00007/A"',
+  );
+  expect(csv.text).toContain('"已替换.pdf","已上传","已驳回","已停用"');
+  expect(csv.text).toContain('"\'=待上传.png","上传中"');
+  expect(csv.text).toContain('"作废单原件.png"');
+  expect(csv.text).toContain('"LR-20200101-0002","领入","已作废"');
+  expect(csv.text).toContain('"' + id(23) + '"');
+  expect(csv.text).not.toContain("example/immutable");
+  expect(csv.text).not.toMatch(/https?:\/\//);
+  expect(f.calls.slice(before).map((c) => c.name)).toEqual([
+    "list_documents",
+    "list_evidence",
+    "list_evidence",
+  ]);
+  expect(f.uploads).toHaveLength(0);
+  expect(f.externalRequests).toEqual([]);
+});
+
+test("one denied attachment read, version drift or mismatched association fails the entire export and retry starts fresh", async ({
+  page,
+}) => {
+  const f = await fixture(page, "viewer");
+  f.setExportDocs(exportDocuments().slice(0, 2));
+  f.setExportItems(id(10), [attachment()]);
+  f.setExportItems(id(11), []);
+  await login(page);
+  await page.goto("/#/documents");
+  await expect(page.locator("tbody tr")).toHaveCount(2);
+  let downloads = 0;
+  page.on("download", () => downloads++);
+  f.failExport(id(11));
+  await page
+    .getByRole("button", { name: "导出附件关联 CSV", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText("导出失败");
+  await expect(page.getByText("private attachment diagnostic")).toHaveCount(0);
+  expect(downloads).toBe(0);
+  f.failExport(null);
+  f.driftExport(true);
+  await page
+    .getByRole("button", { name: "导出附件关联 CSV", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText("单据已被修改或处理");
+  expect(downloads).toBe(0);
+  f.driftExport(false);
+  f.setExportItems(id(10), [{ ...attachment(), document_id: id(11) }]);
+  await page
+    .getByRole("button", { name: "导出附件关联 CSV", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText("单据已被修改或处理");
+  expect(downloads).toBe(0);
+  f.setExportItems(id(10), [attachment()]);
+  const csv = await csvDownload(page, "导出附件关联 CSV");
+  expect(csv.text.split("\r\n")).toHaveLength(3);
+  expect(csv.text).toContain("示例签字件.png");
+  expect(downloads).toBe(1);
+});
+
+test("empty document or attachment results produce headers without claiming failed or missing reads succeeded", async ({
+  page,
+}) => {
+  const f = await fixture(page, "viewer");
+  f.setExportDocs([]);
+  await login(page);
+  await page.goto("/#/documents");
+  await expect(
+    page.getByText("暂无符合条件的单据。", { exact: true }),
+  ).toBeVisible();
+  const before = f.calls.filter((c) => c.name === "list_evidence").length;
+  expect(
+    (await csvDownload(page, "导出单据 CSV")).text.split("\r\n"),
+  ).toHaveLength(2);
+  expect(
+    (await csvDownload(page, "导出附件关联 CSV")).text.split("\r\n"),
+  ).toHaveLength(2);
+  expect(f.calls.filter((c) => c.name === "list_evidence")).toHaveLength(
+    before,
+  );
+  f.setExportDocs([document()]);
+  f.setExportItems(id(10), []);
+  expect(
+    (await csvDownload(page, "导出附件关联 CSV")).text.split("\r\n"),
+  ).toHaveLength(2);
+});
+
+for (const reason of ["revoked", "route changed"]) {
+  test(`pending attachment export stops subsequent reads and download when ${reason}`, async ({
+    page,
+  }) => {
+    const f = await fixture(page, "admin");
+    f.setExportDocs(exportDocuments().slice(0, 2));
+    f.setExportItems(id(10), [attachment()]);
+    f.setExportItems(id(11), []);
+    await login(page);
+    await page.goto("/#/documents");
+    await expect(page.locator("tbody tr")).toHaveCount(2);
+    let downloads = 0;
+    page.on("download", () => downloads++);
+    f.hold();
+    const before = f.calls.filter((c) => c.name === "list_evidence").length;
+    await page
+      .getByRole("button", { name: "导出附件关联 CSV", exact: true })
+      .click();
+    await expect
+      .poll(() => f.calls.filter((c) => c.name === "list_evidence").length)
+      .toBe(before + 1);
+    await expect(
+      page.getByRole("button", { name: "正在导出…", exact: true }),
+    ).toBeDisabled();
+    if (reason === "revoked") {
+      f.disable();
+      await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+      await expect(
+        page.getByText("当前账号无法执行此操作，请登录或查看账号状态。", {
+          exact: true,
+        }),
+      ).toBeVisible();
+    } else {
+      // Both routes share DocumentsView; its export context must still reset.
+      await page.getByRole("link", { name: "流转办理", exact: true }).click();
+      await expect(
+        page.getByRole("heading", { name: "流转办理", exact: true }),
+      ).toBeVisible();
+    }
+    const response = page.waitForResponse((r) =>
+      r.url().endsWith("/rpc/list_evidence"),
+    );
+    f.release();
+    await (await response).finished();
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    expect(f.calls.filter((c) => c.name === "list_evidence")).toHaveLength(
+      before + 1,
+    );
+    expect(downloads).toBe(0);
+    expect(f.uploads).toHaveLength(0);
+  });
+}

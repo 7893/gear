@@ -866,7 +866,9 @@ test("fault and repair preserve assignment, retry after lost acknowledgement and
     "示例打印时卡纸",
   );
   await form.getByRole("button", { name: "确认登记故障", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("故障已记录");
+  await expect(
+    page.getByRole("status").filter({ hasText: "故障已记录" }),
+  ).toBeVisible();
   await expect(
     form.getByRole("heading", { name: "恢复正常", exact: true }),
   ).toBeVisible();
@@ -892,7 +894,9 @@ test("fault and repair preserve assignment, retry after lost acknowledgement and
     .getByLabel("维修处理结果", { exact: true })
     .fill("示例清理进纸组件并试打正常");
   await form.getByRole("button", { name: "确认恢复正常", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("维修恢复已记录");
+  await expect(
+    page.getByRole("status").filter({ hasText: "维修恢复已记录" }),
+  ).toBeVisible();
   await expect(
     form.getByRole("heading", { name: "登记故障", exact: true }),
   ).toBeVisible();

@@ -7,35 +7,42 @@ const props = defineProps<{
   allowed: boolean;
   disabled?: boolean;
   filename: string;
-  query: () => Promise<CsvFile>;
+  label?: string;
+  description?: string;
+  query: (signal: AbortSignal) => Promise<CsvFile>;
 }>();
 const busy = ref(false);
 const error = ref("");
 const message = ref("");
 let generation = 0;
+let controller: AbortController | null = null;
+function reset() {
+  generation++;
+  controller?.abort();
+  controller = null;
+  busy.value = false;
+  error.value = "";
+  message.value = "";
+}
 watch(
   [
     () => props.allowed,
     () => account.profile?.membership?.id,
     () => account.profile?.membership?.role,
   ],
-  () => {
-    generation++;
-    busy.value = false;
-    error.value = "";
-    message.value = "";
-  },
+  reset,
   { flush: "sync" },
 );
-onBeforeUnmount(() => generation++);
+onBeforeUnmount(reset);
 async function exportList() {
   if (!props.allowed || props.disabled || busy.value) return;
   const current = generation;
+  controller = new AbortController();
   busy.value = true;
   error.value = "";
   message.value = "";
   try {
-    const file = await props.query();
+    const file = await props.query(controller.signal);
     if (current !== generation || !props.allowed) return;
     downloadCsv(file, props.filename);
     message.value = `已生成 ${file.rows.length} 条记录，已交由浏览器下载。`;
@@ -43,7 +50,10 @@ async function exportList() {
     if (current === generation && props.allowed)
       error.value = "导出失败：" + safeError(failure);
   } finally {
-    if (current === generation) busy.value = false;
+    if (current === generation) {
+      busy.value = false;
+      controller = null;
+    }
   }
 }
 </script>
@@ -56,9 +66,11 @@ async function exportList() {
         :disabled="disabled || busy"
         @click="exportList"
       >
-        {{ busy ? "正在导出…" : "导出 CSV" }}
+        {{ busy ? "正在导出…" : label || "导出 CSV" }}
       </button>
-      <span class="muted">按当前筛选条件导出全部结果，不限当前页。</span>
+      <span class="muted">{{
+        description || "按当前筛选条件导出全部结果，不限当前页。"
+      }}</span>
     </ActionGroup>
     <p v-if="error" class="notice error" role="alert">{{ error }}</p>
     <p v-if="message" role="status">{{ message }}</p>

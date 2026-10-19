@@ -11,22 +11,24 @@ import {
 } from "../flows";
 import FlowGate from "../components/FlowGate.vue";
 import ActionGroup from "../components/ActionGroup.vue";
+import ListExport from "../components/ListExport.vue";
+import { evidenceAccess } from "../evidence";
+import { documentCsv, attachmentCsv } from "../document-export";
 const props = defineProps<{ manage?: boolean }>();
 const filters = reactive({
   search: "",
   kind: "",
   state: props.manage ? "draft" : "",
 });
-const { data, loading, error, load } = useAuthorizedQuery(
-  flowAccess,
-  () =>
-    listDocuments({
-      search: filters.search,
-      kind: filters.kind || null,
-      state: filters.state || null,
-    }),
-  [() => props.manage],
-);
+const query = () =>
+  listDocuments({
+    search: filters.search,
+    kind: filters.kind || null,
+    state: filters.state || null,
+  });
+const { data, loading, error, load } = useAuthorizedQuery(flowAccess, query, [
+  () => props.manage,
+]);
 const rows = computed(() => data.value || []);
 </script>
 <template>
@@ -73,6 +75,23 @@ const rows = computed(() => data.value || []);
       >
       <button type="submit" :disabled="loading">查询</button>
     </form>
+    <ListExport
+      :key="'documents-' + !!manage"
+      :allowed="flowAccess"
+      :disabled="loading"
+      filename="单据清单"
+      label="导出单据 CSV"
+      :query="async () => documentCsv(await query())"
+    />
+    <ListExport
+      :key="'attachments-' + !!manage"
+      :allowed="evidenceAccess"
+      :disabled="loading"
+      filename="附件关联清单"
+      label="导出附件关联 CSV"
+      description="按当前单据筛选导出可见附件的关联与核对状态，不含原件。"
+      :query="(signal) => attachmentCsv(query, signal)"
+    />
     <p v-if="loading" role="status">正在读取单据…</p>
     <div v-else-if="error" class="notice error" role="alert">
       {{ error }} <button class="quiet" @click="load">重新读取</button>

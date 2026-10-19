@@ -1,3 +1,8 @@
+export const evidenceStates = {
+  awaiting_upload: "待回传",
+  awaiting_review: "待核对",
+  archived: "已归档",
+};
 export type EvidenceHints = {
   document_ids: string[];
   document_numbers: string[];
