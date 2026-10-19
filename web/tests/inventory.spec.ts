@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 import type { Asset, Party } from "../src/inventory-model.js";
 
 const api = "https://api.example.invalid";
@@ -433,6 +434,189 @@ function paginationAssets() {
     asset_code: "SB-" + String(index + 1).padStart(6, "0"),
   }));
 }
+
+for (const role of ["admin", "operator", "viewer"]) {
+  test(`${role} exports all filtered equipment instead of the current page using a fresh read`, async ({
+    page,
+  }) => {
+    const state = await fixture(page, role);
+    state.assets.splice(0, 1, ...paginationAssets());
+    state.assets[0].legacy_code = "00007";
+    state.assets[0].note = '=HYPERLINK("https://example.invalid")';
+    await login(page);
+    await expect(page.locator("tbody tr")).toHaveCount(20);
+    await page.getByRole("button", { name: "下一页", exact: true }).click();
+    const before = state.calls.filter((c) => c.name === "list_assets").length;
+    const downloadPromise = page.waitForEvent("download");
+    await page.getByRole("button", { name: "导出 CSV", exact: true }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toMatch(
+      /^设备台账-\d{4}-\d{2}-\d{2}\.csv$/,
+    );
+    const bytes = await readFile((await download.path())!);
+    expect([...bytes.subarray(0, 3)]).toEqual([239, 187, 191]);
+    const csv = bytes.toString("utf8");
+    expect(csv).toContain('"SB-000001","00007"');
+    expect(csv).toContain('"SB-000051"');
+    expect(csv).toContain('"\'=HYPERLINK(""https://example.invalid"")"');
+    expect(csv).toContain('"临时使用","","2030-01-01"');
+    expect(csv.split("\r\n")).toHaveLength(53);
+    expect(state.calls.filter((c) => c.name === "list_assets")).toHaveLength(
+      before + 1,
+    );
+    await expect(page.getByLabel("清单导出").getByRole("status")).toContainText(
+      "51 条记录",
+    );
+    await expect(
+      page.getByRole("navigation", { name: "设备分页" }).getByRole("status"),
+    ).toContainText("第 2 / 3 页");
+
+    // Filters changed without pressing query still apply to the export's fresh request.
+    await page.getByLabel("搜索设备", { exact: true }).fill("新条件");
+    await page
+      .getByRole("combobox", { name: "分类", exact: true })
+      .selectOption("printer");
+    state.filterResults([state.assets[50]]);
+    const filteredPromise = page.waitForEvent("download");
+    await page.getByRole("button", { name: "导出 CSV", exact: true }).click();
+    const filtered = (
+      await readFile((await (await filteredPromise).path())!)
+    ).toString("utf8");
+    expect(filtered).toContain('"SB-000051"');
+    expect(filtered).not.toContain('"SB-000001"');
+    expect(state.calls.at(-1)).toEqual({
+      name: "list_assets",
+      body: {
+        search: "新条件",
+        category: "printer",
+        state: null,
+        holder_kind: null,
+      },
+    });
+    expect(
+      state.calls.every((c) =>
+        ["get_my_membership", "list_assets"].includes(c.name),
+      ),
+    ).toBe(true);
+  });
+}
+
+test("due export uses server business date and the selected state, including an empty result", async ({
+  page,
+}) => {
+  const state = await fixture(page, "viewer");
+  state.assets.splice(
+    0,
+    1,
+    ...paginationAssets().map((asset, i) => ({
+      ...asset,
+      due_on: i === 0 ? "2029-12-31" : "2030-01-01",
+    })),
+  );
+  await login(page);
+  await page.getByRole("link", { name: "临时使用与到期", exact: true }).click();
+  await expect(page.locator("tbody tr")).toHaveCount(20);
+  await page
+    .getByRole("combobox", { name: "到期情况", exact: true })
+    .selectOption("today");
+  const pending = page.waitForEvent("download");
+  await page.getByRole("button", { name: "导出 CSV", exact: true }).click();
+  const download = await pending;
+  expect(download.suggestedFilename()).toBe("临时使用清单-2030-01-01.csv");
+  const csv = (await readFile((await download.path())!)).toString("utf8");
+  expect(csv).not.toContain('"SB-000001"');
+  expect(csv).toContain('"SB-000051"');
+  expect(csv).toContain('"今天到期","2030-01-01","3"');
+  expect(csv.split("\r\n")).toHaveLength(52);
+  expect(state.calls.at(-1)).toEqual({
+    name: "list_due_assets",
+    body: { state: "today" },
+  });
+  await page
+    .getByRole("combobox", { name: "到期情况", exact: true })
+    .selectOption("later");
+  const emptyPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "导出 CSV", exact: true }).click();
+  const empty = (await readFile((await (await emptyPromise).path())!)).toString(
+    "utf8",
+  );
+  expect(empty.split("\r\n")).toHaveLength(2);
+  await expect(page.getByLabel("清单导出").getByRole("status")).toContainText(
+    "0 条记录",
+  );
+});
+
+test("failed exports show safe errors and revoked access discards a late export without downloading", async ({
+  page,
+}) => {
+  const state = await fixture(page, "viewer");
+  let downloads = 0;
+  page.on("download", () => downloads++);
+  await login(page);
+  await expect(page.locator("tbody tr")).toHaveCount(1);
+  state.failList(true);
+  await page.getByRole("button", { name: "导出 CSV", exact: true }).click();
+  await expect(page.getByLabel("清单导出").getByRole("alert")).toContainText(
+    "导出失败",
+  );
+  await expect(page.getByText("private database diagnostic")).toHaveCount(0);
+  expect(downloads).toBe(0);
+  state.failList(false);
+  state.holdNextList();
+  await page.getByRole("button", { name: "导出 CSV", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "正在导出…", exact: true }),
+  ).toBeDisabled();
+  state.disable();
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(
+    page.getByText("账号已停用，如需恢复，请联系管理员。"),
+  ).toBeVisible();
+  const response = page.waitForResponse((r) =>
+    r.url().endsWith("/rpc/list_assets"),
+  );
+  state.releaseList();
+  await (await response).finished();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  await expect(
+    page.getByRole("button", { name: "导出 CSV", exact: true }),
+  ).toHaveCount(0);
+  expect(downloads).toBe(0);
+});
+
+test("leaving a page discards its pending export", async ({ page }) => {
+  const state = await fixture(page, "viewer");
+  let downloads = 0;
+  page.on("download", () => downloads++);
+  await login(page);
+  await expect(page.locator("tbody tr")).toHaveCount(1);
+  state.holdNextList();
+  await page.getByRole("button", { name: "导出 CSV", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "正在导出…", exact: true }),
+  ).toBeDisabled();
+  await page.getByRole("link", { name: "临时使用与到期", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "临时使用与到期", exact: true }),
+  ).toBeVisible();
+  const response = page.waitForResponse((r) =>
+    r.url().endsWith("/rpc/list_assets"),
+  );
+  state.releaseList();
+  await (await response).finished();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  expect(downloads).toBe(0);
+});
 
 test("ledger pages all fifty-one devices and supports each page size without refetching", async ({
   page,

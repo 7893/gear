@@ -9,11 +9,15 @@ import {
 } from "../inventory";
 import InventoryGate from "../components/InventoryGate.vue";
 import ListPagination from "../components/ListPagination.vue";
+import ListExport from "../components/ListExport.vue";
+import { dueCsv } from "../inventory-export";
 import { defaultPageSize } from "../pagination";
 const state = ref<DueState | "">("");
 const pageSize = ref(defaultPageSize);
-const { data, error, loading, load } = useAuthorizedQuery(inventoryAccess, () =>
-  listDueAssets(state.value || null),
+const query = () => listDueAssets(state.value || null);
+const { data, error, loading, load } = useAuthorizedQuery(
+  inventoryAccess,
+  query,
 );
 </script>
 <template>
@@ -33,6 +37,12 @@ const { data, error, loading, load } = useAuthorizedQuery(inventoryAccess, () =>
       >
       <button type="submit" :disabled="loading">查询</button>
     </form>
+    <ListExport
+      :allowed="inventoryAccess"
+      :disabled="loading"
+      filename="临时使用清单"
+      :query="async () => dueCsv(await query())"
+    />
     <p v-if="loading" role="status">正在读取临时领用…</p>
     <div v-if="error" class="notice error" role="alert">
       <p>{{ error }}</p>

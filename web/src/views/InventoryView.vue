@@ -12,6 +12,8 @@ import {
 } from "../inventory";
 import InventoryGate from "../components/InventoryGate.vue";
 import ListPagination from "../components/ListPagination.vue";
+import ListExport from "../components/ListExport.vue";
+import { inventoryCsv } from "../inventory-export";
 import { defaultPageSize } from "../pagination";
 const filters = reactive({
   search: "",
@@ -20,13 +22,16 @@ const filters = reactive({
   holder_kind: "",
 });
 const pageSize = ref(defaultPageSize);
-const { data, loading, error, load } = useAuthorizedQuery(inventoryAccess, () =>
+const query = () =>
   listAssets({
     search: filters.search,
     category: filters.category || null,
     state: filters.state || null,
     holder_kind: filters.holder_kind || null,
-  }),
+  });
+const { data, loading, error, load } = useAuthorizedQuery(
+  inventoryAccess,
+  query,
 );
 </script>
 <template>
@@ -77,6 +82,12 @@ const { data, loading, error, load } = useAuthorizedQuery(inventoryAccess, () =>
       >
       <button type="submit" :disabled="loading">查询</button>
     </form>
+    <ListExport
+      :allowed="inventoryAccess"
+      :disabled="loading"
+      filename="设备台账"
+      :query="async () => inventoryCsv(await query())"
+    />
     <p v-if="loading" role="status">正在读取台账…</p>
     <div v-if="error" class="notice error" role="alert">
       <p>{{ error }}</p>
