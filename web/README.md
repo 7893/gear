@@ -61,7 +61,7 @@ pnpm -C web run dev
 
 ## 公共界面与临时领用
 
-接收对象创建已本地统一到 `PartyQuickCreate.vue`，由调用页面提供权限；建账无需启用流转。五个读取入口复用 `useAuthorizedQuery.ts`，集中处理加载、中文错误、失权清空及迟到响应；本轮未增加依赖，发布待单独授权，详见[公共界面实施](../docs/shared-ui-implementation.md)。
+接收对象创建已统一到 `PartyQuickCreate.vue`，由调用页面提供权限；建账无需启用流转。五个读取入口复用 `useAuthorizedQuery.ts`，集中处理加载、中文错误、失权清空及迟到响应；本轮未增加依赖，已获授权通过既有 CI/CD 发布，详见[公共界面实施](../docs/shared-ui-implementation.md)。
 
 操作按钮使用 `components/ActionGroup.vue`；公共样式集中在 `src/style.css`，按钮组统一十二像素间距并允许换行。账号页、账号管理、单据操作及分页已复用，现有链接操作区也采用相同间距规则。
 
