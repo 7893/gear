@@ -67,7 +67,8 @@ try {
     "success",
     { timeout: 15000 },
   );
-  await expect(page.locator("#checked-at")).toContainText("UTC");
+  await expect(page.locator("#checked-at")).toContainText("检测时间：");
+  await expect(page.locator("#checked-at")).not.toContainText(/UTC|东八区/);
   if (
     process.env.SMOKE_EXPECTED_REVISION ||
     process.env.SMOKE_EXPECTED_SCHEMA
