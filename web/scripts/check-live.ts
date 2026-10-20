@@ -36,6 +36,12 @@ try {
   );
   assert.equal(robots.status(), 200);
   assert.match(await robots.text(), /User-agent: \*\s+Disallow: \//);
+  const embedded = await page.locator("#gear-runtime-config").textContent();
+  assert.ok(embedded, "Public startup configuration must travel with HTML");
+  const startupConfig = JSON.parse(embedded) as {
+    release?: string;
+    databaseSchema?: string;
+  };
   const apiPolicy = await page.evaluate(async () => {
     const config = (await (
       await fetch("/runtime-config.json", { cache: "no-store" })
@@ -82,6 +88,8 @@ try {
         configuration.databaseSchema,
         process.env.SMOKE_EXPECTED_SCHEMA,
       );
+    assert.equal(startupConfig.release, configuration.release);
+    assert.equal(startupConfig.databaseSchema, configuration.databaseSchema);
   }
   await page.getByRole("button", { name: "重新检测" }).click();
   await expect(page.locator("#retry")).toBeEnabled({ timeout: 15000 });

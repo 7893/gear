@@ -10,3 +10,9 @@ import_map = "./functions/gear-auth-mail/deno.json"
 verify_jwt = true
 entrypoint = "./functions/gear-evidence/index.ts"
 import_map = "./functions/gear-evidence/deno.json"
+
+# Independent scheduler endpoint; never replace the Auth hook entrypoint.
+[functions.gear-notification-mail]
+verify_jwt = false
+entrypoint = "./functions/gear-auth-mail/notification-index.ts"
+import_map = "./functions/gear-auth-mail/deno.json"

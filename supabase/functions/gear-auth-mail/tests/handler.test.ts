@@ -292,6 +292,18 @@ test("notification links use only the configured HTTPS origin and reject empty d
       () => renderGearNotification({ kind: "application_rejected" }, origin),
       /invalid_app_origin/,
     );
+  const dueReminder = renderGearNotification(
+    {
+      kind: "daily_due",
+      businessDate: "2030-01-01",
+      dueSoon: 1,
+      dueToday: 2,
+      overdue: 3,
+    },
+    "https://app.example.invalid",
+  );
+  assert.match(dueReminder.text, /仅统计本次到达提醒节点的设备/);
+  assert.match(dueReminder.text, /已经逾期：3 件/);
   for (const overdue of [-1, 0, 1.5, Number.NaN])
     assert.throws(
       () =>

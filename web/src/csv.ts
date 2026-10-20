@@ -1,3 +1,4 @@
+import { downloadBlob } from "./download.js";
 export type CsvFile = {
   headers: string[];
   rows: string[][];
@@ -23,17 +24,8 @@ export function csvText(file: CsvFile): string {
 }
 
 export function downloadCsv(file: CsvFile, prefix: string) {
-  const url = URL.createObjectURL(
+  downloadBlob(
     new Blob([csvText(file)], { type: "text/csv;charset=utf-8" }),
+    `${prefix}-${file.businessOn}.csv`,
   );
-  const link = document.createElement("a");
-  try {
-    link.href = url;
-    link.download = `${prefix}-${file.businessOn}.csv`;
-    document.body.append(link);
-    link.click();
-  } finally {
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 0);
-  }
 }

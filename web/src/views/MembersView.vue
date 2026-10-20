@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import FormField from "../components/FormField.vue";
 import ActionGroup from "../components/ActionGroup.vue";
-import { computed, ref, watch } from "vue";
+import { onBeforeUnmount, ref, watch } from "vue";
 import {
   account,
+  adminAccess as isAdmin,
+  requestMemberPasswordReset,
   listMembers,
   setMemberAccess,
   refreshProfile,
@@ -45,12 +48,7 @@ const mailProblems: Record<string, string> = {
 const choices = ref<Record<string, { role: Role; reason: string }>>({});
 const retries = new Map<string, string>();
 let generation = 0;
-const isAdmin = computed(
-  () =>
-    account.profile?.email_verified &&
-    account.profile?.membership?.status === "active" &&
-    account.profile.membership.role === "admin",
-);
+let active = true;
 async function load() {
   const current = ++generation;
   members.value = [];
@@ -85,8 +83,8 @@ async function loadNotifications(current: number) {
   }
 }
 watch(
-  isAdmin,
-  (value) => {
+  [isAdmin, () => account.profile?.membership?.id],
+  ([value]) => {
     if (value) void load();
     else {
       generation++;
@@ -95,10 +93,44 @@ watch(
       notifications.value = null;
       notificationError.value = "";
       loading.value = false;
+      busyId.value = "";
+      notice.value = "";
     }
   },
   { immediate: true },
 );
+onBeforeUnmount(() => {
+  active = false;
+  generation++;
+});
+async function requestReset(member: Member) {
+  if (
+    busyId.value ||
+    !isAdmin.value ||
+    !account.recoveryEnabled ||
+    !window.confirm(
+      "向该账号本人的邮箱发送六位找回验证码？不会替对方设置密码，也不会变更其权限。",
+    )
+  )
+    return;
+  const current = generation;
+  busyId.value = member.id;
+  error.value = "";
+  notice.value = "";
+  try {
+    await requestMemberPasswordReset(member);
+    if (current === generation && isAdmin.value)
+      notice.value =
+        "已提交找回验证码请求。请对方查收本人邮箱，并在找回密码页面选择“已有找回验证码”完成验证和设密。";
+  } catch (failure) {
+    if (current === generation && isAdmin.value)
+      error.value =
+        safeError(failure) +
+        " 若连接中断，邮件可能已发送，请先让对方查收；系统不会自动重发。";
+  } finally {
+    if (current === generation) busyId.value = "";
+  }
+}
 async function review(member: Member, status: MemberStatus) {
   if (busyId.value || !isAdmin.value) return;
   const choice = choices.value[member.id];
@@ -119,18 +151,33 @@ async function review(member: Member, status: MemberStatus) {
   const requestId = retries.get(signature) || crypto.randomUUID();
   retries.set(signature, requestId);
   busyId.value = member.id;
+  const current = generation;
+  const actorId = account.profile?.membership?.id;
   error.value = "";
   notice.value = "";
   try {
     await setMemberAccess(member, status, role, choice.reason, requestId);
+    if (!active || current !== generation || !isAdmin.value) return;
     retries.delete(signature);
-    notice.value = "账号处理已保存。";
     await refreshProfile();
-    if (isAdmin.value) await load();
+    if (
+      active &&
+      isAdmin.value &&
+      actorId === account.profile?.membership?.id
+    ) {
+      await load();
+      if (
+        active &&
+        isAdmin.value &&
+        actorId === account.profile?.membership?.id
+      )
+        notice.value = "账号处理已保存。";
+    }
   } catch (failure) {
-    error.value = safeError(failure);
+    if (active && isAdmin.value && actorId === account.profile?.membership?.id)
+      error.value = safeError(failure);
   } finally {
-    busyId.value = "";
+    if (active) busyId.value = "";
   }
 }
 </script>
@@ -166,25 +213,38 @@ async function review(member: Member, status: MemberStatus) {
       <div>
         <h2>{{ member.display_name }}</h2>
         <p class="muted">{{ member.email || "认证身份已不存在" }}</p>
+        <p v-if="member.contact_phone" class="muted">
+          联系手机号：{{ member.contact_phone }}（未验证）
+        </p>
         <span class="status-badge">{{ statusLabels[member.status] }}</span>
       </div>
-      <label
-        >角色<select
-          v-model="choices[member.id].role"
-          :disabled="member.status === 'rejected' || !!busyId"
-        >
-          <option v-for="(label, role) in roleLabels" :key="role" :value="role">
-            {{ label }}
-          </option>
-        </select></label
-      >
-      <label
-        >处理原因<input
-          v-model="choices[member.id].reason"
-          maxlength="500"
-          :disabled="!!busyId"
-      /></label>
+      <FormField
+        label="角色"
+        v-model="choices[member.id].role"
+        :disabled="member.status === 'rejected' || !!busyId"
+        :options="roleLabels"
+      />
+      <FormField
+        label="处理原因"
+        v-model="choices[member.id].reason"
+        maxlength="500"
+        :disabled="!!busyId"
+      />
       <ActionGroup class="row-actions">
+        <button
+          v-if="
+            account.recoveryEnabled &&
+            member.status === 'active' &&
+            member.email_verified &&
+            member.identity_exists
+          "
+          class="quiet"
+          type="button"
+          :disabled="!!busyId"
+          @click="requestReset(member)"
+        >
+          发送找回验证码
+        </button>
         <template v-if="member.status === 'pending'"
           ><button
             type="button"
@@ -266,14 +326,16 @@ async function review(member: Member, status: MemberStatus) {
             {{
               item.notification_type === "application_pending"
                 ? "新申请提醒"
-                : "审核结果通知"
+                : item.notification_type === "daily_due"
+                  ? "到期提醒汇总"
+                  : "审核结果通知"
             }}：{{ mailStates[item.status] }}，已尝试
             {{ item.attempt_count }} 次<span v-if="item.error_code"
               >；{{ mailProblems[item.error_code] || "需要维护者检查" }}</span
             >
           </li>
         </ul>
-        <p v-else>暂无审核通知记录。</p>
+        <p v-else>暂无通知记录。</p>
       </template>
     </section>
   </section>

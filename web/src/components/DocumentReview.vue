@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { account, safeError } from "../accounts";
-import { requestFor, timestamp } from "../inventory";
+import QueryState from "./QueryState.vue";
+import FormField from "./FormField.vue";
+import { computed, ref } from "vue";
+import { safeError } from "../accounts";
+import { timestamp } from "../inventory";
 import {
   flowAdminAccess,
   listDocuments,
   reviewDocument,
   type FlowDocument,
 } from "../flows";
+import { useAuthorizedAction } from "../useAuthorizedAction";
 import { useAuthorizedQuery } from "../useAuthorizedQuery";
 import ActionGroup from "./ActionGroup.vue";
 const props = defineProps<{ document: FlowDocument }>();
@@ -20,10 +23,6 @@ const reason = ref("");
 const correction = ref("");
 const replacement = ref("");
 const acknowledged = ref(false);
-const busy = ref(false);
-const error = ref("");
-const requests = new Map<string, string>();
-let generation = 0;
 const replacementAccess = computed(
   () => eligible.value && action.value === "correct_document",
 );
@@ -51,30 +50,23 @@ const candidates = computed(() =>
         (d.confirmed_at || "") >= props.document.confirmed_at),
   ),
 );
-function clear() {
+function clearForm() {
   action.value = null;
   reason.value = "";
   correction.value = "";
   replacement.value = "";
   acknowledged.value = false;
-  error.value = "";
 }
-watch(
-  [
-    eligible,
-    () => account.profile?.membership?.id,
-    () => props.document.id,
-    () => props.document.version,
-  ],
-  () => {
-    generation++;
-    busy.value = false;
-    clear();
-    requests.clear();
-  },
-  { flush: "sync" },
+const {
+  busy,
+  error,
+  run,
+  reset: clear,
+} = useAuthorizedAction(
+  eligible,
+  [() => props.document.id, () => props.document.version],
+  clearForm,
 );
-onBeforeUnmount(() => generation++);
 async function submit() {
   if (!eligible.value || !action.value || busy.value) return;
   if (
@@ -91,7 +83,6 @@ async function submit() {
     return;
   }
   if (action.value === "void_document" && !acknowledged.value) return;
-  const current = generation;
   const payload = {
     id: props.document.id,
     version: props.document.version,
@@ -100,24 +91,19 @@ async function submit() {
     correction: correction.value.trim(),
     replacement: replacement.value || null,
   };
-  busy.value = true;
-  error.value = "";
-  try {
-    await reviewDocument(
-      props.document,
-      payload.action,
-      payload.reason,
-      payload.correction,
-      payload.replacement,
-      requestFor(requests, payload),
-    );
-    if (current === generation && eligible.value) emit("changed");
-  } catch (failure) {
-    if (current === generation && eligible.value)
-      error.value = safeError(failure);
-  } finally {
-    if (current === generation) busy.value = false;
-  }
+  void run(
+    payload,
+    (id) =>
+      reviewDocument(
+        props.document,
+        payload.action,
+        payload.reason,
+        payload.correction,
+        payload.replacement,
+        id,
+      ),
+    () => emit("changed"),
+  );
 }
 </script>
 <template>
@@ -145,31 +131,31 @@ async function submit() {
       <p v-else class="notice">
         更正说明与原单关联保留，不覆盖打印快照或签字原件，不改变设备去向、数量或期限。真实设备变化仍需办理对应业务。
       </p>
-      <label
-        >处理原因<textarea
-          v-model="reason"
-          required
-          maxlength="2000"
-          :disabled="busy"
-        />
-      </label>
+      <FormField
+        label="处理原因"
+        v-model="reason"
+        required
+        maxlength="2000"
+        :disabled="busy"
+        type="textarea"
+      />
       <template v-if="action === 'correct_document'">
-        <label
-          >更正说明<textarea
-            v-model="correction"
-            required
-            maxlength="4000"
-            :disabled="busy"
-            placeholder="写明原记录有误的内容、正确事实及涉及的设备编号"
-          />
-        </label>
-        <p v-if="loading" role="status">正在读取可关联单据…</p>
-        <div v-if="listError" class="notice error" role="alert">
-          {{ listError }}
-          <button type="button" class="quiet" @click="load">
-            重新读取可关联单据
-          </button>
-        </div>
+        <FormField
+          label="更正说明"
+          v-model="correction"
+          required
+          maxlength="4000"
+          :disabled="busy"
+          placeholder="写明原记录有误的内容、正确事实及涉及的设备编号"
+          type="textarea"
+        />
+        <QueryState
+          :loading="loading"
+          :error="listError"
+          loading-text="正在读取可关联单据…"
+          retry-label="重新读取可关联单据"
+          @retry="load"
+        />
         <label
           >关联替代单（可选）<select
             v-model="replacement"

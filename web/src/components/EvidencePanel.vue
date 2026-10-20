@@ -1,8 +1,17 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { account, safeError } from "../accounts";
+import QueryState from "./QueryState.vue";
+import FormField from "./FormField.vue";
+import { computed, ref, watch } from "vue";
+import { account } from "../accounts";
 import { timestamp } from "../inventory";
 import { listDocuments, type FlowDocument } from "../flows";
+import { useAuthorizedQuery } from "../useAuthorizedQuery";
+import {
+  useAuthorizedAction,
+  type AuthorizedOperation,
+} from "../useAuthorizedAction";
+import { downloadBlob } from "../download";
+import ActionGroup from "./ActionGroup.vue";
 import {
   evidenceAccess,
   evidenceWrite,
@@ -16,17 +25,20 @@ import {
   emptyHints,
   evidenceStates,
   type Attachment,
-  type EvidenceList,
   type EvidenceHints,
   type Candidate,
 } from "../evidence";
 const props = defineProps<{ document: FlowDocument }>();
 const emit = defineEmits<{ changed: [] }>();
-const records = ref<EvidenceList | null>(null);
-const loading = ref(false),
-  busy = ref(false),
-  error = ref(""),
-  message = ref("");
+const {
+  data: records,
+  loading,
+  error: readError,
+  refresh,
+} = useAuthorizedQuery(evidenceAccess, () => listEvidence(props.document.id), [
+  () => props.document.id,
+]);
+const message = ref("");
 const selected = ref<File | null>(null),
   recognition = ref<EvidenceHints>(emptyHints()),
   candidates = ref<Candidate[]>([]),
@@ -55,14 +67,21 @@ const editing = ref<Attachment | null>(null),
   correctionReference = ref(""),
   reason = ref("");
 const targets = ref<FlowDocument[]>([]);
-let generation = 0;
-let controller = new AbortController();
-const requests = new Map<string, string>();
+const {
+  busy,
+  error: actionError,
+  run,
+  requestId,
+} = useAuthorizedAction(evidenceAccess, [() => props.document.id], resetForm);
+const error = computed(() => actionError.value || readError.value);
+// An uncertain upload must retain its original version as well as its nonce.
 let attempt: { signature: string; version: number; id: string } | null = null;
+const writable = computed(
+  () => evidenceWrite.value && props.document.status === "confirmed",
+);
 const canEdit = computed(
   () =>
-    evidenceWrite.value &&
-    props.document.status === "confirmed" &&
+    writable.value &&
     (records.value?.evidence_state !== "archived" ||
       account.profile?.membership?.role === "admin"),
 );
@@ -91,26 +110,14 @@ const manualRequired = computed(() =>
     );
   }),
 );
-const writable = computed(
-  () => evidenceWrite.value && props.document.status === "confirmed",
-);
-function request(key: string) {
-  if (!requests.has(key)) requests.set(key, crypto.randomUUID());
-  return requests.get(key)!;
-}
 function closePreview() {
   if (preview.value) URL.revokeObjectURL(preview.value.url);
   preview.value = null;
 }
-function reset() {
-  generation++;
-  controller.abort();
-  controller = new AbortController();
-  records.value = null;
+function resetForm() {
   selected.value = null;
   recognition.value = emptyHints();
   candidates.value = [];
-  error.value = "";
   message.value = "";
   progress.value = "";
   checks.value = {
@@ -128,80 +135,59 @@ function reset() {
   editing.value = null;
   targets.value = [];
   reason.value = "";
-  loading.value = false;
-  busy.value = false;
   closePreview();
-  requests.clear();
-}
-async function reload() {
-  const stamp = generation;
-  if (!evidenceAccess.value) return;
-  loading.value = true;
-  error.value = "";
-  try {
-    const result = await listEvidence(props.document.id);
-    if (stamp === generation && evidenceAccess.value) {
-      records.value = result;
-      checks.value = {
-        signatures: false,
-        number: false,
-        content: false,
-        pages: false,
-      };
-    }
-  } catch (e) {
-    if (stamp === generation) error.value = safeError(e);
-  } finally {
-    if (stamp === generation) loading.value = false;
-  }
 }
 watch(
-  [
-    evidenceAccess,
-    () => props.document.id,
-    () => account.profile?.membership?.id,
-    () => account.profile?.membership?.role,
-  ],
+  records,
   () => {
-    reset();
-    if (evidenceAccess.value) void reload();
+    checks.value = {
+      signatures: false,
+      number: false,
+      content: false,
+      pages: false,
+    };
   },
-  { immediate: true },
+  { flush: "sync" },
 );
-onBeforeUnmount(reset);
+function reload() {
+  actionError.value = "";
+  return refresh();
+}
+function perform(
+  payload: unknown,
+  action: AuthorizedOperation<void>,
+  onFailure?: (failure: unknown) => void,
+) {
+  if (!evidenceAccess.value || busy.value) return;
+  message.value = "";
+  return run(payload, action, undefined, onFailure);
+}
 async function choose(event: Event) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
   input.value = "";
   if (!file || !canEdit.value || busy.value) return;
-  const stamp = generation;
-  busy.value = true;
-  error.value = "";
-  message.value = "";
   selected.value = file;
   recognition.value = emptyHints();
   candidates.value = [];
   associationConfirmed.value = false;
   attempt = null;
   progress.value = "正在读取文件…";
-  try {
-    const engine = await import("../evidence-recognition");
-    const result = await engine.recognizeEvidence(
-      file,
-      controller.signal,
-      (s) => {
-        if (stamp === generation) progress.value = s;
-      },
-    );
-    if (stamp !== generation || !canEdit.value) return;
-    recognition.value = result.hints;
-    progress.value = `共 ${result.pages} 页；${result.hints.document_ids.length + result.hints.document_numbers.length ? "已找到编号线索，请核对候选。" : "未识别到编号，可上传后人工关联和核对。"}`;
-    const matched = await matchEvidence(result.hints);
-    if (stamp === generation && canEdit.value) candidates.value = matched;
-  } catch (e) {
-    if (stamp === generation) {
-      error.value = safeError(e);
-      const code = e instanceof Error ? e.message : "";
+  await perform(
+    { action: "choose" },
+    async (_, signal, isCurrent) => {
+      const engine = await import("../evidence-recognition");
+      const result = await engine.recognizeEvidence(file, signal, (s) => {
+        if (isCurrent()) progress.value = s;
+      });
+      if (!isCurrent() || !canEdit.value) return;
+      recognition.value = result.hints;
+      progress.value = `共 ${result.pages} 页；${result.hints.document_ids.length + result.hints.document_numbers.length ? "已找到编号线索，请核对候选。" : "未识别到编号，可上传后人工关联和核对。"}`;
+      const matched = await matchEvidence(result.hints);
+      if (isCurrent() && canEdit.value) candidates.value = matched;
+    },
+    (failure) => {
+      const code = failure instanceof Error ? failure.message : "";
       if (
         [
           "evidence_file_too_large",
@@ -215,24 +201,8 @@ async function choose(event: Event) {
         selected.value = null;
       else
         progress.value = "识别或匹配未完成，可以重试识别，或上传后人工核对。";
-    }
-  } finally {
-    if (stamp === generation) busy.value = false;
-  }
-}
-async function perform(action: () => Promise<void>) {
-  const stamp = generation;
-  if (!evidenceAccess.value || busy.value) return;
-  busy.value = true;
-  error.value = "";
-  message.value = "";
-  try {
-    await action();
-  } catch (e) {
-    if (stamp === generation) error.value = safeError(e);
-  } finally {
-    if (stamp === generation) busy.value = false;
-  }
+    },
+  );
 }
 async function upload() {
   if (
@@ -258,94 +228,92 @@ async function upload() {
       version: records.value.document_version,
       id: crypto.randomUUID(),
     };
-  const current = attempt;
-  const stamp = generation;
-  await perform(async () => {
-    await uploadEvidence(
-      file,
-      props.document.id,
-      current.version,
-      current.id,
-      recognition.value,
-      source.value,
-      reference.value,
-      uploadReason.value,
-      controller.signal,
-    );
-    if (stamp !== generation || !evidenceAccess.value) return;
-    selected.value = null;
-    attempt = null;
-    message.value = "原件已保存，待人工核对；尚未归档。";
-    await reload();
-    if (stamp === generation) emit("changed");
-  });
+  const frozen = attempt;
+  await perform(
+    { action: "upload", id: frozen.id },
+    async (_, signal, isCurrent) => {
+      await uploadEvidence(
+        file,
+        props.document.id,
+        frozen.version,
+        frozen.id,
+        recognition.value,
+        source.value,
+        reference.value,
+        uploadReason.value,
+        signal,
+      );
+      if (!isCurrent()) return;
+      selected.value = null;
+      attempt = null;
+      message.value = "原件已保存，待人工核对；尚未归档。";
+      await reload();
+      if (isCurrent()) emit("changed");
+    },
+  );
 }
 async function show(item: Attachment, page = 1) {
-  const stamp = generation;
-  await perform(async () => {
-    const blob =
-      preview.value?.item.id === item.id
-        ? preview.value.blob
-        : await downloadEvidence(item.id, controller.signal);
-    if (stamp !== generation || !evidenceAccess.value) return;
-    const engine = await import("../evidence-recognition");
-    const rendered = await engine.previewPage(
-      blob,
-      item.media_type!,
-      page,
-      controller.signal,
-    );
-    if (stamp !== generation || !evidenceAccess.value) {
-      URL.revokeObjectURL(rendered.url);
-      return;
-    }
-    closePreview();
-    preview.value = {
-      item,
-      blob,
-      url: rendered.url,
-      page,
-      pages: rendered.pages,
-    };
-  });
+  await perform(
+    { action: "preview", id: item.id, page },
+    async (_, signal, isCurrent) => {
+      const blob =
+        preview.value?.item.id === item.id
+          ? preview.value.blob
+          : await downloadEvidence(item.id, signal);
+      if (!isCurrent()) return;
+      const engine = await import("../evidence-recognition");
+      const rendered = await engine.previewPage(
+        blob,
+        item.media_type!,
+        page,
+        signal,
+      );
+      if (!isCurrent()) {
+        URL.revokeObjectURL(rendered.url);
+        return;
+      }
+      closePreview();
+      preview.value = {
+        item,
+        blob,
+        url: rendered.url,
+        page,
+        pages: rendered.pages,
+      };
+    },
+  );
 }
 async function download(item: Attachment) {
-  const stamp = generation;
-  await perform(async () => {
-    const blob = await downloadEvidence(item.id, controller.signal);
-    if (stamp !== generation || !evidenceAccess.value) return;
-    const url = URL.createObjectURL(blob),
-      a = document.createElement("a");
-    a.href = url;
-    a.download = item.original_name;
-    a.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  });
+  await perform(
+    { action: "download", id: item.id },
+    async (_, signal, isCurrent) => {
+      const blob = await downloadEvidence(item.id, signal);
+      if (isCurrent()) downloadBlob(blob, item.original_name);
+    },
+  );
 }
 async function cancel(item: Attachment) {
   if (!writable.value) return;
-  const stamp = generation;
-  await perform(async () => {
-    await cancelEvidence(
-      item,
-      request("cancel:" + item.id + ":" + item.version),
-    );
-    if (stamp === generation) await reload();
-  });
+  await perform(
+    { action: "cancel", id: item.id, version: item.version },
+    async (id, _, isCurrent) => {
+      await cancelEvidence(item, id);
+      if (isCurrent()) await reload();
+    },
+  );
 }
 async function startEdit(item: Attachment) {
   if (!canEdit.value) return;
-  const stamp = generation;
-  await perform(async () => {
+  await perform({ action: "edit", id: item.id }, async (_, __, isCurrent) => {
     const list = await listDocuments({
       search: "",
       kind: null,
       state: "confirmed",
     });
-    if (stamp !== generation || !canEdit.value) return;
+    if (!isCurrent() || !canEdit.value) return;
     targets.value = list;
     editing.value = item;
-    target.value = item.document_id;
+    target.value = item.document_id || "";
     active.value = item.is_active;
     correctionReference.value = item.external_reference || "";
     reason.value = "";
@@ -353,54 +321,56 @@ async function startEdit(item: Attachment) {
 }
 async function correct() {
   if (!editing.value || !canEdit.value || !reason.value.trim()) return;
-  const item = editing.value,
-    stamp = generation;
+  const item = editing.value;
   const changes = {
     document_id: target.value,
     is_active: active.value,
     external_reference: correctionReference.value || null,
     reason: reason.value.trim(),
   };
-  await perform(async () => {
-    await updateEvidence(
-      item,
-      changes,
-      request(
-        "correct:" + item.id + ":" + item.version + JSON.stringify(changes),
-      ),
-    );
-    if (stamp !== generation) return;
-    editing.value = null;
-    await reload();
-    if (stamp === generation) emit("changed");
-  });
+  await perform(
+    { action: "correct", id: item.id, version: item.version, changes },
+    async (id, _, isCurrent) => {
+      await updateEvidence(item, changes, id);
+      if (!isCurrent()) return;
+      editing.value = null;
+      await reload();
+      if (isCurrent()) emit("changed");
+    },
+  );
 }
 async function retryRecognition(item: Attachment) {
   if (!canEdit.value || records.value?.evidence_state === "archived") return;
-  const stamp = generation;
-  await perform(async () => {
-    const blob = await downloadEvidence(item.id, controller.signal);
-    const engine = await import("../evidence-recognition");
-    const result = await engine.recognizeEvidence(
-      new File([blob], item.original_name, { type: item.media_type! }),
-      controller.signal,
-    );
-    if (stamp !== generation || !canEdit.value) return;
-    const changes = {
-      recognition: result.hints,
-      reason: "重新识别单据编号，仍需人工核对",
-    };
-    await updateEvidence(
-      item,
-      changes,
-      request(
-        "recognize:" + item.id + ":" + item.version + JSON.stringify(changes),
-      ),
-    );
-    if (stamp !== generation) return;
-    await reload();
-    if (stamp === generation) emit("changed");
-  });
+  await perform(
+    { action: "recognize", id: item.id },
+    async (_, signal, isCurrent) => {
+      const blob = await downloadEvidence(item.id, signal);
+      if (!isCurrent()) return;
+      const engine = await import("../evidence-recognition");
+      const result = await engine.recognizeEvidence(
+        new File([blob], item.original_name, { type: item.media_type! }),
+        signal,
+      );
+      if (!isCurrent() || !canEdit.value) return;
+      const changes = {
+        recognition: result.hints,
+        reason: "重新识别单据编号，仍需人工核对",
+      };
+      await updateEvidence(
+        item,
+        changes,
+        requestId({
+          action: "recognize-result",
+          id: item.id,
+          version: item.version,
+          changes,
+        }),
+      );
+      if (!isCurrent()) return;
+      await reload();
+      if (isCurrent()) emit("changed");
+    },
+  );
 }
 async function archive() {
   if (
@@ -413,7 +383,6 @@ async function archive() {
     (manualRequired.value && !manualReason.value.trim())
   )
     return;
-  const stamp = generation;
   const payload = [
     props.document.id,
     records.value.document_version,
@@ -421,16 +390,12 @@ async function archive() {
     checks.value,
     manualReason.value.trim(),
   ] as const;
-  await perform(async () => {
-    await archiveEvidence(
-      ...payload,
-      request("archive:" + JSON.stringify(payload)),
-    );
-    if (stamp === generation) {
-      message.value = "已人工核对归档。";
-      await reload();
-      if (stamp === generation) emit("changed");
-    }
+  await perform({ action: "archive", payload }, async (id, _, isCurrent) => {
+    await archiveEvidence(...payload, id);
+    if (!isCurrent()) return;
+    message.value = "已人工核对归档。";
+    await reload();
+    if (isCurrent()) emit("changed");
   });
 }
 </script>
@@ -445,8 +410,12 @@ async function archive() {
     <p v-if="document.status === 'voided'" class="notice">
       单据已作废，原件仅供追溯。
     </p>
-    <p v-if="loading" role="status">正在读取附件…</p>
-    <p v-if="error" role="alert" class="notice error">{{ error }}</p>
+    <QueryState
+      :loading="loading"
+      :error="error"
+      loading-text="正在读取附件…"
+      retry-label=""
+    />
     <p v-if="message" role="status" class="notice">{{ message }}</p>
     <button
       type="button"
@@ -491,22 +460,28 @@ async function archive() {
         <p v-else-if="selected">
           没有匹配候选，仍可上传到当前单据后人工核对；关联有误可更正。
         </p>
-        <label v-if="document.kind === 'receipt'"
-          >凭证来源<select v-model="source" :disabled="busy">
-            <option value="internal">本系统交接单</option>
-            <option value="external">交付方原单</option>
-          </select></label
-        >
-        <label v-if="source === 'external'"
-          >外部单号<input v-model="reference" maxlength="120" :disabled="busy"
-        /></label>
-        <label v-if="records.evidence_state === 'archived'"
-          >补充或更正原因<textarea
-            v-model="uploadReason"
-            maxlength="1000"
-            :disabled="busy"
-          />
-        </label>
+        <FormField
+          label="凭证来源"
+          v-model="source"
+          :disabled="busy"
+          :options="{ internal: '本系统交接单', external: '交付方原单' }"
+          v-if="document.kind === 'receipt'"
+        />
+        <FormField
+          label="外部单号"
+          v-model="reference"
+          maxlength="120"
+          :disabled="busy"
+          v-if="source === 'external'"
+        />
+        <FormField
+          label="补充或更正原因"
+          v-model="uploadReason"
+          maxlength="1000"
+          :disabled="busy"
+          type="textarea"
+          v-if="records.evidence_state === 'archived'"
+        />
         <label v-if="selected" class="checkbox-row"
           ><input
             v-model="associationConfirmed"
@@ -554,7 +529,7 @@ async function archive() {
           ><span v-if="item.external_reference">
             · 外部单号：{{ item.external_reference }}</span
           >
-          <div class="links" v-if="item.upload_state === 'ready'">
+          <ActionGroup class="links" v-if="item.upload_state === 'ready'">
             <button
               type="button"
               class="quiet"
@@ -588,7 +563,7 @@ async function archive() {
             >
               重新识别
             </button>
-          </div>
+          </ActionGroup>
           <button
             v-else-if="
               item.upload_state === 'pending' &&
@@ -609,7 +584,7 @@ async function archive() {
         <h3>原件预览：{{ preview.item.original_name }}</h3>
         <p>第 {{ preview.page }} / {{ preview.pages }} 页</p>
         <img :src="preview.url" alt="签字原件当前页" />
-        <div class="links">
+        <ActionGroup class="links">
           <button
             type="button"
             class="quiet"
@@ -632,7 +607,7 @@ async function archive() {
           >
             关闭预览
           </button>
-        </div>
+        </ActionGroup>
       </div>
       <form v-if="editing && canEdit" @submit.prevent="correct">
         <h3>更正凭证关联或用途</h3>
@@ -649,20 +624,21 @@ async function archive() {
             type="checkbox"
             :disabled="busy"
           />用于当前归档（取消勾选则作为历史保留）</label
-        ><label v-if="editing.source_kind === 'external'"
-          >外部单号<input
-            v-model="correctionReference"
-            maxlength="120"
-            :disabled="busy" /></label
-        ><label
-          >更正原因<textarea
-            v-model="reason"
-            maxlength="1000"
-            required
-            :disabled="busy"
-          />
-        </label>
-        <div class="links">
+        ><FormField
+          label="外部单号"
+          v-model="correctionReference"
+          maxlength="120"
+          :disabled="busy"
+          v-if="editing.source_kind === 'external'"
+        /><FormField
+          label="更正原因"
+          v-model="reason"
+          maxlength="1000"
+          required
+          :disabled="busy"
+          type="textarea"
+        />
+        <ActionGroup class="links">
           <button :disabled="busy || !reason.trim()">保存更正并重新核对</button
           ><button
             type="button"
@@ -672,7 +648,7 @@ async function archive() {
           >
             保留现状
           </button>
-        </div>
+        </ActionGroup>
       </form>
       <form
         v-if="writable && records.evidence_state !== 'archived'"

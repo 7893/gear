@@ -296,3 +296,49 @@ test("lost completion acknowledgement never repeats provider submission", async 
   assert.deepEqual(await response.json(), { result: "result_not_recorded" });
   assert.equal(f.calls.filter((c) => c.name === "send").length, 1);
 });
+
+test("daily digest uses existing Chinese MIME and sends one message per invocation", async () => {
+  const f = fixture({
+    prepare: () =>
+      Response.json({
+        to: "operator@example.invalid",
+        notification: {
+          kind: "daily_due",
+          businessDate: "2030-01-01",
+          dueSoon: 2,
+          dueToday: 1,
+          overdue: 3,
+        },
+      }),
+  });
+  assert.equal((await f.handler(f.request())).status, 200);
+  const sent = f.calls.filter((c) => c.name === "send");
+  assert.equal(sent.length, 1);
+  const mime = Buffer.from(String(sent[0].body.raw), "base64url").toString(
+    "utf8",
+  );
+  assert.match(mime, /charset=UTF-8/i);
+  assert.match(mime, /Content-Transfer-Encoding: base64/i);
+  assert.equal(f.calls.at(-1)?.body.outcome, "submitted");
+});
+test("invalid digest is quarantined without provider submission", async () => {
+  const f = fixture({
+    prepare: () =>
+      Response.json({
+        to: "operator@example.invalid",
+        notification: {
+          kind: "daily_due",
+          businessDate: "2030-01-01",
+          dueSoon: -1,
+          dueToday: 0,
+          overdue: 0,
+        },
+      }),
+  });
+  await f.handler(f.request());
+  assert.equal(
+    f.calls.some((c) => c.name === "send"),
+    false,
+  );
+  assert.equal(f.calls.at(-1)?.body.failure_code, "invalid_message");
+});

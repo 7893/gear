@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { expectActionSpacing, layoutWidths } from "./layout.js";
 import { writeFile } from "node:fs/promises";
 import {
   blankDetails,
@@ -431,6 +432,33 @@ async function identities(page: Page) {
   await page.getByLabel("实际接收人", { exact: true }).fill("示例接收人");
 }
 
+test("handover form actions keep responsive spacing for every flow kind", async ({
+  page,
+}) => {
+  await fixture(page, "admin");
+  await login(page);
+  for (const kind of ["receipt", "issue", "transfer", "return"]) {
+    await page.goto("/#/documents/new?kind=" + kind);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(page.getByText("正在读取设备和名单…")).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "保存草稿", exact: true }),
+    ).toBeVisible();
+    for (const width of layoutWidths) {
+      await page.setViewportSize({ width, height: 1000 });
+      await expectActionSpacing(page);
+    }
+    const createParty = page.locator("details.recipient-editor > summary");
+    if (await createParty.count()) {
+      await createParty.click();
+      for (const width of layoutWidths) {
+        await page.setViewportSize({ width, height: 1000 });
+        await expectActionSpacing(page);
+      }
+    }
+  }
+});
+
 test("missing flag keeps all new routes closed without document requests", async ({
   page,
 }) => {
@@ -458,7 +486,7 @@ test("viewer reads frozen formal snapshot, escaped notes and QR but cannot open 
   await expect(page.getByText("冻结的示例抬头", { exact: true })).toBeVisible();
   await expect(page.getByText(/冻结的示例团队/)).toBeVisible();
   await expect(
-    page.getByRole("img", { name: "单据匹配二维码" }),
+    page.getByRole("img", { name: "单据查询二维码" }),
   ).toHaveAttribute("viewBox", /^0 0 [0-9]+ [0-9]+$/);
   await expect(
     page.getByText("交接：<script>window.unsafe = true</script>", {
@@ -766,6 +794,16 @@ test("responsibility print uses frozen dates and names when current data differs
     preferCSSPageSize: true,
     displayHeaderFooter: false,
   });
+  const boxes = [
+    ...pdf
+      .toString("latin1")
+      .matchAll(/\/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]/g),
+  ];
+  expect(boxes.length).toBeGreaterThan(0);
+  for (const box of boxes) {
+    expect(Math.abs(Number(box[1]) - 841.89)).toBeLessThan(1);
+    expect(Math.abs(Number(box[2]) - 595.28)).toBeLessThan(1);
+  }
   expect(pdf.length).toBeGreaterThan(10000);
 });
 test("partial faulty return requires explanation and saves selected held device only", async ({
@@ -894,6 +932,92 @@ test("handover uses the shared receiver form for person/team creation and lost a
     ),
   ).toHaveLength(0);
 });
+
+test("late draft load cannot overwrite a new handover form after a route change", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  f.setDocument(document("draft"));
+  await login(page);
+  f.holdDetail();
+  await page.goto("/#/documents/" + id(50) + "/edit");
+  await expect
+    .poll(() => f.calls.filter((c) => c.name === "get_document").length)
+    .toBe(1);
+  await page.goto("/#/documents/new?kind=receipt");
+  await expect(
+    page.getByRole("heading", { name: "新建领入单", exact: true }),
+  ).toBeVisible();
+  const response = page.waitForResponse((r) =>
+    r.url().endsWith("/get_document"),
+  );
+  f.releaseDetail();
+  await response;
+  await expect(
+    page.getByRole("heading", { name: "新建领入单", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("实际接收人", { exact: true })).toHaveValue("");
+  await expect(
+    page.getByRole("heading", { name: "已选 0 件设备", exact: true }),
+  ).toBeVisible();
+  expect(
+    f.calls.filter((c) =>
+      ["save_document", "confirm_document"].includes(c.name),
+    ),
+  ).toHaveLength(0);
+});
+
+for (const change of ["revoked", "route changed"]) {
+  test(`late draft save stays discarded when ${change}`, async ({ page }) => {
+    const f = await fixture(page);
+    await login(page);
+    await page.goto("/#/documents/new?kind=receipt");
+    await expect(
+      page.getByRole("button", { name: "保存草稿", exact: true }),
+    ).toBeVisible();
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route(api + "/rest/v1/rpc/save_document", async (route) => {
+      await held;
+      await route.fallback();
+    });
+    const request = page.waitForRequest((r) =>
+      r.url().endsWith("/save_document"),
+    );
+    await page.getByRole("button", { name: "保存草稿", exact: true }).click();
+    await request;
+    if (change === "revoked") {
+      f.disable();
+      await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+      await expect(
+        page.getByText("当前账号无法执行此操作，请登录或查看账号状态。", {
+          exact: true,
+        }),
+      ).toBeVisible();
+    } else {
+      await page.goto("/#/documents/new?kind=return");
+      await expect(
+        page.getByRole("heading", { name: "新建退回单", exact: true }),
+      ).toBeVisible();
+    }
+    const response = page.waitForResponse((r) =>
+      r.url().endsWith("/save_document"),
+    );
+    release();
+    await response;
+    await expect(
+      page.getByText("草稿已保存，尚未改变设备去向。", { exact: true }),
+    ).toHaveCount(0);
+    if (change === "route changed") {
+      await expect(
+        page.getByRole("heading", { name: "新建退回单", exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "保存草稿", exact: true }),
+      ).toBeEnabled();
+    }
+  });
+}
 
 test("late document response cannot restore content after permission loss", async ({
   page,
@@ -1159,4 +1283,62 @@ test("fifty-line A4 PDF uses repeated header, page counters, preserved codes and
   expect(pages).toBeLessThan(12);
   expect(pdf.length).toBeGreaterThan(10000);
   await expect(page.locator(".print-table tbody tr")).toHaveCount(50);
+});
+
+test("document scan opens a mobile summary, retains its target across login and uses readable links", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  const doc = { ...document("confirmed"), reference_code: "DC-20-7K4M-9P2X" };
+  f.setDocument(doc);
+  const lookups: Record<string, unknown>[] = [];
+  await page.route(api + "/rest/v1/rpc/resolve_reference", async (route) => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    lookups.push(body);
+    await route.fulfill({ json: doc.id });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#/scan/document/" + doc.document_no);
+  await expect(
+    page.getByRole("heading", { name: "单据核对", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("请登录后查看对应记录。", { exact: false }),
+  ).toBeVisible();
+  expect(lookups).toHaveLength(0);
+  expect(f.calls.filter((c) => c.name === "get_document")).toHaveLength(0);
+  await page.getByRole("link", { name: "登录后继续查看" }).click();
+  await page
+    .getByLabel("邮箱", { exact: true })
+    .fill("operator@example.invalid");
+  await page.getByLabel("密码", { exact: true }).fill("fictional-password");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "单据核对", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".scan-card")).toContainText("冻结的示例团队");
+  await expect(page.locator(".scan-card")).toContainText("已确认");
+  expect(lookups[0]).toEqual({
+    entity_kind: "document",
+    reference: doc.document_no,
+  });
+  const full = page.getByRole("link", { name: "查看完整单据", exact: true });
+  await expect(full).toHaveAttribute(
+    "href",
+    "#/documents/" + doc.reference_code,
+  );
+  expect(
+    await page.evaluate(
+      () => window.document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await full.click();
+  await expect(page.getByRole("article", { name: "交接单据" })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "打开单据核对页面", exact: true }),
+  ).toHaveAttribute(
+    "href",
+    new URL("/#/scan/document/" + doc.document_no, page.url()).href,
+  );
+  await expect(page.getByRole("img", { name: "单据查询二维码" })).toBeVisible();
 });

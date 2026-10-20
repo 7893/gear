@@ -1,13 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { account, safeError } from "../accounts";
+import { computed, ref, watch } from "vue";
 import {
   createParty,
   inventoryWriteAccess,
   partyFields,
-  requestFor,
   type Party,
 } from "../inventory";
+import { useAuthorizedAction } from "../useAuthorizedAction";
 import ActionGroup from "./ActionGroup.vue";
 import PartyFields from "./PartyFields.vue";
 const props = defineProps<{
@@ -17,37 +16,19 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ created: [Party] }>();
 const form = ref(partyFields());
-const busy = defineModel<boolean>("busy", { default: false });
+const parentBusy = defineModel<boolean>("busy", { default: false });
 const canCreate = computed(() => props.allowed && inventoryWriteAccess.value);
-const error = ref("");
 const notice = ref("");
-const requests = new Map<string, string>();
-let generation = 0;
-watch(
-  [
-    canCreate,
-    () => account.profile?.membership?.id,
-    () => account.profile?.membership?.role,
-  ],
-  () => {
-    generation++;
-    busy.value = false;
-    error.value = "";
-    notice.value = "";
-    form.value = partyFields();
-    requests.clear();
-  },
-  { flush: "sync" },
-);
-onBeforeUnmount(() => {
-  generation++;
-  busy.value = false;
+const { busy, error, run } = useAuthorizedAction(canCreate, [], () => {
+  notice.value = "";
+  form.value = partyFields();
 });
-async function save() {
+watch(busy, (value) => (parentBusy.value = value), {
+  immediate: true,
+  flush: "sync",
+});
+function save() {
   if (busy.value || props.disabled || !canCreate.value) return;
-  const current = generation;
-  busy.value = true;
-  error.value = "";
   notice.value = "";
   const data = {
     ...form.value,
@@ -55,21 +36,17 @@ async function save() {
     default_responsible_id:
       form.value.kind === "team" ? form.value.default_responsible_id : null,
   };
-  try {
-    const result = await createParty(data, requestFor(requests, data));
-    if (current === generation && canCreate.value) {
+  void run(
+    data,
+    (id) => createParty(data, id),
+    (result) => {
       emit("created", result);
       form.value.name = "";
       form.value.note = "";
       form.value.contact = "";
       notice.value = "已新增接收对象，请选择后继续。";
-    }
-  } catch (failure) {
-    if (current === generation && canCreate.value)
-      error.value = safeError(failure);
-  } finally {
-    if (current === generation) busy.value = false;
-  }
+    },
+  );
 }
 </script>
 <template>

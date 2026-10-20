@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import QueryState from "../components/QueryState.vue";
 import { computed, ref, watch } from "vue";
 import { account } from "../accounts";
 import { useRoute } from "vue-router";
@@ -11,10 +12,12 @@ import {
   type Party,
 } from "../inventory";
 import { useAuthorizedQuery } from "../useAuthorizedQuery";
+import { useRouteAccess } from "../useRouteAccess";
 import InventoryGate from "../components/InventoryGate.vue";
 import PartyEditor from "../components/PartyEditor.vue";
+import PartyHoldings from "../components/PartyHoldings.vue";
 const route = useRoute();
-const access = computed(() => inventoryAccess.value && !!route.params.id);
+const access = useRouteAccess(inventoryAccess);
 const { data, error, loading, load } = useAuthorizedQuery(access, async () => {
   const [detail, parties] = await Promise.all([
     getParty(String(route.params.id)),
@@ -76,12 +79,19 @@ function label(key: Key, value: unknown, snapshot?: Party) {
       刷新资料
     </button>
     <p v-if="notice && data" role="status">{{ notice }}</p>
-    <p v-if="loading" role="status">正在读取资料…</p>
-    <p v-if="error" class="notice error" role="alert">{{ error }}</p>
+    <QueryState
+      :loading="loading"
+      :error="error"
+      loading-text="正在读取资料…"
+      retry-label=""
+    />
     <template v-if="data">
       <h2>
         {{ data.party.name }} · {{ data.party.is_active ? "启用" : "停用" }}
       </h2>
+      <p v-if="data.party.reference_code" class="reference-code">
+        {{ data.party.reference_code }}
+      </p>
       <dl class="asset-fields">
         <div v-for="(title, key) in changedLabels" :key="key">
           <dt>{{ title }}</dt>
@@ -89,7 +99,7 @@ function label(key: Key, value: unknown, snapshot?: Party) {
         </div>
       </dl>
       <p>
-        当前在用设备关联：{{
+        当前持有或负责设备：{{
           data.parties.find((p) => p.id === data?.party.id)
             ?.current_asset_count || 0
         }}
@@ -105,6 +115,7 @@ function label(key: Key, value: unknown, snapshot?: Party) {
         :people="people"
         @updated="updated"
       />
+      <PartyHoldings :key="'holdings:' + data.party.id" :party="data.party" />
       <h3>修改历史</h3>
       <ol class="asset-history">
         <li v-for="event in data.history" :key="event.id">

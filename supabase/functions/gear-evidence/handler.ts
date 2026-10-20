@@ -22,6 +22,8 @@ type Attachment = {
 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const codes = new Set([
+  "evidence_event_unavailable",
+  "asset_lifecycle_conflict",
   "invalid_evidence_hints",
   "image_dimensions_exceeded",
   "invalid_evidence_file",
@@ -183,6 +185,7 @@ export async function handle(
     const allowedFields = [
       "file",
       "document_id",
+      "event_id",
       "expected_version",
       "request_id",
       "recognition",
@@ -197,11 +200,13 @@ export async function handle(
       throw new Error("invalid_evidence");
     const file = form.get("file");
     if (!(file instanceof File)) throw new Error("invalid_evidence_file");
-    const document_id = String(form.get("document_id"));
+    const document_id = String(form.get("document_id") || "");
+    const event_id = String(form.get("event_id") || "");
     const request_id = String(form.get("request_id"));
     const version = String(form.get("expected_version"));
     if (
-      !UUID.test(document_id) ||
+      (!UUID.test(document_id) && !/^[1-9][0-9]{0,18}$/.test(event_id)) ||
+      !!document_id === !!event_id ||
       !UUID.test(request_id) ||
       !/^[1-9][0-9]{0,8}$/.test(version)
     )
@@ -228,12 +233,15 @@ export async function handle(
       external_reference: String(form.get("external_reference") || ""),
       correction_reason: String(form.get("correction_reason") || ""),
     };
-    const reserved = (await rpc("reserve_attachment", {
-      document_id,
-      details,
-      expected_version: Number(version),
-      request_id,
-    })) as unknown as Attachment;
+    const reserved = (await rpc(
+      event_id ? "reserve_event_attachment" : "reserve_attachment",
+      {
+        ...(event_id ? { event_id } : { document_id }),
+        details,
+        expected_version: Number(version),
+        request_id,
+      },
+    )) as unknown as Attachment;
     const current = (await rpc("get_attachment", {
       attachment_id: reserved.id,
     })) as unknown as Attachment;

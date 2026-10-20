@@ -38,7 +38,8 @@ DECLARE endpoint text; credential text; request_id bigint;
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM gear_2026.app_settings WHERE id = 1
         AND outbound_mail_enabled AND notifications_enabled_at IS NOT NULL) THEN RETURN NULL; END IF;
-    IF NOT EXISTS (SELECT 1 FROM gear_2026.notification_outbox WHERE notification_type IN ('application_pending','application_result') AND
+    PERFORM gear_private_2026.enqueue_due_notifications();
+    IF NOT EXISTS (SELECT 1 FROM gear_2026.notification_outbox WHERE notification_type IN ('application_pending','application_result','daily_due') AND
         ((status = 'pending' AND available_at <= clock_timestamp())
          OR (status = 'failed' AND attempt_count < 5 AND available_at <= clock_timestamp()
             AND error_code IN ('oauth_temporary','provider_rate_limit','provider_unauthorized'))

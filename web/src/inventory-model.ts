@@ -26,6 +26,7 @@ export const personTypes = {
 export type Category = keyof typeof categories;
 export type AssetState = keyof typeof assetStates;
 export type Party = {
+  reference_code?: string;
   id: string;
   kind: "person" | "team";
   name: string;
@@ -57,9 +58,11 @@ export type PartyDetails = {
   }[];
 };
 export type Asset = {
+  reference_code?: string;
   id: string;
   version?: number;
   asset_code: string;
+  previous_asset_code?: string;
   legacy_code: string | null;
   serial_number: string | null;
   name: string;
@@ -77,6 +80,8 @@ export type Asset = {
   holder_name: string | null;
   responsible_person_id: string | null;
   responsible_name: string | null;
+  actual_user_id?: string | null;
+  actual_user_name?: string | null;
   usage_kind: "long_term" | "temporary" | null;
   started_on: string | null;
   due_on: string | null;
@@ -88,6 +93,7 @@ export type AssetDetails = {
   asset: Asset;
   history: {
     id: string;
+    reverses_event_id?: string | null;
     event_type: string;
     occurred_on: string | null;
     recorded_at: string;
@@ -120,6 +126,41 @@ export type AssetList = {
   matched: number;
   summary: Record<AssetState | "total" | "managed_faulty", number>;
 };
+export const partyRelationships = {
+  holding: "本人或团队持有",
+  responsible: "负责的团队设备",
+  actual: "团队内具体使用",
+  all: "全部关联",
+};
+export type PartyRelationship = keyof typeof partyRelationships;
+export type PartyAssetList = {
+  party: Party;
+  relationship: PartyRelationship;
+  items: Asset[];
+  matched: number;
+  business_on: string;
+};
+export function partyAssetRelations(asset: Asset, party: Party): string {
+  return [
+    asset.holder_party_id === party.id
+      ? party.kind === "team"
+        ? "团队持有"
+        : "本人持有"
+      : "",
+    party.kind === "person" &&
+    asset.holder_kind === "team" &&
+    asset.responsible_person_id === party.id
+      ? "负责的团队设备"
+      : "",
+    party.kind === "person" &&
+    asset.holder_kind === "team" &&
+    asset.actual_user_id === party.id
+      ? "团队内具体使用"
+      : "",
+  ]
+    .filter(Boolean)
+    .join("、");
+}
 export type AssetInput = {
   name: string;
   category: Category;

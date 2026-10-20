@@ -1,14 +1,16 @@
 <script setup lang="ts">
+import QueryState from "../components/QueryState.vue";
+import FormField from "../components/FormField.vue";
+import { recordPath } from "../references";
 import { computed, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { account, safeError } from "../accounts";
+import { useAuthorizedAction } from "../useAuthorizedAction";
 import {
   inventoryWriteAccess,
   listParties,
   initializeAsset,
   assetFields,
   businessToday,
-  requestFor,
   type Party,
   type AssetInput,
   type AssetFieldsInput,
@@ -41,11 +43,16 @@ const {
 const parties = computed(() => partyData.value || []);
 const people = computed(() => parties.value.filter((p) => p.kind === "person"));
 const partyBusy = ref(false);
-const busy = ref(false);
-const error = ref("");
 const duplicatePrompt = ref(false);
 const acknowledged = ref(false);
-const requests = new Map<string, string>();
+const { busy, error, run } = useAuthorizedAction(
+  inventoryWriteAccess,
+  [],
+  () => {
+    duplicatePrompt.value = false;
+    acknowledged.value = false;
+  },
+);
 watch(
   holderMode,
   () => {
@@ -92,9 +99,6 @@ async function save() {
     !form.condition
   )
     return;
-  const owner = account.profile?.membership?.id;
-  busy.value = true;
-  error.value = "";
   const details: AssetInput = {
     ...form,
     category: form.category,
@@ -112,18 +116,13 @@ async function save() {
         : null,
   };
   const payload = { details, placement, allowDuplicate: acknowledged.value };
-  try {
-    const saved = await initializeAsset(
-      details,
-      placement,
-      requestFor(requests, payload),
-      acknowledged.value,
-    );
-    if (inventoryWriteAccess.value && owner === account.profile?.membership?.id)
-      await router.push("/assets/" + saved.id);
-  } catch (failure) {
-    if (inventoryWriteAccess.value) {
-      error.value = safeError(failure);
+  await run(
+    payload,
+    (id) => initializeAsset(details, placement, id, payload.allowDuplicate),
+    async (saved) => {
+      await router.push(recordPath("asset", saved));
+    },
+    (failure) => {
       if (
         failure &&
         typeof failure === "object" &&
@@ -131,10 +130,8 @@ async function save() {
         failure.message === "legacy_code_duplicate"
       )
         duplicatePrompt.value = true;
-    }
-  } finally {
-    busy.value = false;
-  }
+    },
+  );
 }
 </script>
 <template>
@@ -151,26 +148,22 @@ async function save() {
       :disabled="busy || partyLoading"
       @created="createdParty"
     />
-    <p v-if="partyLoading" role="status">正在读取人员与团队…</p>
-    <div v-if="partyError" class="notice error" role="alert">
-      <p>{{ partyError }}</p>
-      <button class="quiet" type="button" @click="loadParties">
-        刷新人员与团队
-      </button>
-    </div>
+    <QueryState
+      :loading="partyLoading"
+      :error="partyError"
+      loading-text="正在读取人员与团队…"
+      retry-label="刷新人员与团队"
+      @retry="loadParties"
+    />
     <form class="form-grid" @submit.prevent="save">
       <AssetFields :model-value="form" :disabled="busy || partyBusy">
-        <label
-          >设备状况<select
-            v-model="form.condition"
-            required
-            :disabled="busy || partyBusy"
-          >
-            <option value="">请核对实际状况</option>
-            <option value="normal">正常</option>
-            <option value="faulty">故障</option>
-          </select></label
-        >
+        <FormField
+          label="设备状况"
+          v-model="form.condition"
+          required
+          :disabled="busy || partyBusy"
+          :options="{ '': '请核对实际状况', normal: '正常', faulty: '故障' }"
+        />
       </AssetFields>
       <PlacementFields
         v-model:mode="holderMode"

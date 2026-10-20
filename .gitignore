@@ -52,3 +52,7 @@ node_modules/
 dist/
 test-results/
 playwright-report/
+
+# Private operational archive bundles.
+*.gear-backup.tar.gz
+设备凭证原件-*.zip

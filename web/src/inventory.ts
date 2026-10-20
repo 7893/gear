@@ -1,3 +1,4 @@
+import { resolveReference } from "./reference-api";
 import { computed } from "vue";
 import { account, inventoryRpc } from "./accounts";
 import type {
@@ -15,6 +16,8 @@ import type {
   PartyDetails,
   LifecycleAction,
   RecoveryPlacement,
+  PartyAssetList,
+  PartyRelationship,
 } from "./inventory-model";
 export * from "./inventory-model";
 
@@ -59,7 +62,8 @@ export function holderLabel(asset: Asset): string {
 export function partyLabel(party: Party): string {
   return (
     party.name +
-    (party.organization_name ? `（${party.organization_name}）` : "")
+    (party.organization_name ? `（${party.organization_name}）` : "") +
+    (party.reference_code ? ` · ${party.reference_code}` : "")
   );
 }
 export function dueLabel(asset: Asset): string {
@@ -85,7 +89,9 @@ export async function listAssets(filters: {
   return (await inventoryRpc("list_assets", filters)) as AssetList;
 }
 export async function getAsset(id: string): Promise<AssetDetails> {
-  return (await inventoryRpc("get_asset", { asset_id: id })) as AssetDetails;
+  return (await inventoryRpc("get_asset", {
+    asset_id: await resolveReference("asset", id),
+  })) as AssetDetails;
 }
 export async function listDueAssets(
   state: DueState | null,
@@ -112,8 +118,33 @@ export async function listParties(): Promise<Party[]> {
 export async function listPartyRecords(): Promise<PartyRecord[]> {
   return (await inventoryRpc("list_party_records")) as PartyRecord[];
 }
+export async function listPartyAssets(
+  partyId: string,
+  relationship: PartyRelationship,
+): Promise<PartyAssetList> {
+  return (await inventoryRpc("list_party_assets", {
+    party_id: partyId,
+    relationship,
+  })) as PartyAssetList;
+}
+export async function setAssignmentUser(
+  asset: Asset,
+  actualUserId: string | null,
+  reason: string,
+  requestId: string,
+): Promise<Asset> {
+  return (await inventoryRpc("set_assignment_user", {
+    asset_id: asset.id,
+    expected_version: asset.version,
+    actual_user_id: actualUserId,
+    reason,
+    request_id: requestId,
+  })) as Asset;
+}
 export async function getParty(id: string): Promise<PartyDetails> {
-  return (await inventoryRpc("get_party", { party_id: id })) as PartyDetails;
+  return (await inventoryRpc("get_party", {
+    party_id: await resolveReference("party", id),
+  })) as PartyDetails;
 }
 export async function updateParty(
   party: Party,
@@ -202,14 +233,4 @@ export async function initializeAsset(
     request_id: requestId,
     allow_legacy_duplicate: allowDuplicate,
   })) as Asset;
-}
-// One ID for the same form contents, including retry after a lost acknowledgement.
-export function requestFor(
-  cache: Map<string, string>,
-  payload: unknown,
-): string {
-  const signature = JSON.stringify(payload);
-  const id = cache.get(signature) || crypto.randomUUID();
-  cache.set(signature, id);
-  return id;
 }

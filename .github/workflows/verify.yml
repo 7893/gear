@@ -104,6 +104,7 @@ jobs:
         run: |
           python3 database/tests/check_schema.py
           python3 database/tests/check_accounts.py
+          python3 database/tests/check_application_contacts.py
           python3 database/tests/check_notifications.py
           python3 database/tests/check_inventory.py
           python3 database/tests/check_demo_inventory.py
@@ -115,6 +116,12 @@ jobs:
           python3 database/tests/check_asset_details.py
           python3 database/tests/check_parties.py
           python3 database/tests/check_asset_lifecycle.py
+          python3 database/tests/check_document_header.py
+          python3 database/tests/check_party_holdings.py
+          python3 database/tests/check_completion.py
+          python3 database/tests/check_due_cadence.py
+          python3 database/tests/check_references.py
+          python3 database/tests/check_backup.py
           python3 database/tests/check_evidence.py
           python3 database/tests/check_schema_year.py
         env:

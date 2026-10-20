@@ -70,6 +70,7 @@ export type DocumentItem = FlowItem & {
   state_after: Partial<Asset> | null;
 };
 export type FlowDocument = FlowDetails & {
+  reference_code?: string;
   id: string;
   created_by: string;
   version: number;

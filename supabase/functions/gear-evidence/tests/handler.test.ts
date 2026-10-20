@@ -347,3 +347,59 @@ test("encrypted flag and malformed image containers are rejected; valid PNG is f
     /image_dimensions_exceeded/,
   );
 });
+
+test("event upload selects the existing verified-file pipeline and rejects dual targets", async () => {
+  const bytes = await pdf();
+  const normal = upload(bytes);
+  const form = await normal.formData();
+  form.delete("document_id");
+  form.set("event_id", "123");
+  const calls: string[] = [];
+  const attachment = {
+    id: id(5),
+    event_id: 123,
+    document_id: null,
+    storage_key: id(5) + "/" + id(6),
+    upload_state: "pending",
+    is_active: true,
+  };
+  const fetcher: typeof fetch = async (input, init) => {
+    const url = new URL(String(input));
+    const name = url.pathname.split("/").at(-1)!;
+    calls.push(name);
+    if (url.pathname === "/auth/v1/user") return Response.json({ id: id(2) });
+    if (name === "reserve_event_attachment") {
+      const body = JSON.parse(String(init?.body));
+      assert.equal(body.event_id, "123");
+      assert.equal("document_id" in body, false);
+      return Response.json(attachment);
+    }
+    if (name === "get_attachment") return Response.json(attachment);
+    if (url.pathname.startsWith("/storage/v1/object/"))
+      return Response.json({});
+    if (name === "commit_attachment") {
+      const body = JSON.parse(String(init?.body));
+      assert.equal(
+        body.verified.sha256,
+        (await verifyFile(bytes, "示例.pdf")).sha256,
+      );
+      return Response.json({ ...attachment, upload_state: "ready" });
+    }
+    throw new Error("unexpected_mock");
+  };
+  const request = () =>
+    new Request(normal.url, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer example-user",
+        Origin: env.GEAR_EVIDENCE_APP_URL.slice(0, -1),
+      },
+      body: form,
+    });
+  assert.equal((await handle(request(), env, fetcher)).status, 200);
+  assert.equal(calls.filter((n) => n === "commit_attachment").length, 1);
+  form.set("document_id", id(1));
+  calls.length = 0;
+  assert.equal((await handle(request(), env, fetcher)).status, 400);
+  assert.deepEqual(calls, ["user"]);
+});

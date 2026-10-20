@@ -104,7 +104,7 @@ def bootstrap(with_application=False):
         db.schema='gear_2026'
         for name in ['admin', 'operator']:
             db.run(f"INSERT INTO auth.users VALUES ('{IDS[name]}','{name}@example.invalid',now())")
-        pending = call(db, 'admin', 'apply_for_access', "'Example pending admin'") if with_application else None
+        pending = call(db, 'admin', 'apply_for_access', "'Example pending admin','13800000000'") if with_application else None
         db.env.pop('GEAR_ADMIN_EMAIL', None)
         db.env.pop('GEAR_ADMIN_DISPLAY_NAME', None)
         db.run((ROOT / 'database/bootstrap_admin.sql').read_text(), fail='GEAR_ADMIN_EMAIL is required')

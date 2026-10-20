@@ -1,3 +1,4 @@
+import { recordCode } from "./references";
 import { documentStates, flowKinds, type FlowDocument } from "./flows-model";
 import { evidenceAccess, listEvidence } from "./evidence";
 import { evidenceStates, type Attachment } from "./evidence-model";
@@ -17,7 +18,7 @@ const identityHeaders = [
 function identityRow(doc: FlowDocument): string[] {
   const parties = doc.parties_snapshot;
   return [
-    doc.id,
+    recordCode("DC", doc),
     doc.document_no || "",
     flowKinds[doc.kind],
     documentStates[doc.status],
@@ -62,7 +63,7 @@ export function documentCsv(docs: FlowDocument[]): CsvFile {
 function attachmentRow(doc: FlowDocument, item: Attachment): string[] {
   return [
     ...identityRow(doc),
-    item.id,
+    recordCode("AT", item),
     item.original_name,
     { pending: "上传中", ready: "已上传", failed: "上传失败" }[
       item.upload_state

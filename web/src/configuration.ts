@@ -9,13 +9,30 @@ export type RuntimeConfig = {
   evidenceEnabled: boolean;
 };
 
-export async function configuration(): Promise<RuntimeConfig> {
-  const response = await fetch("/runtime-config.json", {
-    cache: "no-store",
-    signal: AbortSignal.timeout(10000),
-  });
-  if (!response.ok) throw new Error("configuration_unavailable");
-  const value = (await response.json()) as Record<string, unknown>;
+let pending: Promise<RuntimeConfig> | undefined;
+
+// Public, deployment-scoped settings only. Failures remain retryable.
+export function configuration(): Promise<RuntimeConfig> {
+  if (!pending)
+    pending = readConfiguration().catch((error: unknown) => {
+      pending = undefined;
+      throw error;
+    });
+  return pending;
+}
+
+async function readConfiguration(): Promise<RuntimeConfig> {
+  const embedded = document.getElementById("gear-runtime-config");
+  let value: Record<string, unknown>;
+  if (embedded) value = JSON.parse(embedded.textContent || "null");
+  else {
+    // Compatibility with development and deployments made before embedding.
+    const response = await fetch("/runtime-config.json", {
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok) throw new Error("configuration_unavailable");
+    value = (await response.json()) as Record<string, unknown>;
+  }
   if (
     !value ||
     typeof value.apiUrl !== "string" ||

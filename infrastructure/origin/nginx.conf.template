@@ -30,5 +30,19 @@ server {
         add_header X-Content-Type-Options "nosniff" always;
         add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
     }
+    # Only public bootstrap files use short edge caching. Browsers revalidate;
+    # releases invalidate both paths. Auth, RPCs and files never use this origin.
+    location = /index.html {
+        try_files $uri =404;
+        add_header Cache-Control "public, max-age=0, s-maxage=300, must-revalidate";
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
+    }
+    location = /runtime-config.json {
+        try_files $uri =404;
+        add_header Cache-Control "public, max-age=0, s-maxage=60, must-revalidate";
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
+    }
     location / { try_files $uri $uri/ /index.html; }
 }

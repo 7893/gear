@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import FormField from "../components/FormField.vue";
+import { recordPath } from "../references";
 import { computed, ref, watch } from "vue";
 import { account } from "../accounts";
 import {
@@ -7,12 +9,47 @@ import {
   listPartyRecords,
   personTypes,
   type Party,
+  type PartyRecord,
 } from "../inventory";
 import { useAuthorizedQuery } from "../useAuthorizedQuery";
-import { defaultPageSize } from "../pagination";
 import InventoryGate from "../components/InventoryGate.vue";
 import PartyQuickCreate from "../components/PartyQuickCreate.vue";
-import ListPagination from "../components/ListPagination.vue";
+import ListResults from "../components/ListResults.vue";
+import DataTable from "../components/DataTable.vue";
+import type { TableColumn } from "../table";
+const columns: TableColumn<PartyRecord>[] = [
+  { key: "name", label: "名称" },
+  {
+    key: "kind",
+    label: "类别",
+    value: (party) =>
+      party.kind === "team"
+        ? "团队"
+        : personTypes[party.person_type || "other"],
+  },
+  {
+    key: "organization_name",
+    label: "所属单位",
+    value: (party) => party.organization_name || "未填写",
+  },
+  {
+    key: "default_responsible_id",
+    label: "默认负责人",
+    value: (party) =>
+      data.value?.find((p) => p.id === party.default_responsible_id)?.name ||
+      "不适用",
+  },
+  {
+    key: "current_asset_count",
+    label: "持有或负责设备",
+    value: (party) => `${party.current_asset_count} 台`,
+  },
+  {
+    key: "is_active",
+    label: "状态",
+    value: (party) => (party.is_active ? "启用" : "停用"),
+  },
+];
 const { data, error, loading, load } = useAuthorizedQuery(
   inventoryAccess,
   listPartyRecords,
@@ -20,7 +57,6 @@ const { data, error, loading, load } = useAuthorizedQuery(
 const search = ref("");
 const kind = ref("");
 const state = ref("active");
-const pageSize = ref(defaultPageSize);
 const notice = ref("");
 watch(
   [
@@ -41,8 +77,8 @@ const filtered = computed(() =>
     (p) =>
       (!kind.value || p.kind === kind.value) &&
       (!state.value || p.is_active === (state.value === "active")) &&
-      [p.name, p.organization_name, p.contact, p.note].some((v) =>
-        (v || "").includes(search.value.trim()),
+      [p.reference_code, p.name, p.organization_name, p.contact, p.note].some(
+        (v) => (v || "").includes(search.value.trim()),
       ),
   ),
 );
@@ -66,73 +102,41 @@ function created(party: Party) {
     />
     <p v-if="notice" role="status">{{ notice }}</p>
     <form class="inventory-filters" @submit.prevent="load">
-      <label>搜索人员或团队<input v-model="search" maxlength="200" /></label>
-      <label
-        >对象类别<select v-model="kind">
-          <option value="">全部类别</option>
-          <option value="person">个人</option>
-          <option value="team">团队</option>
-        </select></label
-      >
-      <label
-        >对象状态<select v-model="state">
-          <option value="">全部状态</option>
-          <option value="active">启用</option>
-          <option value="inactive">停用</option>
-        </select></label
-      >
+      <FormField label="搜索人员或团队" v-model="search" maxlength="200" />
+      <FormField
+        label="对象类别"
+        v-model="kind"
+        :options="{ '': '全部类别', person: '个人', team: '团队' }"
+      />
+      <FormField
+        label="对象状态"
+        v-model="state"
+        :options="{ '': '全部状态', active: '启用', inactive: '停用' }"
+      />
       <button type="submit" :disabled="loading">刷新名单</button>
     </form>
-    <p v-if="loading" role="status">正在读取名单…</p>
-    <p v-if="error" class="notice error" role="alert">{{ error }}</p>
-    <ListPagination
-      v-if="data"
-      v-model:page-size="pageSize"
-      :items="filtered"
+    <ListResults
+      :items="data ? filtered : null"
+      :loading="loading"
+      :error="error"
+      loading-text="正在读取名单…"
       label="人员与团队分页"
-      v-slot="{ items }"
+      empty-text="没有符合条件的人员或团队。"
+      @retry="load"
     >
-      <div v-if="items.length" class="table-scroll">
-        <table class="inventory-table">
-          <thead>
-            <tr>
-              <th>名称</th>
-              <th>类别</th>
-              <th>所属单位</th>
-              <th>默认负责人</th>
-              <th>在用设备关联</th>
-              <th>状态</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="party in items" :key="party.id">
-              <td>
-                <RouterLink :to="'/parties/' + party.id">{{
-                  party.name
-                }}</RouterLink>
-              </td>
-              <td>
-                {{
-                  party.kind === "team"
-                    ? "团队"
-                    : personTypes[party.person_type || "other"]
-                }}
-              </td>
-              <td>{{ party.organization_name || "未填写" }}</td>
-              <td>
-                {{
-                  data.find((p) => p.id === party.default_responsible_id)
-                    ?.name || "不适用"
-                }}
-              </td>
-              <td>{{ party.current_asset_count }} 台</td>
-              <td>{{ party.is_active ? "启用" : "停用" }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <p v-else>没有符合条件的人员或团队。</p>
-    </ListPagination>
+      <template #default="{ items }">
+        <DataTable :items="items" :columns="columns">
+          <template #name="{ row: party }">
+            <RouterLink :to="recordPath('party', party)">{{
+              party.name
+            }}</RouterLink>
+            <small class="reference-code" v-if="party.reference_code">{{
+              party.reference_code
+            }}</small>
+          </template>
+        </DataTable>
+      </template>
+    </ListResults>
   </section>
   <InventoryGate v-else title="人员与团队" />
 </template>

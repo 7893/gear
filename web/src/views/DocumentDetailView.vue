@@ -1,16 +1,15 @@
 <script setup lang="ts">
+import QueryState from "../components/QueryState.vue";
 import ActionGroup from "../components/ActionGroup.vue";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import qrcode from "qrcode-generator";
-import { account, safeError } from "../accounts";
-import {
-  listAssets,
-  categories,
-  timestamp,
-  requestFor,
-  type Asset,
-} from "../inventory";
+import RecordQr from "../components/RecordQr.vue";
+import { recordPath } from "../references";
+import { account } from "../accounts";
+import { useAuthorizedQuery } from "../useAuthorizedQuery";
+import { useAuthorizedAction } from "../useAuthorizedAction";
+import { useRouteAccess } from "../useRouteAccess";
+import { listAssets, categories, timestamp, type Asset } from "../inventory";
 import {
   flowAccess,
   flowWriteAccess,
@@ -19,7 +18,6 @@ import {
   documentStates,
   getDocument,
   deleteDocument,
-  type FlowDocument,
   type DocumentItem,
 } from "../flows";
 import FlowGate from "../components/FlowGate.vue";
@@ -27,14 +25,33 @@ import EvidencePanel from "../components/EvidencePanel.vue";
 import DocumentReview from "../components/DocumentReview.vue";
 const route = useRoute();
 const router = useRouter();
-const data = ref<FlowDocument | null>(null);
-const draftAssets = ref<Asset[]>([]);
-const error = ref("");
-const loading = ref(false);
-const busy = ref(false);
+const detailAccess = useRouteAccess(flowAccess);
+const {
+  data: loaded,
+  loading,
+  error: readError,
+  load: loadDocument,
+} = useAuthorizedQuery(
+  detailAccess,
+  async (isCurrent) => {
+    const doc = await getDocument(String(route.params.id));
+    if (!isCurrent()) return null;
+    const preview =
+      doc.status === "draft"
+        ? await listAssets({
+            search: "",
+            category: null,
+            state: null,
+            holder_kind: null,
+          })
+        : null;
+    return { doc, assets: preview?.items || [] };
+  },
+  [() => route.params.id],
+);
+const data = computed(() => loaded.value?.doc || null);
+const draftAssets = computed(() => loaded.value?.assets || []);
 const deleting = ref(false);
-const requests = new Map<string, string>();
-let generation = 0;
 watch(
   [() => data.value?.document_no, () => data.value?.status, flowAccess],
   () => {
@@ -51,19 +68,6 @@ watch(
   },
   { flush: "sync" },
 );
-const qr = computed(() => {
-  if (!data.value || data.value.status === "draft") return null;
-  const code = qrcode(0, "M");
-  code.addData("gear:document:" + data.value.id);
-  code.make();
-  const count = code.getModuleCount();
-  let path = "";
-  for (let row = 0; row < count; row++)
-    for (let column = 0; column < count; column++) {
-      if (code.isDark(row, column)) path += `M${column + 4},${row + 4}h1v1h-1z`;
-    }
-  return { path, size: count + 8 };
-});
 const canEdit = computed(
   () =>
     flowWriteAccess.value &&
@@ -71,6 +75,16 @@ const canEdit = computed(
     (account.profile?.membership?.role === "admin" ||
       data.value.created_by === account.profile?.membership?.id),
 );
+const {
+  busy,
+  error: actionError,
+  run,
+} = useAuthorizedAction(
+  canEdit,
+  [() => route.params.id],
+  () => (deleting.value = false),
+);
+const error = computed(() => actionError.value || readError.value);
 const parties = computed(() => data.value?.parties_snapshot || data.value);
 const snapshotComplete = computed(
   () =>
@@ -86,86 +100,28 @@ function asset(item: DocumentItem): Partial<Asset> {
     {}
   );
 }
-async function load() {
-  const current = ++generation;
-  data.value = null;
-  draftAssets.value = [];
-  error.value = "";
+function load() {
   deleting.value = false;
-  if (!flowAccess.value) return;
-  loading.value = true;
-  try {
-    const doc = await getDocument(String(route.params.id));
-    const preview =
-      doc.status === "draft"
-        ? await listAssets({
-            search: "",
-            category: null,
-            state: null,
-            holder_kind: null,
-          })
-        : null;
-    if (current === generation && flowAccess.value) {
-      data.value = doc;
-      draftAssets.value = preview?.items || [];
-    }
-  } catch (failure) {
-    if (current === generation && flowAccess.value)
-      error.value = safeError(failure);
-  } finally {
-    if (current === generation) loading.value = false;
-  }
+  actionError.value = "";
+  return loadDocument();
 }
-watch(
-  [
-    flowAccess,
-    () => account.profile?.membership?.id,
-    () => account.profile?.membership?.role,
-    () => route.params.id,
-  ],
-  () => {
-    if (flowAccess.value) void load();
-    else {
-      generation++;
-      data.value = null;
-      draftAssets.value = [];
-      error.value = "";
-      deleting.value = false;
-      loading.value = false;
-    }
-  },
-  { immediate: true },
+onBeforeUnmount(() =>
+  document.documentElement.style.removeProperty("--gear-print-id"),
 );
-onBeforeUnmount(() => {
-  generation++;
-  document.documentElement.style.removeProperty("--gear-print-id");
-});
 function print() {
   if (flowAccess.value && snapshotComplete.value && !error.value)
     window.print();
 }
 async function remove() {
-  if (!data.value || !canEdit.value || busy.value || !deleting.value) return;
-  const current = generation;
-  busy.value = true;
-  error.value = "";
-  try {
-    await deleteDocument(
-      data.value,
-      requestFor(requests, {
-        id: data.value.id,
-        version: data.value.version,
-        action: "delete",
-      }),
-    );
-    if (current === generation && flowWriteAccess.value)
+  if (!data.value || !deleting.value) return;
+  const current = data.value;
+  await run(
+    { id: current.id, version: current.version, action: "delete" },
+    (id) => deleteDocument(current, id),
+    async () => {
       await router.push("/flows");
-  } catch (failure) {
-    if (current === generation && flowAccess.value)
-      error.value = safeError(failure);
-  } finally {
-    if (current === generation) busy.value = false;
-  }
+    },
+  );
 }
 </script>
 <template>
@@ -173,10 +129,13 @@ async function remove() {
     <div class="print-controls">
       <RouterLink to="/documents">返回单据记录</RouterLink>
       <h1 class="refresh">单据详情</h1>
-      <p v-if="loading" role="status">正在读取单据…</p>
-      <div v-if="error" class="notice error" role="alert">
-        {{ error }} <button class="quiet" @click="load">重新读取</button>
-      </div>
+      <QueryState
+        :loading="loading"
+        :error="error"
+        loading-text="正在读取单据…"
+        retry-label="重新读取"
+        @retry="load"
+      />
       <template v-if="data"
         ><p>
           状态：{{ documentStates[data.status] }}；{{
@@ -192,7 +151,7 @@ async function remove() {
           }}。
         </p>
         <p class="hint">
-          打印或另存 PDF 不会再次办理交接。建议使用桌面 Chrome 或
+          打印或另存 PDF 不会再次办理交接。默认 A4 横向。建议使用桌面 Chrome 或
           Edge；关闭浏览器自带页眉页脚，页码由单据提供。
         </p>
         <ActionGroup class="links">
@@ -206,7 +165,7 @@ async function remove() {
           <RouterLink
             v-if="canEdit"
             class="button"
-            :to="'/documents/' + data.id + '/edit'"
+            :to="recordPath('document', data) + '/edit'"
             >继续编辑草稿</RouterLink
           >
           <button
@@ -280,18 +239,11 @@ async function remove() {
                     >草稿 · 不作为正式交接凭证</strong
                   >
                 </div>
-                <svg
-                  v-if="qr"
-                  :viewBox="`0 0 ${qr.size} ${qr.size}`"
-                  width="84"
-                  height="84"
-                  role="img"
-                  aria-label="单据匹配二维码"
-                  shape-rendering="crispEdges"
-                >
-                  <rect :width="qr.size" :height="qr.size" fill="#fff" />
-                  <path :d="qr.path" fill="#000" />
-                </svg>
+                <RecordQr
+                  v-if="data.status !== 'draft' && data.document_no"
+                  kind="document"
+                  :reference="data.document_no"
+                />
               </div>
             </th>
           </tr>
@@ -350,9 +302,11 @@ async function remove() {
           <tr v-for="(item, index) in data.items" :key="item.id">
             <td>{{ index + 1 }}</td>
             <td>
-              {{ asset(item).asset_code || "确认后生成" }}<br />{{
-                asset(item).legacy_code || "无原编号"
-              }}
+              {{
+                asset(item).reference_code ||
+                asset(item).asset_code ||
+                "确认后生成"
+              }}<br />{{ asset(item).legacy_code || "无原编号" }}
             </td>
             <td>
               {{ asset(item).name || "未填写" }}<br />{{

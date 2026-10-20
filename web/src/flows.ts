@@ -1,3 +1,4 @@
+import { resolveReference } from "./reference-api";
 import { computed } from "vue";
 import { account, inventoryRpc } from "./accounts";
 import { inventoryAccess, inventoryWriteAccess } from "./inventory";
@@ -22,7 +23,7 @@ export async function listDocuments(filters: {
 }
 export async function getDocument(id: string): Promise<FlowDocument> {
   return (await inventoryRpc("get_document", {
-    document_id: id,
+    document_id: await resolveReference("document", id),
   })) as FlowDocument;
 }
 export async function saveDocument(

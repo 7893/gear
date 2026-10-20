@@ -1,29 +1,36 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from "vue";
+import { computed, ref } from "vue";
 import { safeError } from "../accounts";
 import {
   businessToday,
   changeAssetCondition,
   inventoryWriteAccess,
-  requestFor,
   type Asset,
 } from "../inventory";
+import { useAuthorizedAction } from "../useAuthorizedAction";
 import ActionGroup from "./ActionGroup.vue";
 const props = defineProps<{ asset: Asset; earliestOn: string }>();
 const emit = defineEmits<{ updated: [condition: Asset["condition"]] }>();
 const occurredOn = ref(businessToday());
 const reason = ref("");
-const error = ref("");
-const saving = ref(false);
-const requests = new Map<string, string>();
-let active = true;
-onBeforeUnmount(() => (active = false));
 const eligible = computed(
   () =>
     inventoryWriteAccess.value &&
     props.asset.management_status === "managed" &&
     !props.asset.invalidated_at &&
     !!props.asset.version,
+);
+const {
+  error,
+  busy: saving,
+  run,
+} = useAuthorizedAction(
+  eligible,
+  [() => props.asset.id, () => props.asset.version],
+  () => {
+    occurredOn.value = businessToday();
+    reason.value = "";
+  },
 );
 const fault = computed(() => props.asset.condition === "normal");
 const action = computed(() => (fault.value ? "登记故障" : "恢复正常"));
@@ -48,22 +55,18 @@ async function submit() {
     occurred_on: occurredOn.value,
     reason: reason.value.trim(),
   };
-  saving.value = true;
-  error.value = "";
-  try {
-    await changeAssetCondition(
-      props.asset,
-      payload.target_condition,
-      payload.occurred_on,
-      payload.reason,
-      requestFor(requests, payload),
-    );
-    if (active && eligible.value) emit("updated", payload.target_condition);
-  } catch (failure) {
-    if (active && eligible.value) error.value = safeError(failure);
-  } finally {
-    if (active) saving.value = false;
-  }
+  void run(
+    payload,
+    (id) =>
+      changeAssetCondition(
+        props.asset,
+        payload.target_condition,
+        payload.occurred_on,
+        payload.reason,
+        id,
+      ),
+    () => emit("updated", payload.target_condition),
+  );
 }
 </script>
 <template>

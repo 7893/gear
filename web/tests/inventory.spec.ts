@@ -1,4 +1,6 @@
+import { recordCode } from "../src/references.js";
 import { expect, test, type Page } from "@playwright/test";
+import { expectActionSpacing, layoutWidths } from "./layout.js";
 import { readFile } from "node:fs/promises";
 import type { Asset, Party } from "../src/inventory-model.js";
 
@@ -79,6 +81,7 @@ async function fixture(
   const createdParties = new Map<string, Party>();
   const partyEdits = new Map<string, Party>();
   const lifecycleEdits = new Map<string, Asset>();
+  const userEdits = new Map<string, Asset>();
   const partyHistory: Record<string, unknown[]> = {};
   let maintenanceFailure = "";
   const extensions = new Map<string, Asset>();
@@ -204,6 +207,86 @@ async function fixture(
           ).length,
         })),
       });
+    if (name === "list_party_assets") {
+      const p = structuredClone(parties.find((p) => p.id === body.party_id)!);
+      const relationship = String(body.relationship);
+      const items = structuredClone(
+        assets.filter(
+          (a) =>
+            a.management_status === "managed" &&
+            !a.invalidated_at &&
+            ((["holding", "all"].includes(relationship) &&
+              a.holder_party_id === p.id) ||
+              (p.kind === "person" &&
+                a.holder_kind === "team" &&
+                ["responsible", "all"].includes(relationship) &&
+                a.responsible_person_id === p.id) ||
+              (p.kind === "person" &&
+                a.holder_kind === "team" &&
+                ["actual", "all"].includes(relationship) &&
+                a.actual_user_id === p.id)),
+        ),
+      );
+      if (hold) {
+        hold = false;
+        await new Promise<void>((resolve) => (release = resolve));
+      }
+      if (listFailure)
+        return route.fulfill({
+          status: 503,
+          json: { message: "private holdings diagnostic" },
+        });
+      return route.fulfill({
+        json: {
+          party: p,
+          relationship,
+          items,
+          matched: items.length,
+          business_on: "2026-10-19",
+        },
+      });
+    }
+    if (name === "set_assignment_user") {
+      if (maintenanceFailure)
+        return route.fulfill({
+          status: 400,
+          json: { message: maintenanceFailure },
+        });
+      const key = String(body.request_id);
+      const asset = assets.find((a) => a.id === body.asset_id)!;
+      let result = userEdits.get(key);
+      if (!result) {
+        const before = structuredClone(asset);
+        asset.actual_user_id = body.actual_user_id as string | null;
+        asset.actual_user_name =
+          parties.find((p) => p.id === body.actual_user_id)?.name || null;
+        asset.version = (asset.version || 1) + 1;
+        result = structuredClone(asset);
+        userEdits.set(key, result);
+        history[asset.id] = [
+          {
+            id: "18",
+            event_type: "assignment_user_changed",
+            occurred_on: "2026-10-19",
+            recorded_at: "2026-10-19T00:00:00Z",
+            actor_label: "示例经办人",
+            reason: body.reason,
+            before_data: before,
+            after_data: result,
+          },
+          ...(history[asset.id] || []),
+        ];
+      }
+      if (holdUpdate) {
+        holdUpdate = false;
+        await new Promise<void>((resolve) => (releaseUpdate = resolve));
+      }
+      if (uncertain) {
+        uncertain = false;
+        return route.abort("failed");
+      }
+      return route.fulfill({ json: result });
+    }
     if (name === "get_party") {
       const p = parties.find((p) => p.id === body.party_id)!;
       return route.fulfill({
@@ -646,6 +729,280 @@ async function loginReady(page: Page) {
     page.getByRole("heading", { name: "设备台账", exact: true }),
   ).toBeVisible();
 }
+
+test("recipient holdings use exact IDs, distinguish responsibility and actual use, and export a fresh full list", async ({
+  page,
+}) => {
+  const f = await fixture(page, "viewer");
+  const direct = {
+    ...structuredClone(base),
+    id: newAssetId,
+    asset_code: "SB-000002",
+    holder_party_id: personId,
+    holder_kind: "person" as const,
+    holder_name: "示例人员",
+  };
+  f.assets.push(direct);
+  f.assets[0].actual_user_id = personId;
+  f.assets[0].actual_user_name = "示例人员";
+  f.parties.push({
+    ...f.parties[0],
+    id: "00000000-0000-4000-8000-000000000099",
+  });
+  await loginReady(page);
+  await page.goto("/#/parties/" + personId);
+  const region = page.getByRole("region", {
+    name: "持有与关联设备",
+    exact: true,
+  });
+  await expect(
+    region.getByRole("link", { name: "SB-000002 · 示例打印机", exact: true }),
+  ).toBeVisible();
+  await expect(
+    region.getByRole("link", { name: "SB-000001 · 示例打印机", exact: true }),
+  ).toHaveCount(0);
+  await region
+    .getByRole("combobox", { name: "清单范围", exact: true })
+    .selectOption("responsible");
+  await expect(
+    region.getByRole("link", { name: "SB-000001 · 示例打印机", exact: true }),
+  ).toBeVisible();
+  await region
+    .getByRole("combobox", { name: "清单范围", exact: true })
+    .selectOption("actual");
+  await expect(
+    region.getByRole("cell", {
+      name: "负责的团队设备、团队内具体使用",
+      exact: true,
+    }),
+  ).toBeVisible();
+  f.assets[0].name = "示例导出时最新名称";
+  const downloaded = page.waitForEvent("download");
+  await region
+    .getByRole("button", { name: "导出持有清单 CSV", exact: true })
+    .click();
+  const file = await downloaded;
+  const text = await readFile((await file.path())!, "utf8");
+  expect(text).toContain("示例导出时最新名称");
+  expect(text).toContain(recordCode("PE", { id: personId }));
+  expect(text).toContain("负责的团队设备、团队内具体使用");
+  expect(
+    f.calls.filter((c) => c.name === "list_party_assets").at(-1)?.body,
+  ).toEqual({ party_id: personId, relationship: "actual" });
+  await page.goto("/#/parties/00000000-0000-4000-8000-000000000099");
+  await expect(
+    page
+      .getByRole("region", { name: "持有与关联设备", exact: true })
+      .getByText("此范围暂无当前分配的设备。", { exact: true }),
+  ).toBeVisible();
+});
+
+test("team holdings paginate independently and export all fifty-one matching devices", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  f.assets.splice(0, f.assets.length, ...paginationAssets());
+  await loginReady(page);
+  await page.goto("/#/parties/" + teamId);
+  const region = page.getByRole("region", {
+    name: "持有与关联设备",
+    exact: true,
+  });
+  await expect(region.getByRole("table").getByRole("row")).toHaveCount(21);
+  const count = f.calls.filter((c) => c.name === "list_party_assets").length;
+  await region.getByRole("button", { name: "末页", exact: true }).click();
+  await expect(region.getByRole("table").getByRole("row")).toHaveCount(12);
+  expect(f.calls.filter((c) => c.name === "list_party_assets")).toHaveLength(
+    count,
+  );
+  const download = page.waitForEvent("download");
+  await region
+    .getByRole("button", { name: "导出持有清单 CSV", exact: true })
+    .click();
+  const file = await download;
+  expect(
+    (await readFile((await file.path())!, "utf8"))
+      .split("\r\n")
+      .filter(Boolean),
+  ).toHaveLength(52);
+});
+
+test("team actual user annotation retries without moving equipment and can clear the user", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  await loginReady(page);
+  await page.goto("/#/assets/" + assetId);
+  const before = structuredClone(f.assets[0]);
+  const region = page.getByRole("region", {
+    name: "团队具体使用人",
+    exact: true,
+  });
+  await region
+    .getByRole("button", { name: "补录或更换具体使用人", exact: true })
+    .click();
+  await region
+    .getByRole("combobox", { name: "具体使用人", exact: true })
+    .selectOption(personId);
+  await region
+    .getByLabel("记录原因", { exact: true })
+    .fill("示例团队内部使用核对");
+  f.loseNextAcknowledgement();
+  await region
+    .getByRole("button", { name: "保存具体使用人", exact: true })
+    .click();
+  await expect(region.getByRole("alert")).toBeVisible();
+  await region
+    .getByRole("button", { name: "保存具体使用人", exact: true })
+    .click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "具体使用人已记录" }),
+  ).toBeVisible();
+  const calls = f.calls.filter((c) => c.name === "set_assignment_user");
+  expect(calls).toHaveLength(2);
+  expect(calls[0].body).toEqual(calls[1].body);
+  expect(f.assets[0]).toMatchObject({
+    holder_party_id: before.holder_party_id,
+    responsible_person_id: before.responsible_person_id,
+    due_on: before.due_on,
+    asset_code: before.asset_code,
+    actual_user_id: personId,
+  });
+  await expect(
+    page.getByText("具体使用人：待补录 → 示例人员", { exact: true }),
+  ).toBeVisible();
+  await region
+    .getByRole("button", { name: "补录或更换具体使用人", exact: true })
+    .click();
+  await region
+    .getByRole("combobox", { name: "具体使用人", exact: true })
+    .selectOption("");
+  await region
+    .getByLabel("记录原因", { exact: true })
+    .fill("示例具体使用人待核对");
+  await region
+    .getByRole("button", { name: "保存具体使用人", exact: true })
+    .click();
+  await expect(
+    page.getByText("具体使用人：示例人员 → 待补录", { exact: true }),
+  ).toBeVisible();
+  expect(f.assets[0].actual_user_id).toBeNull();
+});
+
+test("actual user conflicts retain input and querying users have no edit action", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  await loginReady(page);
+  await page.goto("/#/assets/" + assetId);
+  const region = page.getByRole("region", {
+    name: "团队具体使用人",
+    exact: true,
+  });
+  await region
+    .getByRole("button", { name: "补录或更换具体使用人", exact: true })
+    .click();
+  await region
+    .getByRole("combobox", { name: "具体使用人", exact: true })
+    .selectOption(personId);
+  await region.getByLabel("记录原因", { exact: true }).fill("示例版本检查");
+  f.failMaintenance("assignment_user_conflict");
+  await region
+    .getByRole("button", { name: "保存具体使用人", exact: true })
+    .click();
+  await expect(region.getByRole("alert")).toContainText("设备或持有关系已变化");
+  await expect(
+    region.getByRole("combobox", { name: "具体使用人", exact: true }),
+  ).toHaveValue(personId);
+});
+
+test("viewers read team actual user but cannot annotate it", async ({
+  page,
+}) => {
+  const f = await fixture(page, "viewer");
+  f.assets[0].actual_user_id = personId;
+  f.assets[0].actual_user_name = "示例人员";
+  await loginReady(page);
+  await page.goto("/#/assets/" + assetId);
+  await expect(
+    page.locator(".asset-fields").getByText("示例人员", { exact: true }),
+  ).toHaveCount(2);
+  await expect(
+    page.getByRole("region", { name: "团队具体使用人", exact: true }),
+  ).toHaveCount(0);
+  expect(f.calls.some((c) => c.name === "set_assignment_user")).toBe(false);
+});
+
+test("revoked access discards a late actual user response", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  await loginReady(page);
+  await page.goto("/#/assets/" + assetId);
+  const region = page.getByRole("region", {
+    name: "团队具体使用人",
+    exact: true,
+  });
+  await region
+    .getByRole("button", { name: "补录或更换具体使用人", exact: true })
+    .click();
+  await region
+    .getByRole("combobox", { name: "具体使用人", exact: true })
+    .selectOption(personId);
+  await region.getByLabel("记录原因", { exact: true }).fill("示例异步检查");
+  f.holdUpdate();
+  await region
+    .getByRole("button", { name: "保存具体使用人", exact: true })
+    .click();
+  await expect(
+    region.getByRole("button", { name: "正在保存…", exact: true }),
+  ).toBeDisabled();
+  f.disable();
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(
+    page.getByText("当前账号无法执行此操作，请登录或查看账号状态。", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  const response = page.waitForResponse((r) =>
+    r.url().endsWith("/set_assignment_user"),
+  );
+  f.releaseUpdate();
+  await (await response).finished();
+  await expect(
+    page.getByRole("status").filter({ hasText: "具体使用人已记录" }),
+  ).toHaveCount(0);
+});
+
+test("late recipient holdings cannot restore private rows after permission loss", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  await loginReady(page);
+  await expect(
+    page.getByRole("link", { name: "SB-000001 · 示例打印机", exact: true }),
+  ).toBeVisible();
+  f.holdNextList();
+  await page.goto("/#/parties/" + teamId);
+  await expect(
+    page.getByText("正在读取持有清单…", { exact: true }),
+  ).toBeVisible();
+  f.disable();
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(
+    page.getByText("当前账号无法执行此操作，请登录或查看账号状态。", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  const response = page.waitForResponse((r) =>
+    r.url().endsWith("/list_party_assets"),
+  );
+  f.releaseList();
+  await (await response).finished();
+  await expect(
+    page.getByRole("region", { name: "持有与关联设备", exact: true }),
+  ).toHaveCount(0);
+});
 
 test("recipient editor shares fields and retries identical updates without reassigning devices", async ({
   page,
@@ -1237,6 +1594,56 @@ test("inventory is closed by default and never queries business RPCs", async ({
   expect(state.calls.every((c) => c.name === "get_my_membership")).toBe(true);
 });
 
+test("inventory actions stay separated across pages and responsive widths", async ({
+  page,
+}) => {
+  await fixture(page, "admin");
+  await loginReady(page);
+  for (const [path, heading] of [
+    ["/assets", "设备台账"],
+    ["/assets/new", "登记已有设备"],
+    ["/assets/import", "批量导入已有设备"],
+    ["/assets/" + assetId, "设备详情"],
+    ["/due", "临时使用与到期"],
+    ["/parties", "人员与团队"],
+    ["/parties/" + personId, "人员或团队详情"],
+    ["/parties/" + teamId, "人员或团队详情"],
+    ["/account", "我的账号"],
+  ]) {
+    await page.goto("/#" + path);
+    await expect(
+      page.getByRole("heading", { name: heading, exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("status").filter({ hasText: /正在读取|正在加载/ }),
+    ).toHaveCount(0);
+    for (const width of layoutWidths) {
+      await page.setViewportSize({ width, height: 1000 });
+      await expectActionSpacing(page);
+    }
+    if (path === "/assets/" + assetId) {
+      await page
+        .getByRole("button", { name: "更正基本资料", exact: true })
+        .click();
+      await page
+        .getByRole("button", { name: "办理遗失、报废或找回", exact: true })
+        .click();
+      for (const width of layoutWidths) {
+        await page.setViewportSize({ width, height: 1000 });
+        await expectActionSpacing(page);
+      }
+    }
+    const createParty = page.locator("details.recipient-editor > summary");
+    if (await createParty.count()) {
+      await createParty.click();
+      for (const width of layoutWidths) {
+        await page.setViewportSize({ width, height: 1000 });
+        await expectActionSpacing(page);
+      }
+    }
+  }
+});
+
 test("account actions keep consistent spacing and wrap without overlapping", async ({
   page,
 }) => {
@@ -1266,7 +1673,10 @@ test("account actions keep consistent spacing and wrap without overlapping", asy
         };
       }),
     );
-    expect(boxes).toHaveLength(3);
+    await expect(
+      group.getByRole("link", { name: "修改密码", exact: true }),
+    ).toBeVisible();
+    expect(boxes).toHaveLength(4);
     for (let i = 1; i < boxes.length; i++) {
       const previous = boxes[i - 1]!,
         current = boxes[i]!;
@@ -1920,6 +2330,37 @@ test("permission refresh loads a new query and discards the older in-flight ledg
   await expect(page.getByText("正在读取台账…", { exact: true })).toHaveCount(0);
 });
 
+test("switching entity detail pages only queries the destination record", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  await loginReady(page);
+  await page.goto("/#/assets/" + assetId);
+  await expect(
+    page.getByRole("heading", { name: "设备详情", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "设备资料更正" }),
+  ).toBeVisible();
+  await page.goto("/#/parties/" + personId);
+  await expect(
+    page.getByRole("heading", { name: "人员或团队详情", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "持有与关联设备" }),
+  ).toBeVisible();
+  await page.goto("/#/assets/" + assetId);
+  await expect(
+    page.getByRole("region", { name: "设备资料更正" }),
+  ).toBeVisible();
+  expect(
+    f.calls.filter((c) => c.name === "get_asset").map((c) => c.body.asset_id),
+  ).toEqual([assetId, assetId]);
+  expect(
+    f.calls.filter((c) => c.name === "get_party").map((c) => c.body.party_id),
+  ).toEqual([personId]);
+});
+
 test("switching device routes discards the previous detail response", async ({
   page,
 }) => {
@@ -2278,3 +2719,272 @@ for (const cause of ["revoked", "route changed"]) {
     ).toHaveCount(0);
   });
 }
+
+test("CSV import previews first, keeps zero prefixes, and retries the identical batch after a lost response", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  let first = true;
+  await page.route(api + "/rest/v1/rpc/import_assets", async (route) => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    f.calls.push({ name: "import_assets", body });
+    if (first) {
+      first = false;
+      return route.abort("failed");
+    }
+    return route.fulfill({ json: { imported: 1 } });
+  });
+  await loginReady(page);
+  await page.goto("/#/assets/import");
+  await expect(page.getByLabel("选择导入 CSV")).toBeEnabled();
+  const headers = [
+    "设备名称",
+    "设备分类",
+    "状况",
+    "原资产编号",
+    "出厂序列号",
+    "品牌",
+    "型号",
+    "位置",
+    "备注",
+    "持有方ID",
+    "负责人ID",
+    "使用类型",
+    "已知起始日期",
+    "预计归还日期",
+    "具体使用人ID",
+  ];
+  const content =
+    headers.join(",") + "\r\n示例导入电脑,台式电脑,正常,00007/A,,,,,,,,,,,\r\n";
+  await page.getByLabel("选择导入 CSV").setInputFiles({
+    name: "example.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(content),
+  });
+  await expect(
+    page.getByRole("heading", { name: "导入预览（1 台）" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: "00007/A", exact: true }),
+  ).toBeVisible();
+  const button = page.getByRole("button", {
+    name: "确认整批导入",
+    exact: true,
+  });
+  await expect(button).toBeDisabled();
+  expect(f.calls.some((c) => c.name === "import_assets")).toBe(false);
+  await page.getByLabel("已核对本批设备，确认尚未导入").check();
+  await button.click();
+  await expect(page.getByRole("alert")).toBeVisible();
+  await button.click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "已导入 1 台设备" }),
+  ).toBeVisible();
+  const calls = f.calls.filter((c) => c.name === "import_assets");
+  expect(calls).toHaveLength(2);
+  expect(calls[0].body).toEqual(calls[1].body);
+  expect(
+    (calls[0].body.rows as { details: { legacy_code: string } }[])[0].details
+      .legacy_code,
+  ).toBe("00007/A");
+});
+test("CSV import denies viewer access without requesting recipient data or writing", async ({
+  page,
+}) => {
+  const f = await fixture(page, "viewer");
+  await loginReady(page);
+  const before = f.calls.length;
+  await page.goto("/#/assets/import");
+  await expect(page.getByText("按当前账号权限")).toHaveCount(0);
+  await expect(page.getByLabel("选择导入 CSV")).toHaveCount(0);
+  expect(
+    f.calls
+      .slice(before)
+      .some((c) => ["import_assets", "list_parties"].includes(c.name)),
+  ).toBe(false);
+});
+test("admin lifecycle correction keeps the original record and refreshes after explicit reason", async ({
+  page,
+}) => {
+  const f = await fixture(page, "admin");
+  await loginReady(page);
+  const region = await openLifecycle(page);
+  await region
+    .getByRole("combobox", { name: "处理类型", exact: true })
+    .selectOption("lost");
+
+  await region.getByLabel("处理原因", { exact: true }).fill("示例误登记");
+  await region.getByRole("checkbox").check();
+  await region
+    .getByRole("button", { name: "确认登记遗失", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "撤销误登记的处置", exact: true }),
+  ).toBeVisible();
+  await page.route(api + "/rest/v1/rpc/correct_asset_lifecycle", (route) => {
+    f.calls.push({
+      name: "correct_asset_lifecycle",
+      body: route.request().postDataJSON() as Record<string, unknown>,
+    });
+    Object.assign(f.assets[0], base, { version: 3 });
+    return route.fulfill({ json: f.assets[0] });
+  });
+  await page
+    .getByRole("button", { name: "撤销误登记的处置", exact: true })
+    .click();
+  await page.getByLabel("纠错原因", { exact: true }).fill("示例核对后撤销");
+  await page
+    .getByRole("button", { name: "确认撤销误登记", exact: true })
+    .click();
+  await expect(page.getByRole("heading", { name: /SB-000001/ })).toBeVisible();
+  await expect
+    .poll(
+      () => f.calls.filter((c) => c.name === "correct_asset_lifecycle").length,
+    )
+    .toBe(1);
+  expect(
+    f.calls.find((c) => c.name === "correct_asset_lifecycle")!.body,
+  ).toMatchObject({
+    asset_id: assetId,
+    expected_version: 2,
+    reason: "示例核对后撤销",
+  });
+});
+
+test("same-account focus checks coalesce without blanking the ledger", async ({
+  page,
+}) => {
+  const state = await fixture(page, "viewer");
+  await loginReady(page);
+  expect(
+    state.calls.filter((c) => c.name === "get_my_membership"),
+  ).toHaveLength(1);
+  const rows = page.locator("tbody tr");
+  let checked = 0;
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route(api + "/rest/v1/rpc/get_my_membership", async (route) => {
+    checked++;
+    await held;
+    await route.fallback();
+  });
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event("focus"));
+    window.dispatchEvent(new Event("focus"));
+    window.dispatchEvent(new Event("focus"));
+  });
+  await expect.poll(() => checked).toBe(1);
+  await expect(rows).toHaveCount(1);
+  await expect(
+    page.getByRole("link", { name: "设备台账", exact: true }),
+  ).toBeVisible();
+  state.holdNextList();
+  release();
+  await expect(page.getByText("正在更新…", { exact: true })).toBeVisible();
+  await expect(rows).toHaveCount(1);
+  state.releaseList();
+  await expect(page.getByText("正在更新…", { exact: true })).toHaveCount(0);
+  expect(checked).toBe(1);
+  expect(
+    state.calls.filter((c) => c.name === "get_my_membership"),
+  ).toHaveLength(2);
+});
+
+test("returning to a ledger retains filters, size and page while refreshing changed records", async ({
+  page,
+}) => {
+  const state = await fixture(page, "viewer");
+  state.assets.splice(0, state.assets.length, ...paginationAssets());
+  await loginReady(page);
+  await page.getByRole("link", { name: "设备台账", exact: true }).click();
+  const nav = page.getByRole("navigation", { name: "设备分页" });
+  await expect(page.locator("tbody tr")).toHaveCount(20);
+  await page.getByLabel("搜索设备", { exact: true }).fill("示例");
+  await page.getByRole("button", { name: "查询", exact: true }).click();
+  await expect(page.locator("tbody tr")).toHaveCount(20);
+  await nav
+    .getByRole("combobox", { name: "每页显示", exact: true })
+    .selectOption("10");
+  await nav.getByRole("button", { name: "下一页", exact: true }).click();
+  await expect(nav.getByRole("status")).toContainText("第 2 / 6 页");
+  await page.locator("tbody tr a").first().click();
+  await expect(
+    page.getByRole("heading", { name: "设备详情", exact: true }),
+  ).toBeVisible();
+  state.assets[10].name = "示例后台更新设备";
+  state.holdNextList();
+  await page.goBack();
+  await expect(page.getByLabel("搜索设备", { exact: true })).toHaveValue(
+    "示例",
+  );
+  await expect(
+    nav.getByRole("combobox", { name: "每页显示", exact: true }),
+  ).toHaveValue("10");
+  await expect(nav.getByRole("status")).toContainText("第 2 / 6 页");
+  await expect(page.locator("tbody tr")).toHaveCount(10);
+  await expect(page.getByText("正在更新…", { exact: true })).toBeVisible();
+  state.releaseList();
+  await expect(page.getByText("正在更新…", { exact: true })).toHaveCount(0);
+  await expect(nav.getByRole("status")).toContainText("第 2 / 6 页");
+  await expect(page.locator("tbody tr").first()).toContainText(
+    "示例后台更新设备",
+  );
+  expect(
+    state.calls.filter((c) => c.name === "list_assets").at(-1)?.body.search,
+  ).toBe("示例");
+});
+
+test("permission failure destroys inactive page caches and late refreshes", async ({
+  page,
+}) => {
+  const state = await fixture(page, "viewer");
+  await loginReady(page);
+  await page.getByRole("link", { name: "设备台账", exact: true }).click();
+  await expect(page.locator("tbody tr")).toHaveCount(1);
+  await page.getByRole("link", { name: "我的账号", exact: true }).click();
+  await page.route(api + "/rest/v1/rpc/get_my_membership", (route) =>
+    route.fulfill({
+      status: 503,
+      json: { message: "private permission diagnostic" },
+    }),
+  );
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(
+    page.getByRole("link", { name: "设备台账", exact: true }),
+  ).toHaveCount(0);
+  const reads = state.calls.filter((c) => c.name === "list_assets").length;
+  await page.goto("/#/assets");
+  await expect(page.locator("tbody tr")).toHaveCount(0);
+  await expect(
+    page.getByText("当前账号无法执行此操作，请登录或查看账号状态。", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.getByText("private permission diagnostic")).toHaveCount(0);
+  expect(state.calls.filter((c) => c.name === "list_assets")).toHaveLength(
+    reads,
+  );
+});
+
+test("logout clears list state before the next login", async ({ page }) => {
+  const state = await fixture(page, "viewer");
+  await loginReady(page);
+  await page.getByRole("link", { name: "设备台账", exact: true }).click();
+  await expect(page.locator("tbody tr")).toHaveCount(1);
+  await page.getByLabel("搜索设备", { exact: true }).fill("旧账号筛选");
+  await page.getByRole("button", { name: "退出登录", exact: true }).click();
+  await expect(page.locator("tbody tr")).toHaveCount(0);
+  state.assets[0].name = "示例重新登录后设备";
+  await page.getByRole("link", { name: "登录", exact: true }).click();
+  await page
+    .getByLabel("邮箱", { exact: true })
+    .fill("operator@example.invalid");
+  await page
+    .getByLabel("密码", { exact: true })
+    .fill("example-only-" + "x".repeat(16));
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await expect(page.locator("tbody tr")).toHaveCount(1);
+  await page.getByRole("link", { name: "设备台账", exact: true }).click();
+  await expect(page.getByLabel("搜索设备", { exact: true })).toHaveValue("");
+  await expect(page.locator("tbody tr")).toContainText("示例重新登录后设备");
+});

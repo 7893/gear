@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import FormField from "../components/FormField.vue";
 import { onBeforeUnmount, ref } from "vue";
 import { account, safeError } from "../accounts";
+import PasswordFields from "../components/PasswordFields.vue";
+import ActionGroup from "../components/ActionGroup.vue";
 import { createRecoveryFlow } from "../recovery";
 const flow = createRecoveryFlow();
 const stage = ref<"request" | "verify" | "password" | "done">("request");
@@ -12,16 +15,18 @@ const accepted = ref(false);
 const busy = ref(false);
 const notice = ref("");
 const error = ref("");
-async function submit() {
+async function submit(existingCode = false) {
   if (busy.value || !account.enabled || !account.recoveryEnabled) return;
   busy.value = true;
   error.value = "";
   try {
     if (stage.value === "request") {
-      await flow.request(email.value);
+      if (existingCode) await flow.useExistingCode(email.value);
+      else await flow.request(email.value);
       stage.value = "verify";
-      notice.value =
-        "若该邮箱对应已验证、已启用的账号，将收到六位验证码，请在此输入。";
+      notice.value = existingCode
+        ? "请输入已收到的六位找回验证码。"
+        : "若该邮箱对应已验证、已启用的账号，将收到六位验证码，请在此输入。";
     } else if (stage.value === "verify") {
       await flow.verify(code.value);
       stage.value = "password";
@@ -69,75 +74,68 @@ async function returnToLogin(event: MouseEvent) {
     </p>
     <p v-if="notice" class="notice" role="status">{{ notice }}</p>
     <p v-if="error" class="notice error" role="alert">{{ error }}</p>
-    <form v-if="stage !== 'done'" @submit.prevent="submit">
-      <label
-        >注册邮箱<input
-          v-model="email"
-          type="email"
-          autocomplete="email"
-          maxlength="254"
-          required
-          :readonly="stage !== 'request'"
-      /></label>
-      <label v-if="stage === 'verify'"
-        >验证码<input
-          v-model="code"
-          inputmode="numeric"
-          autocomplete="one-time-code"
-          pattern="[0-9]{6}"
-          minlength="6"
-          maxlength="6"
-          required
-      /></label>
-      <template v-if="stage === 'password'">
-        <label
-          >新密码<input
-            v-model="password"
-            type="password"
-            autocomplete="new-password"
-            minlength="12"
-            maxlength="128"
-            required
-        /></label>
-        <label
-          >再次输入新密码<input
-            v-model="confirmation"
-            type="password"
-            autocomplete="new-password"
-            minlength="12"
-            maxlength="128"
-            required
-        /></label>
-        <p class="hint">
-          此账号与同一认证服务的其他应用共享密码。重置后，这些应用也需使用新密码，并可能需要重新登录。
-        </p>
-        <label class="checkbox-row"
-          ><input
-            v-model="accepted"
-            type="checkbox"
-            required
-          />我理解并同意本次共享账号密码变更</label
+    <form v-if="stage !== 'done'" @submit.prevent="submit()">
+      <FormField
+        label="注册邮箱"
+        v-model="email"
+        type="email"
+        autocomplete="email"
+        maxlength="254"
+        required
+        :readonly="stage !== 'request'"
+      />
+      <FormField
+        label="验证码"
+        v-model="code"
+        inputmode="numeric"
+        autocomplete="one-time-code"
+        pattern="[0-9]{6}"
+        minlength="6"
+        maxlength="6"
+        required
+        v-if="stage === 'verify'"
+      />
+      <PasswordFields
+        v-if="stage === 'password'"
+        v-model:password="password"
+        v-model:confirmation="confirmation"
+        v-model:accepted="accepted"
+        :disabled="busy"
+      />
+      <ActionGroup>
+        <button
+          :disabled="busy || !account.enabled || !account.recoveryEnabled"
+          type="submit"
         >
-      </template>
-      <button
-        :disabled="busy || !account.enabled || !account.recoveryEnabled"
-        type="submit"
-      >
-        {{
-          busy
-            ? "处理中…"
-            : stage === "request"
-              ? "发送找回验证码"
-              : stage === "verify"
-                ? "验证找回验证码"
-                : "设置新密码"
-        }}
-      </button>
+          {{
+            busy
+              ? "处理中…"
+              : stage === "request"
+                ? "发送找回验证码"
+                : stage === "verify"
+                  ? "验证找回验证码"
+                  : "设置新密码"
+          }}
+        </button>
+        <button
+          v-if="stage === 'request'"
+          class="quiet"
+          type="submit"
+          :disabled="busy || !account.enabled || !account.recoveryEnabled"
+          @click.prevent="
+            (
+              $event.currentTarget as HTMLButtonElement
+            ).form?.reportValidity() && submit(true)
+          "
+        >
+          已有找回验证码
+        </button>
+      </ActionGroup>
     </form>
     <p v-if="stage === 'password'" class="hint">
       请在本页完成操作。若提交时连接中断，密码可能已更新，可尝试使用新密码登录。
     </p>
-    <div class="links">
+    <ActionGroup class="links">
       <button
         v-if="stage === 'verify' || stage === 'password'"
         class="quiet"
@@ -148,6 +146,6 @@ async function returnToLogin(event: MouseEvent) {
         重新发送或更换邮箱
       </button>
       <a href="/#/login" @click="returnToLogin">返回登录</a>
-    </div>
+    </ActionGroup>
   </section>
 </template>

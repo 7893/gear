@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import QueryState from "../components/QueryState.vue";
+import RecordQr from "../components/RecordQr.vue";
 import { computed, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { account } from "../accounts";
 import { useAuthorizedQuery } from "../useAuthorizedQuery";
+import { useRouteAccess } from "../useRouteAccess";
 import {
   inventoryAccess,
   inventoryWriteAccess,
@@ -22,8 +25,11 @@ import ExtensionForm from "../components/ExtensionForm.vue";
 import AssetConditionForm from "../components/AssetConditionForm.vue";
 import AssetDetailsForm from "../components/AssetDetailsForm.vue";
 import AssetLifecycleForm from "../components/AssetLifecycleForm.vue";
+import AssignmentUserForm from "../components/AssignmentUserForm.vue";
+import EventEvidencePanel from "../components/EventEvidencePanel.vue";
+import LifecycleCorrectionForm from "../components/LifecycleCorrectionForm.vue";
 const route = useRoute();
-const detailAccess = computed(() => inventoryAccess.value && !!route.params.id);
+const detailAccess = useRouteAccess(inventoryAccess);
 const { data, error, loading, load } = useAuthorizedQuery(
   detailAccess,
   () => getAsset(String(route.params.id)),
@@ -36,6 +42,12 @@ const conditionEarliestOn = computed(
       data.value?.asset.last_flow_on,
       data.value?.asset.started_on,
       ...(data.value?.history || [])
+        .filter(
+          (event) =>
+            !(data.value?.history || []).some(
+              (r) => r.reverses_event_id === event.id,
+            ),
+        )
         .filter((event) =>
           [
             "asset_initialized",
@@ -71,6 +83,10 @@ function detailsUpdated() {
   message.value = "设备资料更正已记录，原单快照和持有关系保持不变。";
   void load();
 }
+function userUpdated() {
+  message.value = "具体使用人已记录，团队持有方、负责人、期限和原单快照保持。";
+  void load();
+}
 watch(
   [
     inventoryAccess,
@@ -90,13 +106,20 @@ watch(
       刷新设备情况
     </button>
     <p v-if="message" class="notice" role="status">{{ message }}</p>
-    <p v-if="loading" role="status">正在读取设备…</p>
-    <div v-if="error" class="notice error" role="alert">
-      <p>{{ error }}</p>
-      <button class="quiet" type="button" @click="load">重新读取</button>
-    </div>
+    <QueryState
+      :loading="loading"
+      :error="error"
+      loading-text="正在读取设备…"
+      retry-label="重新读取"
+      @retry="load"
+    />
     <template v-if="data">
       <h2>{{ data.asset.asset_code }} · {{ data.asset.name }}</h2>
+      <RecordQr
+        v-if="data.asset.reference_code"
+        kind="asset"
+        :reference="data.asset.reference_code"
+      />
       <p v-if="data.asset.invalidated_at" class="notice">
         此建账记录已标记无效，保留历史供核对。
       </p>
@@ -146,6 +169,19 @@ watch(
           <dd>{{ data.asset.location || "未填写" }}</dd>
         </div>
         <div>
+          <dt>具体使用人</dt>
+          <dd>
+            {{
+              data.asset.actual_user_name ||
+              (data.asset.holder_kind === "person"
+                ? data.asset.holder_name
+                : data.asset.holder_kind === "team"
+                  ? "待补录"
+                  : "不适用")
+            }}
+          </dd>
+        </div>
+        <div>
           <dt>领用起始日期</dt>
           <dd>
             {{
@@ -173,6 +209,11 @@ watch(
         :asset="data.asset"
         @updated="detailsUpdated"
       />
+      <AssignmentUserForm
+        :key="'user:' + data.asset.id + ':' + data.asset.version"
+        :asset="data.asset"
+        @updated="userUpdated"
+      />
       <AssetConditionForm
         :key="'condition:' + data.asset.id + ':' + data.asset.version"
         :asset="data.asset"
@@ -189,6 +230,12 @@ watch(
         :asset="data.asset"
         :earliest-on="conditionEarliestOn"
         @updated="lifecycleUpdated"
+      />
+      <LifecycleCorrectionForm
+        :key="'correction:' + data.asset.version"
+        :asset="data.asset"
+        :history="data.history"
+        @updated="load"
       />
       <h3>历史记录</h3>
       <ol v-if="data.history.length" class="asset-history">
@@ -216,7 +263,19 @@ watch(
                                 ? "登记找回"
                                 : event.event_type === "asset_invalidated"
                                   ? "作废误建台账"
-                                  : "设备变更记录"
+                                  : event.event_type ===
+                                      "assignment_user_changed"
+                                    ? "记录团队具体使用人"
+                                    : event.event_type ===
+                                        "asset_lifecycle_corrected"
+                                      ? "撤销误登记处置"
+                                      : event.event_type ===
+                                          "attachment_uploaded"
+                                        ? "上传事件凭证"
+                                        : event.event_type ===
+                                            "attachment_reviewed"
+                                          ? "核对事件凭证"
+                                          : "设备变更记录"
           }}</strong>
           <p>
             历史日期：{{ event.occurred_on || "未知，未补造日期" }}；记录于
@@ -240,7 +299,14 @@ watch(
               event.before_data.responsible_name
             }}；原预计归还日期：{{ event.before_data.due_on || "长期使用" }}。
           </p>
+          <p v-if="event.reverses_event_id">
+            已撤销原记录 {{ event.reverses_event_id }}，原记录保留。
+          </p>
           <p v-if="event.reason">说明：{{ event.reason }}</p>
+          <p v-if="event.event_type === 'assignment_user_changed'">
+            具体使用人：{{ event.before_data?.actual_user_name || "待补录" }} →
+            {{ event.after_data.actual_user_name || "待补录" }}
+          </p>
           <ul v-if="event.event_type === 'asset_updated'">
             <li
               v-for="change in assetDetailsChanges(event)"
@@ -260,6 +326,22 @@ watch(
             :to="'/documents/' + event.after_data.document_id"
             >{{ event.after_data.document_no || "查看交接单" }}</RouterLink
           >
+          <EventEvidencePanel
+            v-if="
+              [
+                'asset_initialized',
+                'asset_fault_reported',
+                'asset_repaired',
+                'asset_lost',
+                'asset_scrapped',
+                'asset_found',
+                'asset_invalidated',
+                'asset_lifecycle_corrected',
+              ].includes(event.event_type)
+            "
+            :event-id="event.id"
+            :historical="event.event_type === 'asset_initialized'"
+          />
         </li>
       </ol>
       <p v-else>暂无设备事件记录。</p>

@@ -1,12 +1,21 @@
-import { reactive } from "vue";
+import { computed, reactive } from "vue";
+import { clearGearAuthStorage } from "./auth-support";
 import { createClient } from "@supabase/supabase-js";
 import { configuration } from "./configuration";
+import {
+  applicationNameError,
+  applicationNameMessage,
+  applicationPhoneError,
+  applicationPhoneMessage,
+  validateApplication,
+} from "./application-validation";
 
 export type Role = "admin" | "operator" | "viewer";
 export type MemberStatus = "pending" | "active" | "rejected" | "disabled";
 export type Membership = {
   id: string;
   display_name: string;
+  contact_phone?: string | null;
   status: MemberStatus;
   role: Role | null;
   version: number;
@@ -35,6 +44,17 @@ export const account = reactive({
   message: "",
   error: "",
 });
+export const accountAccess = computed(
+  () =>
+    account.enabled &&
+    account.signedIn &&
+    account.profile?.email_verified === true &&
+    account.profile.membership?.status === "active" &&
+    !!account.profile.membership.role,
+);
+export const adminAccess = computed(
+  () => accountAccess.value && account.profile?.membership?.role === "admin",
+);
 function makeClient(
   apiUrl: string,
   publishableKey: string,
@@ -53,6 +73,17 @@ function makeClient(
 }
 let client: ReturnType<typeof makeClient> | undefined;
 let refreshSequence = 0;
+let profileIdentity: string | undefined;
+let profileRefresh: Promise<void> | undefined;
+
+function clearProfile() {
+  ++refreshSequence;
+  profileRefresh = undefined;
+  profileIdentity = undefined;
+  account.profile = null;
+  account.signedIn = false;
+  account.loading = false;
+}
 const messages: Record<string, string> = {
   evidence_unavailable: "签字件功能尚未开放。",
   invalid_evidence: "附件资料无效，请核对文件、外部单号和更正原因。",
@@ -83,6 +114,8 @@ const messages: Record<string, string> = {
   login_required: "请重新登录。",
   email_not_verified: "请先完成邮箱验证。",
   invalid_name: "请填写 1 至 80 个字符的姓名。",
+  invalid_application_name: applicationNameMessage,
+  invalid_contact_phone: applicationPhoneMessage,
   last_admin: "至少需要保留一个可用的管理员账号。",
   version_conflict: "账号状态已改变，请刷新后重试。",
   request_conflict: "本次请求与此前操作不同，请刷新后重试。",
@@ -94,6 +127,17 @@ const messages: Record<string, string> = {
   invalid_new_password: "新密码长度应为 12 至 128 个字符。",
   password_mismatch: "两次输入的新密码不一致。",
   shared_password_confirmation_required: "请先确认共享账号密码变更的影响。",
+  invalid_current_password:
+    "当前密码不正确，请重新输入；忘记密码可使用邮箱验证码找回。",
+  password_change_unavailable: "当前账号状态或身份已变化，请重新登录后核对。",
+  password_change_cancelled: "操作已取消，请重新核对账号状态。",
+  password_change_busy: "正在处理密码变更，请等待本次请求完成。",
+  member_reset_unavailable:
+    "此账号尚未验证、未启用或资料已变化，请刷新账号列表后核对。",
+  invalid_document_header:
+    "请填写一至一百二十字的单行单位抬头和不超过两千字的修改原因。",
+  settings_conflict: "设置已变化，请刷新后重新核对修改。",
+  settings_unchanged: "单位抬头没有变化，无需保存。",
   inventory_unavailable: "设备台账尚未开放。",
   inventory_access_denied: "当前账号没有此设备操作权限，请刷新账号状态。",
   invalid_asset: "设备资料不符合要求，请核对名称、分类、状况和字段长度。",
@@ -140,6 +184,15 @@ const messages: Record<string, string> = {
   invalid_extension_date: "新期限须晚于原期限，且不能早于东八区今天。",
   assignment_not_temporary: "设备已不属于当前临时领用，请重新读取设备情况。",
   assignment_conflict: "设备或期限已变化，请刷新设备情况后重新核对延期。",
+  invalid_party_asset_filter: "请选择适用于当前个人或团队的清单范围。",
+  invalid_assignment_user:
+    "请选择有效的个人作为具体使用人，并填写不超过两千字的原因。",
+  assignment_user_conflict:
+    "设备或持有关系已变化，请刷新后重新核对具体使用人。",
+  assignment_user_unavailable:
+    "仅可补录当前在管、由团队持有的设备；个人持有时使用人为本人。",
+  actual_user_unavailable: "所选具体使用人已停用或不存在，请刷新名单重新选择。",
+  assignment_user_unchanged: "具体使用人没有变化，无需保存。",
   invalid_document: "单据资料不符合要求，请核对字段与明细数量。",
   invalid_document_item: "请核对设备明细、实际状况；故障设备须填写说明。",
   invalid_document_date:
@@ -159,7 +212,17 @@ const messages: Record<string, string> = {
     "单据已有后续设备变更或被引用为替代单，不能直接作废。请核对历史，不要倒退真实去向。",
   document_state_conflict:
     "设备当前情况与原单结果不一致，整单未作废，请刷新并核对。",
+  reference_not_found: "编号不存在，或当前账号无权查看。",
   document_not_found: "单据不存在，或当前账号无权读取。",
+  original_export_too_large:
+    "原件合计超过 25 MB 或 1000 份，请使用整体备份工具导出。",
+  original_export_empty: "尚无可下载的凭证原件。",
+  invalid_inventory_import: "导入文件格式不正确，最多一次导入 200 台设备。",
+  inventory_import_row_error: "导入校验未通过，整批未导入。",
+  invalid_due_settings: "请检查提醒天数、时间和修改原因。",
+  evidence_event_unavailable: "该事件不支持上传凭证，请刷新设备记录。",
+  asset_lifecycle_dependencies:
+    "该事件已有后续状态变更，不能直接撤销。请先核对历史。",
   draft_access_denied: "只能处理有权访问的草稿，请返回单据列表核对。",
   document_conflict: "单据已被修改或处理，请重新读取后核对。",
   asset_flow_conflict:
@@ -167,6 +230,31 @@ const messages: Record<string, string> = {
   duplicate_document_asset: "同一张单不能重复选择同一台设备。",
 };
 export function safeError(error: unknown): string {
+  if (
+    error &&
+    typeof error === "object" &&
+    "message" in error &&
+    error.message === "inventory_import_row_error" &&
+    "details" in error &&
+    typeof error.details === "string" &&
+    error.details.length < 300
+  ) {
+    try {
+      const detail = JSON.parse(error.details) as Record<string, unknown>;
+      if (
+        Number.isSafeInteger(detail.line_no) &&
+        Number(detail.line_no) >= 2 &&
+        Number(detail.line_no) <= 201
+      )
+        return (
+          `CSV 第 ${detail.line_no} 行未通过校验，整批未导入。` +
+          ((typeof detail.cause === "string" && messages[detail.cause]) ||
+            "请核对该行内容。")
+        );
+    } catch {
+      /* Never display arbitrary database detail. */
+    }
+  }
   const message =
     error && typeof error === "object" && "message" in error
       ? String(error.message)
@@ -196,7 +284,9 @@ export function safeError(error: unknown): string {
         if (
           detail &&
           typeof detail.asset_code === "string" &&
-          /^SB-[0-9]{1,19}$/.test(detail.asset_code)
+          /^(?:SB-[0-9]{1,19}|EQ-[0-9]{2}-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4})$/.test(
+            detail.asset_code,
+          )
         )
           prefix = `设备 ${detail.asset_code}：`;
         else if (
@@ -226,44 +316,73 @@ function service(): ReturnType<typeof makeClient> {
   if (!client || !account.enabled) throw new Error("accounts_unavailable");
   return client;
 }
-export async function refreshProfile(): Promise<void> {
+export function refreshProfile(): Promise<void> {
+  if (!client) return Promise.resolve();
+  if (profileRefresh) return profileRefresh;
+  const pending = readProfile().finally(() => {
+    if (profileRefresh === pending) profileRefresh = undefined;
+  });
+  profileRefresh = pending;
+  return pending;
+}
+
+async function readProfile(): Promise<void> {
   if (!client) return;
   const sequence = ++refreshSequence;
   account.loading = true;
-  // Clear old permissions before refreshing; errors must not retain an admin view.
-  account.profile = null;
+  // Keep a verified same-session view during revalidation. Clear on identity
+  // changes or failures; every backend operation still checks current permissions.
   try {
     const { data: session, error: sessionError } =
       await client.auth.getSession();
     if (sequence !== refreshSequence) return;
     if (sessionError) throw sessionError;
     account.signedIn = !!session.session;
-    if (!session.session) return;
-    const { data, error } = await client.rpc("get_my_membership");
+    if (!session.session) {
+      account.profile = null;
+      profileIdentity = undefined;
+      return;
+    }
+    if (profileIdentity !== session.session.user.id) account.profile = null;
+    const { data, error } = await client
+      .rpc("get_my_membership")
+      .abortSignal(AbortSignal.timeout(15000));
     if (sequence !== refreshSequence) return;
     if (error) throw error;
     const profile = data as Profile;
     const applicationName =
       session.session.user.user_metadata?.gear_application_name;
+    const applicationPhone =
+      session.session.user.user_metadata?.gear_application_phone;
     if (
       !profile.membership &&
       profile.email_verified &&
       typeof applicationName === "string" &&
-      applicationName.trim()
+      typeof applicationPhone === "string" &&
+      !applicationNameError(applicationName) &&
+      !applicationPhoneError(applicationPhone)
     ) {
-      // Registration is an explicit application. Metadata supplies only a name;
-      // the RPC checks the verified caller and can create only a pending member.
-      const applied = await client.rpc("apply_for_access", {
-        display_name: applicationName.trim(),
-      });
+      // Metadata is untrusted input. The RPC validates contact details again and
+      // can create only a pending Gear member, never a shared Auth phone identity.
+      const applied = await client
+        .rpc("apply_for_access", {
+          display_name: applicationName.trim(),
+          contact_phone: applicationPhone,
+        })
+        .abortSignal(AbortSignal.timeout(15000));
       if (sequence !== refreshSequence) return;
       if (applied.error) throw applied.error;
       profile.membership = applied.data as Membership;
     }
+    profileIdentity = session.session.user.id;
     account.profile = profile;
     account.error = "";
   } catch (error) {
-    if (sequence === refreshSequence) account.error = safeError(error);
+    if (sequence === refreshSequence) {
+      account.profile = null;
+      profileIdentity = undefined;
+      account.error = safeError(error);
+    }
   } finally {
     if (sequence === refreshSequence) account.loading = false;
   }
@@ -305,8 +424,19 @@ export async function initializeAccounts(): Promise<void> {
     } else if (callbackError)
       account.message = "验证链接无效或已过期，请重新验证邮箱。";
     // Do not await another SDK operation inside an Auth callback's lock.
-    client.auth.onAuthStateChange(() => {
-      window.setTimeout(() => void refreshProfile(), 0);
+    client.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT") {
+        clearProfile();
+        return;
+      }
+      if (event === "INITIAL_SESSION") return; // Explicit check below owns startup.
+      if (session && session.user.id !== profileIdentity) clearProfile();
+      window.setTimeout(() => {
+        // signIn/verifyEmail also check explicitly; avoid a second identical read.
+        if (event === "SIGNED_IN" && profileIdentity === session?.user.id)
+          return;
+        void refreshProfile();
+      }, 0);
     });
     await refreshProfile();
     window.addEventListener("focus", () => void refreshProfile());
@@ -328,12 +458,17 @@ export async function register(
   displayName: string,
   email: string,
   password: string,
+  contactPhone: string,
 ): Promise<void> {
+  const application = validateApplication(displayName, contactPhone);
   const { error } = await service().auth.signUp({
     email: email.trim(),
     password,
     options: {
-      data: { gear_application_name: displayName.trim() },
+      data: {
+        gear_application_name: application.display_name,
+        gear_application_phone: application.contact_phone,
+      },
       emailRedirectTo: window.location.origin + "/",
     },
   });
@@ -362,17 +497,17 @@ export async function resendVerification(email: string): Promise<void> {
   });
   if (error) throw error;
 }
-export async function apply(displayName: string): Promise<void> {
-  const { error } = await service().rpc("apply_for_access", {
-    display_name: displayName.trim(),
-  });
+export async function apply(
+  displayName: string,
+  contactPhone: string,
+): Promise<void> {
+  const application = validateApplication(displayName, contactPhone);
+  const { error } = await service().rpc("apply_for_access", application);
   if (error) throw error;
   await refreshProfile();
 }
 export async function signOut(): Promise<void> {
-  ++refreshSequence;
-  account.profile = null;
-  account.signedIn = false;
+  clearProfile();
   const { error } = await service().auth.signOut({ scope: "local" });
   if (error) throw error;
 }
@@ -381,13 +516,105 @@ export async function listMembers(): Promise<Member[]> {
   if (error) throw error;
   return data as Member[];
 }
+export async function freshAccountIdentity() {
+  if (!accountAccess.value) throw new Error("password_change_unavailable");
+  const current = service();
+  const { data, error } = await current.auth.getUser();
+  if (error || !data.user?.email || !data.user.email_confirmed_at)
+    throw new Error("password_change_unavailable");
+  const result = await current.rpc("get_my_membership");
+  const profile = result.data as Profile | null;
+  if (
+    result.error ||
+    !profile?.email_verified ||
+    profile.membership?.status !== "active" ||
+    !profile.membership.role ||
+    profile.email.toLowerCase() !== data.user.email.toLowerCase() ||
+    !accountAccess.value ||
+    profile.membership.id !== account.profile?.membership?.id
+  )
+    throw new Error("password_change_unavailable");
+  return {
+    id: data.user.id,
+    email: data.user.email,
+    memberId: profile.membership.id,
+    role: profile.membership.role,
+  };
+}
+export async function finishPasswordChange(identityId: string) {
+  const { data } = await service().auth.getSession();
+  if (data.session?.user.id !== identityId) return;
+  await signOut().catch(() => undefined);
+  clearGearAuthStorage();
+}
+export async function requestMemberPasswordReset(member: Member) {
+  if (!account.enabled || !account.recoveryEnabled || !adminAccess.value)
+    throw new Error("admin_required");
+  const identity = await freshAccountIdentity();
+  if (identity.role !== "admin") throw new Error("admin_required");
+  const latest = (await listMembers()).find((item) => item.id === member.id);
+  if (
+    !latest ||
+    latest.version !== member.version ||
+    latest.email !== member.email ||
+    !latest.email ||
+    !latest.email_verified ||
+    !latest.identity_exists ||
+    latest.status !== "active"
+  )
+    throw new Error("member_reset_unavailable");
+  const current = await freshAccountIdentity();
+  if (
+    !adminAccess.value ||
+    current.role !== "admin" ||
+    current.id !== identity.id ||
+    current.memberId !== identity.memberId
+  )
+    throw new Error("admin_required");
+  // This is the existing public recovery operation; the server email hook
+  // independently checks the target's current eligibility before sending.
+  const { error } = await service().auth.resetPasswordForEmail(latest.email, {
+    redirectTo: window.location.origin + "/",
+  });
+  if (error) throw error;
+}
+async function databaseRpc(
+  name: string,
+  parameters: Record<string, unknown>,
+): Promise<unknown> {
+  const { data, error } = await service()
+    .rpc(name, parameters)
+    .abortSignal(AbortSignal.timeout(15000));
+  if (error) throw error;
+  return data;
+}
+export async function settingsRpc(
+  name:
+    | "get_app_settings"
+    | "update_document_header"
+    | "get_due_settings"
+    | "update_due_settings",
+  parameters: Record<string, unknown> = {},
+): Promise<unknown> {
+  if (!adminAccess.value) throw new Error("admin_required");
+  return databaseRpc(name, parameters);
+}
 export async function inventoryRpc(
   name:
+    | "import_assets"
+    | "correct_asset_lifecycle"
+    | "list_event_evidence"
+    | "reserve_event_attachment"
+    | "review_event_attachment"
+    | "list_originals"
     | "list_assets"
     | "get_asset"
     | "list_parties"
     | "create_party"
+    | "resolve_reference"
     | "list_party_records"
+    | "list_party_assets"
+    | "set_assignment_user"
     | "get_party"
     | "update_party"
     | "change_asset_lifecycle"
@@ -418,6 +645,10 @@ export async function inventoryRpc(
   }
   if (
     [
+      "list_event_evidence",
+      "reserve_event_attachment",
+      "review_event_attachment",
+      "list_originals",
       "list_evidence",
       "get_attachment",
       "match_evidence",
@@ -429,11 +660,7 @@ export async function inventoryRpc(
     (!account.evidenceEnabled || !account.flowsEnabled)
   )
     throw new Error("evidence_unavailable");
-  const { data, error } = await service()
-    .rpc(name, parameters)
-    .abortSignal(AbortSignal.timeout(15000));
-  if (error) throw error;
-  return data;
+  return databaseRpc(name, parameters);
 }
 export type NotificationStatus = {
   enabled: boolean;
@@ -450,7 +677,8 @@ export type NotificationStatus = {
   >;
   recent: {
     id: string;
-    notification_type: "application_pending" | "application_result";
+    notification_type:
+      "application_pending" | "application_result" | "daily_due";
     status: keyof NotificationStatus["counts"];
     attempt_count: number;
     error_code: string | null;

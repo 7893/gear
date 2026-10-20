@@ -1,3 +1,4 @@
+import { recordCode } from "./references";
 import {
   categories,
   assetStates,
@@ -5,6 +6,8 @@ import {
   type Asset,
   type AssetList,
   type DueAssetList,
+  type PartyAssetList,
+  partyAssetRelations,
 } from "./inventory-model";
 import { businessToday, holderLabel } from "./inventory";
 import type { CsvFile } from "./csv";
@@ -21,6 +24,7 @@ const assetHeaders = [
   "状况",
   "当前持有方",
   "负责人",
+  "具体使用人",
   "使用方式",
   "起始日期",
   "预计归还日期",
@@ -42,6 +46,8 @@ function assetRow(asset: Asset): string[] {
     asset.condition === "faulty" ? "故障" : "正常",
     holderLabel(asset),
     asset.responsible_name || "",
+    asset.actual_user_name ||
+      (asset.holder_kind === "person" ? asset.holder_name || "" : ""),
     asset.usage_kind === "temporary"
       ? "临时使用"
       : asset.usage_kind === "long_term"
@@ -70,6 +76,18 @@ export function dueCsv(data: DueAssetList): CsvFile {
       dueStates[asset.due_state],
       data.business_on,
       String(data.notice_days),
+    ]),
+    businessOn: data.business_on,
+  };
+}
+export function partyAssetsCsv(data: PartyAssetList): CsvFile {
+  return {
+    headers: ["核对对象标识", "核对对象", "关联类型", ...assetHeaders],
+    rows: data.items.map((asset) => [
+      recordCode(data.party.kind === "team" ? "TM" : "PE", data.party),
+      data.party.name,
+      partyAssetRelations(asset, data.party),
+      ...assetRow(asset),
     ]),
     businessOn: data.business_on,
   };

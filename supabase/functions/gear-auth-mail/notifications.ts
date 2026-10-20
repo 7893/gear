@@ -66,6 +66,26 @@ function notification(value: unknown): Notification {
       kind: value.kind,
       role: value.role as "admin" | "operator" | "viewer",
     };
+  if (
+    value.kind === "daily_due" &&
+    "businessDate" in value &&
+    typeof value.businessDate === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(value.businessDate) &&
+    "dueSoon" in value &&
+    "dueToday" in value &&
+    "overdue" in value &&
+    [value.dueSoon, value.dueToday, value.overdue].every(
+      (n) => typeof n === "number" && Number.isSafeInteger(n) && n >= 0,
+    )
+  ) {
+    return {
+      kind: "daily_due",
+      businessDate: value.businessDate,
+      dueSoon: value.dueSoon as number,
+      dueToday: value.dueToday as number,
+      overdue: value.overdue as number,
+    };
+  }
   if (value.kind === "application_rejected") return { kind: value.kind };
   throw new Error("invalid_message");
 }

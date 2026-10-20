@@ -1,17 +1,18 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { account, safeError } from "../accounts";
+import FormField from "./FormField.vue";
+import { computed, ref, watch } from "vue";
+import { account } from "../accounts";
 import {
   inventoryAccess,
   businessToday,
   listParties,
   changeAssetLifecycle,
   lifecycleActions,
-  requestFor,
   type Asset,
   type LifecycleAction,
   type RecoveryPlacement,
 } from "../inventory";
+import { useAuthorizedAction } from "../useAuthorizedAction";
 import { useAuthorizedQuery } from "../useAuthorizedQuery";
 import ActionGroup from "./ActionGroup.vue";
 import PlacementFields from "./PlacementFields.vue";
@@ -39,8 +40,6 @@ const mode = ref("inventory"),
   responsibleId = ref(""),
   usage = ref("long_term"),
   dueOn = ref("");
-const busy = ref(false),
-  error = ref("");
 const recoveryAccess = computed(
   () => eligible.value && open.value && action.value === "found",
 );
@@ -50,26 +49,14 @@ const {
   error: partiesError,
   load,
 } = useAuthorizedQuery(recoveryAccess, listParties);
-const requests = new Map<string, string>();
-let generation = 0;
-function reset() {
-  generation++;
-  open.value = false;
-  busy.value = false;
-  error.value = "";
-  reason.value = "";
-  acknowledged.value = false;
-  requests.clear();
-}
-watch(
-  [
-    eligible,
-    () => account.profile?.membership?.id,
-    () => props.asset.id,
-    () => props.asset.version,
-  ],
-  reset,
-  { flush: "sync" },
+const { busy, error, run, reset } = useAuthorizedAction(
+  eligible,
+  [() => props.asset.id, () => props.asset.version],
+  () => {
+    open.value = false;
+    reason.value = "";
+    acknowledged.value = false;
+  },
 );
 watch(action, () => {
   acknowledged.value = false;
@@ -87,7 +74,6 @@ watch(holderId, () => {
       : parties.value?.find((p) => p.id === holderId.value)
           ?.default_responsible_id || "";
 });
-onBeforeUnmount(() => generation++);
 async function save() {
   if (
     !eligible.value ||
@@ -96,7 +82,6 @@ async function save() {
     (action.value === "found" && (!parties.value || loading.value))
   )
     return;
-  const current = generation;
   const details: RecoveryPlacement | Record<string, never> =
     action.value === "found"
       ? {
@@ -128,25 +113,19 @@ async function save() {
     details,
     reason: reason.value.trim(),
   };
-  busy.value = true;
-  error.value = "";
-  try {
-    await changeAssetLifecycle(
-      props.asset,
-      payload.action,
-      payload.occurred_on,
-      details,
-      payload.reason,
-      requestFor(requests, payload),
-    );
-    if (current === generation && eligible.value)
-      emit("updated", payload.action);
-  } catch (failure) {
-    if (current === generation && eligible.value)
-      error.value = safeError(failure);
-  } finally {
-    if (current === generation) busy.value = false;
-  }
+  void run(
+    payload,
+    (id) =>
+      changeAssetLifecycle(
+        props.asset,
+        payload.action,
+        payload.occurred_on,
+        details,
+        payload.reason,
+        id,
+      ),
+    () => emit("updated", payload.action),
+  );
 }
 </script>
 <template>
@@ -168,15 +147,15 @@ async function save() {
           <option v-else value="found">登记找回</option>
         </select></label
       >
-      <label
-        >处理日期<input
-          v-model="occurredOn"
-          type="date"
-          required
-          :disabled="busy || action === 'invalidate'"
-          :min="earliestOn || undefined"
-          :max="businessToday()"
-      /></label>
+      <FormField
+        label="处理日期"
+        v-model="occurredOn"
+        type="date"
+        required
+        :disabled="busy || action === 'invalidate'"
+        :min="earliestOn || undefined"
+        :max="businessToday()"
+      />
       <template v-if="action === 'found'">
         <p class="form-wide hint">
           请核对找回后的实际状况和持有关系，重新选择使用期限；不会自动恢复旧领用记录或旧期限。
@@ -188,15 +167,19 @@ async function save() {
             重新读取名单
           </button>
         </p>
-        <label
-          >找回时状况<select v-model="condition" required :disabled="busy">
-            <option value="normal">正常</option>
-            <option value="faulty">故障</option>
-          </select></label
-        >
-        <label
-          >找回后位置<input v-model="location" maxlength="120" :disabled="busy"
-        /></label>
+        <FormField
+          label="找回时状况"
+          v-model="condition"
+          required
+          :disabled="busy"
+          :options="{ normal: '正常', faulty: '故障' }"
+        />
+        <FormField
+          label="找回后位置"
+          v-model="location"
+          maxlength="120"
+          :disabled="busy"
+        />
         <PlacementFields
           v-if="parties"
           v-model:mode="mode"
@@ -216,14 +199,15 @@ async function save() {
             : "关闭当前分配和到期提醒，保留最后责任方与原单据，不作为正常退回。报废不能直接登记找回。"
         }}
       </p>
-      <label class="form-wide"
-        >处理原因<textarea
-          v-model="reason"
-          required
-          maxlength="2000"
-          :disabled="busy"
-        />
-      </label>
+      <FormField
+        label="处理原因"
+        v-model="reason"
+        required
+        maxlength="2000"
+        :disabled="busy"
+        type="textarea"
+        wide
+      />
       <label class="form-wide checkbox-row"
         ><input
           v-model="acknowledged"

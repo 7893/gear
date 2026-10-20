@@ -8,8 +8,11 @@ export type EvidenceHints = {
   document_numbers: string[];
 };
 export type Attachment = {
+  reference_code?: string;
+  created_at?: string;
   id: string;
-  document_id: string;
+  document_id: string | null;
+  event_id?: string | number | null;
   version: number;
   storage_key: string;
   original_name: string;

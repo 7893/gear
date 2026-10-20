@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { reactive, ref } from "vue";
+import FormField from "../components/FormField.vue";
+import { reactive } from "vue";
 import { useAuthorizedQuery } from "../useAuthorizedQuery";
 import {
   inventoryAccess,
@@ -7,21 +8,18 @@ import {
   listAssets,
   categories,
   assetStates,
-  holderLabel,
-  dueLabel,
 } from "../inventory";
 import InventoryGate from "../components/InventoryGate.vue";
-import ListPagination from "../components/ListPagination.vue";
+import AssetTable from "../components/AssetTable.vue";
+import ListResults from "../components/ListResults.vue";
 import ListExport from "../components/ListExport.vue";
 import { inventoryCsv } from "../inventory-export";
-import { defaultPageSize } from "../pagination";
 const filters = reactive({
   search: "",
   category: "",
   state: "",
   holder_kind: "",
 });
-const pageSize = ref(defaultPageSize);
 const query = () =>
   listAssets({
     search: filters.search,
@@ -45,41 +43,38 @@ const { data, loading, error, load } = useAuthorizedQuery(
         >登记已有设备</RouterLink
       >
     </div>
+    <RouterLink v-if="inventoryWriteAccess" to="/assets/import"
+      >批量导入已有设备</RouterLink
+    >
     <form class="inventory-filters" @submit.prevent="load">
-      <label
-        >搜索设备<input
-          v-model="filters.search"
-          maxlength="120"
-          placeholder="编号、名称、型号、持有方或位置"
-      /></label>
-      <label
-        >分类<select v-model="filters.category">
-          <option value="">全部分类</option>
-          <option v-for="(label, code) in categories" :key="code" :value="code">
-            {{ label }}
-          </option>
-        </select></label
-      >
-      <label
-        >状态<select v-model="filters.state">
-          <option value="">全部状态</option>
-          <option
-            v-for="(label, code) in assetStates"
-            :key="code"
-            :value="code"
-          >
-            {{ label }}
-          </option>
-        </select></label
-      >
-      <label
-        >持有情况<select v-model="filters.holder_kind">
-          <option value="">全部持有情况</option>
-          <option value="inventory">经办人库存</option>
-          <option value="person">个人持有</option>
-          <option value="team">团队持有</option>
-        </select></label
-      >
+      <FormField
+        label="搜索设备"
+        v-model="filters.search"
+        maxlength="120"
+        placeholder="编号、名称、型号、持有方或位置"
+      />
+      <FormField
+        label="分类"
+        v-model="filters.category"
+        :options="categories"
+        empty-label="全部分类"
+      />
+      <FormField
+        label="状态"
+        v-model="filters.state"
+        :options="assetStates"
+        empty-label="全部状态"
+      />
+      <FormField
+        label="持有情况"
+        v-model="filters.holder_kind"
+        :options="{
+          '': '全部持有情况',
+          inventory: '经办人库存',
+          person: '个人持有',
+          team: '团队持有',
+        }"
+      />
       <button type="submit" :disabled="loading">查询</button>
     </form>
     <ListExport
@@ -88,77 +83,34 @@ const { data, loading, error, load } = useAuthorizedQuery(
       filename="设备台账"
       :query="async () => inventoryCsv(await query())"
     />
-    <p v-if="loading" role="status">正在读取台账…</p>
-    <div v-if="error" class="notice error" role="alert">
-      <p>{{ error }}</p>
-      <button class="quiet" type="button" @click="load">重新查询</button>
-    </div>
-    <template v-if="data">
-      <div class="inventory-summary" aria-label="设备统计">
-        <span>有效设备总数：{{ data.summary.total }}</span>
-        <span v-for="(label, status) in assetStates" :key="status"
-          >{{ label }}：{{ data.summary[status] }}</span
-        >
-        <span>在管故障：{{ data.summary.managed_faulty }}（交叉统计）</span>
-      </div>
-      <p class="muted">
-        符合当前条件：{{ data.matched }} 件。日期按东八区显示。
-      </p>
-      <ListPagination
-        v-model:page-size="pageSize"
-        :items="data.items"
-        label="设备分页"
-        v-slot="{ items: pageItems }"
-      >
-        <div v-if="data.items.length" class="table-scroll">
-          <table class="inventory-table">
-            <thead>
-              <tr>
-                <th>编号与设备</th>
-                <th>分类与型号</th>
-                <th>状态与状况</th>
-                <th>当前持有方</th>
-                <th>负责人</th>
-                <th>位置</th>
-                <th>预计归还</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="asset in pageItems" :key="asset.id">
-                <td>
-                  <RouterLink :to="'/assets/' + asset.id"
-                    >{{ asset.asset_code }} · {{ asset.name }}</RouterLink
-                  ><small>旧编号：{{ asset.legacy_code || "未填写" }}</small>
-                </td>
-                <td>
-                  {{
-                    categories[asset.category as keyof typeof categories] ||
-                    asset.category
-                  }}<small>{{ asset.model || "型号未填写" }}</small>
-                </td>
-                <td>
-                  {{ assetStates[asset.display_status]
-                  }}<small>{{
-                    asset.condition === "faulty" ? "故障" : "正常"
-                  }}</small>
-                </td>
-                <td>{{ holderLabel(asset) }}</td>
-                <td>{{ asset.responsible_name || "不适用" }}</td>
-                <td>{{ asset.location || "未填写" }}</td>
-                <td>{{ dueLabel(asset) }}</td>
-              </tr>
-            </tbody>
-          </table>
+    <ListResults
+      :items="data?.items ?? null"
+      :loading="loading"
+      :error="error"
+      loading-text="正在读取台账…"
+      retry-label="重新查询"
+      label="设备分页"
+      :empty-text="
+        data?.summary.total
+          ? '没有符合当前条件的设备，请调整查询条件。'
+          : '尚未登记设备。'
+      "
+      @retry="load"
+    >
+      <template #summary v-if="data">
+        <div class="inventory-summary" aria-label="设备统计">
+          <span>有效设备总数：{{ data.summary.total }}</span>
+          <span v-for="(label, status) in assetStates" :key="status"
+            >{{ label }}：{{ data.summary[status] }}</span
+          >
+          <span>在管故障：{{ data.summary.managed_faulty }}（交叉统计）</span>
         </div>
-        <p v-else>
-          {{
-            data.summary.total
-              ? "没有符合当前条件的设备，请调整查询条件。"
-              : "尚未登记设备。"
-          }}
+        <p class="muted">
+          符合当前条件：{{ data.matched }} 件。日期按东八区显示。
         </p>
-      </ListPagination>
-    </template>
+      </template>
+      <template #default="{ items }"><AssetTable :items="items" /></template>
+    </ListResults>
   </section>
   <InventoryGate v-else />
 </template>

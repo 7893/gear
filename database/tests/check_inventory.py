@@ -69,7 +69,7 @@ def main():
             initialized = list(pool.map(lambda _: initialize(db, request=request, details={'legacy_code': '00007 / OLD'}), range(2)))
         asset = initialized[0]
         assert asset == initialized[1]
-        assert asset['asset_code'] == 'SB-000001' and asset['legacy_code'] == '00007 / OLD'
+        assert asset['previous_asset_code'] == 'SB-000001' and asset['asset_code'].startswith('EQ-') and asset['legacy_code'] == '00007 / OLD'
         assert asset['display_status'] == 'inventory_available' and asset['last_flow_on'] is None
         assert db.run(f"SELECT count(*) FROM gear_2026.events WHERE request_id='{request}'") == '1'
         assert db.run(f"SELECT count(*) FROM gear_2026.assignments WHERE asset_id='{asset['id']}'") == '0'
@@ -82,7 +82,7 @@ def main():
         initialize(db, details={'legacy_code': '00007 / OLD'}, fail='legacy_code_duplicate')
         other = initialize(db, details={'legacy_code': '00007 / OLD'}, ack=True)
         assert other['id'] != asset['id'] and other['legacy_duplicate_acknowledged']
-        assert other['asset_code'] == 'SB-000002'
+        assert other['previous_asset_code'] == 'SB-000002'
         print('PASS stable internal numbers, exact old text, duplicate acknowledgement and repeated creation returns one asset')
 
         placement = {'holder_party_id': person['id'], 'responsible_person_id': person['id'], 'usage_kind': 'long_term'}
@@ -140,7 +140,7 @@ def main():
         print('PASS literal search, exclusive summaries, invalid records excluded, immutable history and inactive recipient protection')
 
         db.run("SELECT setval('gear_2026.asset_code_sequence',999999,true)")
-        assert initialize(db)['asset_code'] == 'SB-1000000'
+        assert initialize(db)['previous_asset_code'] == 'SB-1000000'
         db.run(f"UPDATE gear_2026.members SET status='disabled',role=NULL WHERE id='{IDS['operator']}'")
         initialize(db, request=request, details={'legacy_code': '00007 / OLD'}, fail='inventory_access_denied')
         rpc(db, 'operator', 'get_asset', f"'{asset['id']}'", fail='inventory_access_denied')

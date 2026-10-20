@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FormField from "./FormField.vue";
 import { computed } from "vue";
 import { partyLabel, type Party } from "../inventory";
 const props = defineProps<{
@@ -19,13 +20,12 @@ const people = computed(() =>
 );
 </script>
 <template>
-  <label
-    >当前持有情况<select v-model="mode" :disabled="disabled">
-      <option value="inventory">经办人库存</option>
-      <option value="person">个人持有</option>
-      <option value="team">团队持有</option>
-    </select></label
-  >
+  <FormField
+    label="当前持有情况"
+    v-model="mode"
+    :disabled="disabled"
+    :options="{ inventory: '经办人库存', person: '个人持有', team: '团队持有' }"
+  />
   <template v-if="mode !== 'inventory'">
     <label
       >持有方<select v-model="holderId" required :disabled="disabled">
@@ -47,19 +47,20 @@ const people = computed(() =>
         </option>
       </select></label
     >
-    <label
-      >使用期限<select v-model="usage" :disabled="disabled">
-        <option value="long_term">长期使用</option>
-        <option value="temporary">临时使用</option>
-      </select></label
-    >
-    <label v-if="usage === 'temporary'"
-      >预计归还日期<input
-        v-model="dueOn"
-        type="date"
-        required
-        :min="minDate || undefined"
-        :disabled="disabled"
-    /></label>
+    <FormField
+      label="使用期限"
+      v-model="usage"
+      :disabled="disabled"
+      :options="{ long_term: '长期使用', temporary: '临时使用' }"
+    />
+    <FormField
+      label="预计归还日期"
+      v-model="dueOn"
+      type="date"
+      required
+      :min="minDate || undefined"
+      :disabled="disabled"
+      v-if="usage === 'temporary'"
+    />
   </template>
 </template>

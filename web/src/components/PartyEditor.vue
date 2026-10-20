@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { account, safeError } from "../accounts";
+import FormField from "./FormField.vue";
+import { computed, ref } from "vue";
 import {
   inventoryWriteAccess,
   partyFields,
-  requestFor,
   updateParty,
   type Party,
 } from "../inventory";
+import { useAuthorizedAction } from "../useAuthorizedAction";
 import PartyFields from "./PartyFields.vue";
 import ActionGroup from "./ActionGroup.vue";
 const props = defineProps<{ party: Party; people: Party[] }>();
@@ -15,64 +15,46 @@ const emit = defineEmits<{ updated: [] }>();
 const fields = ref(partyFields(props.party));
 const enabled = ref(props.party.is_active !== false);
 const reason = ref("");
-const error = ref("");
 const open = ref(false);
-const busy = ref(false);
 const eligible = computed(
   () => inventoryWriteAccess.value && !!props.party.version,
 );
-const requests = new Map<string, string>();
-let generation = 0;
-function clear() {
-  generation++;
+function clearForm() {
   fields.value = partyFields(props.party);
   enabled.value = props.party.is_active !== false;
   reason.value = "";
-  error.value = "";
   open.value = false;
-  busy.value = false;
-  requests.clear();
 }
-watch(
-  [
-    eligible,
-    () => account.profile?.membership?.id,
-    () => account.profile?.membership?.role,
-    () => props.party.id,
-    () => props.party.version,
-  ],
-  clear,
-  { flush: "sync" },
+const {
+  busy,
+  error,
+  run,
+  reset: clear,
+} = useAuthorizedAction(
+  eligible,
+  [() => props.party.id, () => props.party.version],
+  clearForm,
 );
-onBeforeUnmount(() => generation++);
-async function save() {
-  if (!eligible.value || busy.value) return;
-  const current = generation;
-  const details = { ...fields.value };
+function save() {
   const payload = {
     party_id: props.party.id,
     expected_version: props.party.version,
-    details,
+    details: { ...fields.value },
     active: enabled.value,
     reason: reason.value.trim(),
   };
-  busy.value = true;
-  error.value = "";
-  try {
-    await updateParty(
-      props.party,
-      details,
-      payload.active,
-      payload.reason,
-      requestFor(requests, payload),
-    );
-    if (current === generation && eligible.value) emit("updated");
-  } catch (failure) {
-    if (current === generation && eligible.value)
-      error.value = safeError(failure);
-  } finally {
-    if (current === generation) busy.value = false;
-  }
+  void run(
+    payload,
+    (id) =>
+      updateParty(
+        props.party,
+        payload.details,
+        payload.active,
+        payload.reason,
+        id,
+      ),
+    () => emit("updated"),
+  );
 }
 </script>
 <template>
@@ -98,14 +80,15 @@ async function save() {
       <p class="form-wide hint">
         停用仅阻止新的领用选择，已有设备仍由原持有方和负责人负责，需另行办理退回或转交。停用团队默认负责人前，须先更换有效团队的默认负责人。
       </p>
-      <label class="form-wide"
-        >修改原因<textarea
-          v-model="reason"
-          required
-          maxlength="2000"
-          :disabled="busy"
-        />
-      </label>
+      <FormField
+        label="修改原因"
+        v-model="reason"
+        required
+        maxlength="2000"
+        :disabled="busy"
+        type="textarea"
+        wide
+      />
       <p v-if="error" class="form-wide notice error" role="alert">
         {{ error }}
       </p>

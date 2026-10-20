@@ -18,6 +18,8 @@ def private_path(name):
     return (bool(set(path.parts[:-1]) & PRIVATE_DIRS)
             or (path.name.startswith(('.env', '.dev.vars')) and not path.name.endswith('.example'))
             or path.suffix in PRIVATE_SUFFIXES
+            or path.name.endswith('.gear-backup.tar.gz')
+            or (path.name.startswith('设备凭证原件-') and path.suffix == '.zip')
             or bool(re.match(r'(client_secret|google-oauth-client|google-mail-token|'
                              r'service[-_]account|application_default_credentials).*\.json$',
                              path.name)))

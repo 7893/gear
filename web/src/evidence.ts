@@ -34,10 +34,11 @@ export async function uploadEvidence(
   reference: string,
   reason: string,
   signal: AbortSignal,
+  eventId?: string,
 ): Promise<Attachment> {
   const form = new FormData();
   form.set("file", file);
-  form.set("document_id", documentId);
+  form.set(eventId ? "event_id" : "document_id", eventId || documentId);
   form.set("expected_version", String(version));
   form.set("request_id", requestId);
   form.set("recognition", JSON.stringify(hints));
@@ -86,6 +87,29 @@ export async function archiveEvidence(
     attachment_ids: ids,
     checks,
     manual_reason: reason || null,
+    request_id: requestId,
+  });
+}
+
+export async function listEventEvidence(
+  eventId: string,
+): Promise<{ asset_version: number; items: Attachment[] }> {
+  return (await inventoryRpc("list_event_evidence", { event_id: eventId })) as {
+    asset_version: number;
+    items: Attachment[];
+  };
+}
+export async function reviewEventEvidence(
+  item: Attachment,
+  accepted: boolean,
+  reason: string,
+  requestId: string,
+) {
+  return inventoryRpc("review_event_attachment", {
+    attachment_id: item.id,
+    expected_version: item.version,
+    accepted,
+    reason,
     request_id: requestId,
   });
 }

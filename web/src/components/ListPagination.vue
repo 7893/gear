@@ -21,7 +21,19 @@ const visibleItems = computed(() =>
     page.value * pageSize.value,
   ),
 );
-watch([() => props.items, pageSize], () => (page.value = 1));
+// A background response for the same ordered records must not send users to page 1.
+watch(
+  [
+    () =>
+      JSON.stringify(
+        props.items.map((item) =>
+          item && typeof item === "object" && "id" in item ? item.id : item,
+        ),
+      ),
+    pageSize,
+  ],
+  () => (page.value = 1),
+);
 watch(pageCount, (count) => (page.value = Math.min(page.value, count)));
 </script>
 <template>

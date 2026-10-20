@@ -2,7 +2,10 @@
 
 from pathlib import Path
 import importlib.util
+import json
+import re
 import tempfile
+import tomllib
 import unittest
 
 spec = importlib.util.spec_from_file_location('deploy', Path(__file__).resolve().parents[1] / 'scripts/deploy.py')
@@ -11,6 +14,22 @@ spec.loader.exec_module(deploy)
 
 
 class DeploymentBoundaries(unittest.TestCase):
+    def test_function_entries_keep_auth_and_background_notifications_separate(self):
+        root = Path(__file__).resolve().parents[1] / 'supabase'
+        config = tomllib.loads((root / 'config.toml').read_text())['functions']
+        expected = {
+            'gear-auth-mail': ('gear-auth-mail/index.ts', False),
+            'gear-notification-mail': ('gear-auth-mail/notification-index.ts', False),
+            'gear-evidence': ('gear-evidence/index.ts', True),
+        }
+        for name, (entry, jwt) in expected.items():
+            with self.subTest(function=name):
+                actual = config[name]
+                self.assertEqual(actual['entrypoint'], './functions/' + entry)
+                self.assertIs(actual['verify_jwt'], jwt)
+                self.assertTrue((root / actual['entrypoint']).is_file())
+                self.assertTrue((root / actual['import_map']).is_file())
+
     def environment(self):
         env = {name: 'example' for name in deploy.REQUIRED}
         env.update(
@@ -68,6 +87,35 @@ class DeploymentBoundaries(unittest.TestCase):
             path.write_text('fake credential')
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
         self.assertFalse(temporary.exists())
+
+    def test_runtime_configuration_is_embedded_as_safe_public_data(self):
+        env = self.environment()
+        env.update(GEAR_ACCOUNTS_ENABLED='true', GEAR_FLOWS_ENABLED='true')
+        env['DEPLOY_SSH_KEY'] = 'private-example-not-for-the-browser'
+        env['SUPABASE_PUBLISHABLE_KEY'] += '</script><script>example</script>&'
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'index.html').write_text(
+                '<html><head><link rel="preload" href="/runtime-config.json" '
+                'as="fetch" crossorigin /></head><body></body></html>')
+            deploy.write_runtime_configuration(root, env)
+            html = (root / 'index.html').read_text()
+            embedded = re.search(
+                r'<script id="gear-runtime-config" type="application/json">(.*?)</script>', html)[1]
+            value = json.loads(embedded)
+            self.assertEqual(value, json.loads((root / 'runtime-config.json').read_text()))
+            self.assertEqual(value['publishableKey'], env['SUPABASE_PUBLISHABLE_KEY'])
+            self.assertTrue(value['accountsEnabled'])
+            self.assertTrue(value['flowsEnabled'])
+            self.assertFalse(value['evidenceEnabled'])
+            self.assertNotIn('<', embedded)
+            self.assertNotIn('&', embedded)
+            self.assertNotIn('rel="preload"', html)
+            self.assertNotIn(env['DEPLOY_SSH_KEY'], html)
+            self.assertNotIn('DEPLOY_SSH_KEY', html)
+            self.assertEqual(len(deploy.public_files(root)), 2)
+            with self.assertRaises(ValueError):
+                deploy.write_runtime_configuration(root, env)
 
     def test_deploys_only_matching_uploaded_version(self):
         revision = 'a' * 40

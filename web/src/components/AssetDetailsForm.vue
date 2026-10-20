@@ -1,53 +1,45 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { account, safeError } from "../accounts";
+import FormField from "./FormField.vue";
+import { computed, ref, watch } from "vue";
+import { safeError } from "../accounts";
 import {
   assetFields,
   inventoryWriteAccess,
-  requestFor,
   updateAssetDetails,
   type Asset,
 } from "../inventory";
+import { useAuthorizedAction } from "../useAuthorizedAction";
 import AssetFields from "./AssetFields.vue";
 import ActionGroup from "./ActionGroup.vue";
 const props = defineProps<{ asset: Asset }>();
 const emit = defineEmits<{ updated: [] }>();
 const fields = ref(assetFields(props.asset));
-const open = ref(false),
-  busy = ref(false),
-  error = ref("");
+const open = ref(false);
 const reason = ref(""),
   duplicate = ref(false),
   acknowledged = ref(false);
-const requests = new Map<string, string>();
-let generation = 0;
 const eligible = computed(
   () =>
     inventoryWriteAccess.value &&
     !props.asset.invalidated_at &&
     !!props.asset.version,
 );
-function clear() {
-  generation++;
+function clearForm() {
   fields.value = assetFields(props.asset);
   open.value = false;
-  busy.value = false;
-  error.value = "";
   reason.value = "";
   duplicate.value = false;
   acknowledged.value = false;
-  requests.clear();
 }
-watch(
-  [
-    eligible,
-    () => account.profile?.membership?.id,
-    () => account.profile?.membership?.role,
-    () => props.asset.id,
-    () => props.asset.version,
-  ],
-  clear,
-  { flush: "sync" },
+const {
+  busy,
+  error,
+  run,
+  reset: clear,
+} = useAuthorizedAction(
+  eligible,
+  [() => props.asset.id, () => props.asset.version],
+  clearForm,
 );
 watch(
   () => fields.value.legacy_code,
@@ -56,7 +48,6 @@ watch(
     acknowledged.value = false;
   },
 );
-onBeforeUnmount(() => generation++);
 async function save() {
   if (
     !eligible.value ||
@@ -69,7 +60,6 @@ async function save() {
     error.value = safeError(new Error("invalid_asset_details"));
     return;
   }
-  const current = generation;
   const details = { ...fields.value, category: fields.value.category };
   const payload = {
     asset_id: props.asset.id,
@@ -78,20 +68,18 @@ async function save() {
     reason: reason.value.trim(),
     allow_legacy_duplicate: acknowledged.value,
   };
-  busy.value = true;
-  error.value = "";
-  try {
-    await updateAssetDetails(
-      props.asset,
-      details,
-      payload.reason,
-      requestFor(requests, payload),
-      payload.allow_legacy_duplicate,
-    );
-    if (current === generation && eligible.value) emit("updated");
-  } catch (failure) {
-    if (current === generation && eligible.value) {
-      error.value = safeError(failure);
+  void run(
+    payload,
+    (id) =>
+      updateAssetDetails(
+        props.asset,
+        details,
+        payload.reason,
+        id,
+        payload.allow_legacy_duplicate,
+      ),
+    () => emit("updated"),
+    (failure) => {
       if (
         failure &&
         typeof failure === "object" &&
@@ -99,10 +87,8 @@ async function save() {
         failure.message === "legacy_code_duplicate"
       )
         duplicate.value = true;
-    }
-  } finally {
-    if (current === generation) busy.value = false;
-  }
+    },
+  );
 }
 </script>
 <template>
@@ -118,14 +104,15 @@ async function save() {
         更正名称、分类、旧编号等资料并保留前后记录。内部编号、持有方、实际状况、期限及原单快照保持不变。
       </p>
       <AssetFields v-model="fields" :disabled="busy" />
-      <label class="form-wide"
-        >更正原因<textarea
-          v-model="reason"
-          required
-          maxlength="2000"
-          :disabled="busy"
-        />
-      </label>
+      <FormField
+        label="更正原因"
+        v-model="reason"
+        required
+        maxlength="2000"
+        :disabled="busy"
+        type="textarea"
+        wide
+      />
       <label v-if="duplicate" class="form-wide checkbox-row"
         ><input
           v-model="acknowledged"

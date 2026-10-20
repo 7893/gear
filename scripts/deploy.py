@@ -140,6 +140,34 @@ def private_files():
         os.umask(previous)
 
 
+def write_runtime_configuration(dist, env):
+    # One allowlist feeds both public files. Never serialize the environment.
+    configuration = {
+        'apiUrl': https_origin(env['PUBLIC_API_URL']),
+        'databaseSchema': env['GEAR_DB_SCHEMA'],
+        'publishableKey': env['SUPABASE_PUBLISHABLE_KEY'],
+        'release': env['GITHUB_SHA'],
+        'accountsEnabled': env.get('GEAR_ACCOUNTS_ENABLED') == 'true',
+        'recoveryEnabled': env.get('GEAR_RECOVERY_ENABLED') == 'true',
+        'inventoryEnabled': env.get('GEAR_INVENTORY_ENABLED') == 'true',
+        'flowsEnabled': env.get('GEAR_FLOWS_ENABLED') == 'true',
+        'evidenceEnabled': env.get('GEAR_EVIDENCE_ENABLED') == 'true',
+    }
+    serialized = json.dumps(configuration)
+    (dist / 'runtime-config.json').write_text(serialized + '\n')
+    # JSON script elements are data, not executable script. Escape HTML delimiters
+    # so even an unexpected public string cannot end the element.
+    embedded = serialized.replace('&', '\\u0026').replace('<', '\\u003c').replace('>', '\\u003e')
+    path = dist / 'index.html'
+    html = path.read_text()
+    if html.count('</head>') != 1 or 'id="gear-runtime-config"' in html:
+        raise ValueError('Expected one fresh application shell')
+    html = re.sub(r'\s*<link\b[^>]*href=[\"\']/runtime-config\.json[\"\'][^>]*>', '', html)
+    html = html.replace('</head>', '<script id="gear-runtime-config" type="application/json">'
+                        + embedded + '</script>\n</head>')
+    path.write_text(html)
+
+
 def deploy(env):
     validate(env)
     # Build processes receive configuration names they need, without deployment credentials.
@@ -153,17 +181,7 @@ def deploy(env):
         '--mode', 'production', '--dry-run'], cwd=GATEWAY, env=gateway_env)
     run('Page production build', ['pnpm', 'run', 'build'], cwd=PAGE, env=clean)
     dist = PAGE / 'dist'
-    (dist / 'runtime-config.json').write_text(json.dumps({
-        'apiUrl': https_origin(env['PUBLIC_API_URL']),
-        'databaseSchema': env['GEAR_DB_SCHEMA'],
-        'publishableKey': env['SUPABASE_PUBLISHABLE_KEY'],
-        'release': env['GITHUB_SHA'],
-        'accountsEnabled': env.get('GEAR_ACCOUNTS_ENABLED') == 'true',
-        'recoveryEnabled': env.get('GEAR_RECOVERY_ENABLED') == 'true',
-        'inventoryEnabled': env.get('GEAR_INVENTORY_ENABLED') == 'true',
-        'flowsEnabled': env.get('GEAR_FLOWS_ENABLED') == 'true',
-        'evidenceEnabled': env.get('GEAR_EVIDENCE_ENABLED') == 'true',
-    }) + '\n')
+    write_runtime_configuration(dist, env)
     files = public_files(dist)
     # Verify AWS trust before making any publication changes.
     aws_env = dict(clean, **assume_role(env), AWS_DEFAULT_REGION='us-east-1', AWS_PAGER='')

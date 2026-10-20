@@ -1,28 +1,15 @@
-import { createClient } from "@supabase/supabase-js";
 import { configuration } from "./configuration";
 import { signOut, type Profile } from "./accounts";
-
-function makeRecoveryClient(
-  apiUrl: string,
-  publishableKey: string,
-  databaseSchema: string,
-) {
-  return createClient(apiUrl, publishableKey, {
-    db: { schema: databaseSchema },
-    auth: {
-      storageKey: "gear.recovery.v1",
-      flowType: "implicit",
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
-  });
-}
+import {
+  transientAuthClient,
+  validateNewPassword,
+  clearGearAuthStorage,
+} from "./auth-support";
 
 // Each page owns its recovery client. Recovery tokens never enter persistent
 // storage, the regular login client, URL parameters or the business RPC flow.
 export function createRecoveryFlow() {
-  let client: ReturnType<typeof makeRecoveryClient> | undefined;
+  let client: ReturnType<typeof transientAuthClient> | undefined;
   let requestedEmail = "";
   let verifiedEmail = "";
   let changed = false;
@@ -33,10 +20,11 @@ export function createRecoveryFlow() {
     const config = await configuration();
     if (!config.accountsEnabled || !config.recoveryEnabled)
       throw new Error("recovery_unavailable");
-    client = makeRecoveryClient(
+    client = transientAuthClient(
       config.apiUrl,
       config.publishableKey,
       config.databaseSchema,
+      "gear.recovery.v1",
     );
     return client;
   }
@@ -74,6 +62,13 @@ export function createRecoveryFlow() {
       );
       if (error) throw error;
     },
+    async useExistingCode(email: string) {
+      await discard();
+      requestedEmail = email.trim().toLowerCase();
+      if (!requestedEmail) throw new Error("recovery_required");
+      changed = false;
+      await service();
+    },
     async verify(code: string) {
       if (!requestedEmail || !/^[0-9]{6}$/.test(code))
         throw new Error("invalid_verification_code");
@@ -109,11 +104,7 @@ export function createRecoveryFlow() {
         Date.now() - verifiedAt > deadline
       )
         throw new Error("recovery_required");
-      if (password.length < 12 || password.length > 128)
-        throw new Error("invalid_new_password");
-      if (password !== confirmation) throw new Error("password_mismatch");
-      if (!sharedImpactAccepted)
-        throw new Error("shared_password_confirmation_required");
+      validateNewPassword(password, confirmation, sharedImpactAccepted);
       await eligible();
       const { error } = await client.auth.updateUser({ password });
       if (error) throw error;
@@ -122,12 +113,7 @@ export function createRecoveryFlow() {
       await signOut().catch(() => undefined);
       // The provider revokes other refresh sessions after a password update.
       // Clear only Gear's persistent session, then reload to drop its old client.
-      for (const key of [
-        "gear.auth.v1",
-        "gear.auth.v1-code-verifier",
-        "gear.auth.v1-user",
-      ])
-        window.localStorage.removeItem(key);
+      clearGearAuthStorage();
     },
     async cancel() {
       requestedEmail = "";

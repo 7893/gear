@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FormField from "./FormField.vue";
 import { watch } from "vue";
 import {
   partyLabel,
@@ -17,26 +18,26 @@ watch(
 );
 </script>
 <template>
-  <label
-    >对象类型<select v-model="form.kind" :disabled="disabled || fixedKind">
-      <option value="person">个人</option>
-      <option value="team">团队</option>
-    </select></label
-  >
-  <label
-    >对象名称<input
-      v-model="form.name"
-      required
-      maxlength="80"
-      :disabled="disabled"
-  /></label>
-  <label v-if="form.kind === 'person'"
-    >人员类型<select v-model="form.person_type" :disabled="disabled">
-      <option v-for="(label, type) in personTypes" :key="type" :value="type">
-        {{ label }}
-      </option>
-    </select></label
-  >
+  <FormField
+    label="对象类型"
+    v-model="form.kind"
+    :disabled="disabled || fixedKind"
+    :options="{ person: '个人', team: '团队' }"
+  />
+  <FormField
+    label="对象名称"
+    v-model="form.name"
+    required
+    maxlength="80"
+    :disabled="disabled"
+  />
+  <FormField
+    label="人员类型"
+    v-model="form.person_type"
+    :disabled="disabled"
+    :options="personTypes"
+    v-if="form.kind === 'person'"
+  />
   <label v-else
     >团队默认负责人<select
       v-model="form.default_responsible_id"
@@ -50,22 +51,25 @@ watch(
       </option>
     </select></label
   >
-  <label
-    >所属单位<input
-      v-model="form.organization_name"
-      maxlength="120"
-      :disabled="disabled"
-  /></label>
-  <label
-    >联系方式<input v-model="form.contact" maxlength="200" :disabled="disabled"
-  /></label>
-  <label
-    >对象备注<textarea
-      v-model="form.note"
-      maxlength="2000"
-      :disabled="disabled"
-    />
-  </label>
+  <FormField
+    label="所属单位"
+    v-model="form.organization_name"
+    maxlength="120"
+    :disabled="disabled"
+  />
+  <FormField
+    label="联系方式"
+    v-model="form.contact"
+    maxlength="200"
+    :disabled="disabled"
+  />
+  <FormField
+    label="对象备注"
+    v-model="form.note"
+    maxlength="2000"
+    :disabled="disabled"
+    type="textarea"
+  />
   <p v-if="form.kind === 'team'" class="form-wide hint">
     负责人需先登记为个人。默认负责人只作填表参考，不改动已有设备的责任人。
   </p>
