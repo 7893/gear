@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import FormField from "../components/FormField.vue";
-import { reactive } from "vue";
+import { computed, reactive, ref } from "vue";
 import { useAuthorizedQuery } from "../useAuthorizedQuery";
 import {
   inventoryAccess,
@@ -14,12 +14,19 @@ import AssetTable from "../components/AssetTable.vue";
 import ListResults from "../components/ListResults.vue";
 import ListExport from "../components/ListExport.vue";
 import { inventoryCsv } from "../inventory-export";
+import AppIcon from "../components/AppIcon.vue";
+const filtersExpanded = ref(false);
 const filters = reactive({
   search: "",
   category: "",
   state: "",
   holder_kind: "",
 });
+const filterCount = computed(
+  () =>
+    [filters.category, filters.state, filters.holder_kind].filter(Boolean)
+      .length,
+);
 const query = () =>
   listAssets({
     search: filters.search,
@@ -36,16 +43,45 @@ const { data, loading, error, load } = useAuthorizedQuery(
   <section v-if="inventoryAccess" class="card">
     <div class="section-heading">
       <div>
-        <p class="eyebrow">设备</p>
         <h1>设备台账</h1>
       </div>
-      <RouterLink v-if="inventoryWriteAccess" class="button" to="/assets/new"
-        >登记已有设备</RouterLink
-      >
+      <div v-if="inventoryWriteAccess" class="action-group page-actions">
+        <RouterLink class="button quiet" to="/assets/import"
+          ><AppIcon name="upload" />批量导入已有设备</RouterLink
+        >
+        <RouterLink class="button" to="/assets/new"
+          ><AppIcon name="plus" />登记已有设备</RouterLink
+        >
+      </div>
     </div>
-    <RouterLink v-if="inventoryWriteAccess" to="/assets/import"
-      >批量导入已有设备</RouterLink
-    >
+    <div v-if="data" class="inventory-summary" aria-label="设备统计">
+      <div class="stats-overview">
+        <div class="stat-card">
+          <span>有效设备总数：</span><strong>{{ data.summary.total }}</strong
+          ><AppIcon name="assets" />
+        </div>
+        <div class="stat-card">
+          <span>在库可用：</span
+          ><strong>{{ data.summary.inventory_available }}</strong
+          ><AppIcon name="check" />
+        </div>
+        <div class="stat-card">
+          <span>使用中：</span><strong>{{ data.summary.in_use }}</strong
+          ><AppIcon name="transfer" />
+        </div>
+        <div class="stat-card stat-card-warning">
+          <span>在管故障：</span
+          ><strong>{{ data.summary.managed_faulty }}</strong
+          ><AppIcon name="settings" />
+        </div>
+      </div>
+      <div class="inventory-breakdown">
+        <span>在库故障：{{ data.summary.inventory_faulty }}</span>
+        <span>已退上游：{{ data.summary.returned_upstream }}</span>
+        <span>遗失：{{ data.summary.lost }}</span>
+        <span>已报废：{{ data.summary.scrapped }}</span>
+      </div>
+    </div>
     <form class="inventory-filters" @submit.prevent="load">
       <FormField
         label="搜索设备"
@@ -53,29 +89,48 @@ const { data, loading, error, load } = useAuthorizedQuery(
         maxlength="120"
         placeholder="编号、名称、型号、持有方或位置"
       />
-      <FormField
-        label="分类"
-        v-model="filters.category"
-        :options="categories"
-        empty-label="全部分类"
-      />
-      <FormField
-        label="状态"
-        v-model="filters.state"
-        :options="assetStates"
-        empty-label="全部状态"
-      />
-      <FormField
-        label="持有情况"
-        v-model="filters.holder_kind"
-        :options="{
-          '': '全部持有情况',
-          inventory: '经办人库存',
-          person: '个人持有',
-          team: '团队持有',
-        }"
-      />
-      <button type="submit" :disabled="loading">查询</button>
+      <button type="submit" :disabled="loading">
+        <AppIcon name="search" />查询
+      </button>
+      <button
+        type="button"
+        class="quiet filter-toggle"
+        :aria-expanded="filtersExpanded"
+        aria-controls="additional-filters"
+        @click="filtersExpanded = !filtersExpanded"
+      >
+        <AppIcon name="settings" />筛选条件<span v-if="filterCount"
+          >（{{ filterCount }}）</span
+        >
+      </button>
+      <div
+        id="additional-filters"
+        class="additional-filters"
+        :class="{ 'is-expanded': filtersExpanded }"
+      >
+        <FormField
+          label="分类"
+          v-model="filters.category"
+          :options="categories"
+          empty-label="全部分类"
+        />
+        <FormField
+          label="状态"
+          v-model="filters.state"
+          :options="assetStates"
+          empty-label="全部状态"
+        />
+        <FormField
+          label="持有情况"
+          v-model="filters.holder_kind"
+          :options="{
+            '': '全部持有情况',
+            inventory: '经办人库存',
+            person: '个人持有',
+            team: '团队持有',
+          }"
+        />
+      </div>
     </form>
     <ListExport
       :allowed="inventoryAccess"
@@ -98,13 +153,6 @@ const { data, loading, error, load } = useAuthorizedQuery(
       @retry="load"
     >
       <template #summary v-if="data">
-        <div class="inventory-summary" aria-label="设备统计">
-          <span>有效设备总数：{{ data.summary.total }}</span>
-          <span v-for="(label, status) in assetStates" :key="status"
-            >{{ label }}：{{ data.summary[status] }}</span
-          >
-          <span>在管故障：{{ data.summary.managed_faulty }}（交叉统计）</span>
-        </div>
         <p class="muted">符合当前条件：{{ data.matched }} 件。</p>
       </template>
       <template #default="{ items }"><AssetTable :items="items" /></template>

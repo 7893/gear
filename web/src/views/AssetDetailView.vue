@@ -114,12 +114,21 @@ watch(
       @retry="load"
     />
     <template v-if="data">
-      <h2>{{ data.asset.asset_code }} · {{ data.asset.name }}</h2>
-      <RecordQr
-        v-if="data.asset.reference_code"
-        kind="asset"
-        :reference="data.asset.reference_code"
-      />
+      <div class="asset-identity">
+        <div>
+          <h2>{{ data.asset.asset_code }} · {{ data.asset.name }}</h2>
+          <span
+            class="asset-status"
+            :class="'asset-status-' + data.asset.display_status"
+            >{{ assetStates[data.asset.display_status] }}</span
+          >
+        </div>
+        <RecordQr
+          v-if="data.asset.reference_code"
+          kind="asset"
+          :reference="data.asset.reference_code"
+        />
+      </div>
       <p v-if="data.asset.invalidated_at" class="notice">
         此建账记录已标记无效，保留历史供核对。
       </p>
@@ -186,7 +195,7 @@ watch(
           <dd>
             {{
               data.asset.holder_party_id
-                ? data.asset.started_on || "未知，未补造日期"
+                ? data.asset.started_on || "未记录"
                 : "不适用"
             }}
           </dd>
@@ -278,7 +287,7 @@ watch(
                                           : "设备变更记录"
           }}</strong>
           <p>
-            历史日期：{{ event.occurred_on || "未知，未补造日期" }}；记录于
+            历史日期：{{ event.occurred_on || "未记录" }}；记录于
             {{ timestamp(event.recorded_at) }}；经办人：{{ event.actor_label }}
           </p>
           <p v-if="event.after_data.holder_name">

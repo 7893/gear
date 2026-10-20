@@ -1534,6 +1534,72 @@ test("ledger pages all fifty-one devices and supports each page size without ref
   );
 });
 
+test("responsive navigation preserves routes, closes on selection and supports keyboard access", async ({
+  page,
+}, testInfo) => {
+  const state = await fixture(page, "admin");
+  state.assets.splice(
+    0,
+    state.assets.length,
+    ...paginationAssets().slice(0, 6),
+  );
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await loginReady(page);
+  const navigation = page.getByRole("navigation", {
+    name: "主导航",
+    exact: true,
+  });
+  await expect(navigation).toBeVisible();
+  await expect(
+    navigation.getByRole("link", { name: "设备台账", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
+  await expect(
+    page.getByRole("button", { name: "打开导航", exact: true }),
+  ).toBeHidden();
+  await page.screenshot({ path: testInfo.outputPath("desktop.png") });
+  await page.setViewportSize({ width: 390, height: 900 });
+  const toggle = page.getByRole("button", { name: "打开导航", exact: true });
+  await expect(navigation).toBeHidden();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await toggle.click();
+  await expect(navigation).toBeVisible();
+  await navigation
+    .getByRole("link", { name: "人员与团队", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "人员与团队", exact: true }),
+  ).toBeVisible();
+  await expect(navigation).toBeHidden();
+  await toggle.click();
+  await navigation.getByRole("link", { name: "设备台账", exact: true }).focus();
+  await page.keyboard.press("Escape");
+  await expect(navigation).toBeHidden();
+  await expect(toggle).toBeFocused();
+  await toggle.click();
+  await navigation.getByRole("link", { name: "设备台账", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "设备台账", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "跳到主要内容", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("main")).toBeFocused();
+  await expect(page).toHaveURL(/#\/assets$/);
+  await expect(page.getByLabel("分类", { exact: true })).toBeHidden();
+  await page.getByRole("button", { name: "筛选条件", exact: true }).click();
+  await expect(page.getByLabel("分类", { exact: true })).toBeVisible();
+  await page.getByLabel("分类", { exact: true }).selectOption("printer");
+  await page.getByRole("button", { name: "查询", exact: true }).click();
+  expect(
+    state.calls.filter((call) => call.name === "list_assets").at(-1)?.body
+      .category,
+  ).toBe("printer");
+  await page.getByRole("button", { name: /筛选条件\s*（1）/ }).click();
+  await expect(page.getByLabel("分类", { exact: true })).toBeHidden();
+  await expectActionSpacing(page);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: testInfo.outputPath("mobile.png") });
+});
+
 test("a filtered ledger resets its page and keeps global counts for single and empty results", async ({
   page,
 }) => {
@@ -1552,7 +1618,7 @@ test("a filtered ledger resets its page and keeps global counts for single and e
     "第 1 / 1 页，显示第 1 至 1 条，共 1 条",
   );
   await expect(
-    page.getByText("有效设备总数：51", { exact: true }),
+    page.getByText(/有效设备总数：\s*51/, { exact: true }),
   ).toBeVisible();
   state.filterResults([]);
   await page.getByLabel("搜索设备", { exact: true }).fill("没有匹配项");
@@ -2051,7 +2117,7 @@ test("viewer lands on ledger, sends fixed filters, reads history and cannot open
   await expect(page.getByRole("heading", { name: "当前情况" })).toBeVisible();
   await expect(page.getByText("00001-A", { exact: true })).toBeVisible();
   await expect(
-    page.getByText("历史日期：未知，未补造日期", { exact: false }),
+    page.getByText("历史日期：未记录", { exact: false }),
   ).toBeVisible();
   await page.goto("/#/assets/new");
   await expect(

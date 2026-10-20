@@ -66,8 +66,14 @@ const columns = computed<TableColumn<Asset>[]>(() => [
       <small>{{ asset.model || "型号未填写" }}</small>
     </template>
     <template #display_status="{ row: asset }">
-      {{ assetStates[asset.display_status]
-      }}<small>{{ asset.condition === "faulty" ? "故障" : "正常" }}</small>
+      <span
+        class="asset-status"
+        :class="'asset-status-' + asset.display_status"
+        >{{ assetStates[asset.display_status] }}</span
+      >
+      <small :class="{ 'condition-faulty': asset.condition === 'faulty' }">{{
+        asset.condition === "faulty" ? "故障" : "正常"
+      }}</small>
     </template>
   </DataTable>
 </template>

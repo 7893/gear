@@ -11,14 +11,18 @@ function cell(row: T, column: TableColumn<T>) {
     <table class="inventory-table">
       <thead>
         <tr>
-          <th v-for="column in columns" :key="column.key">
+          <th v-for="column in columns" :key="column.key" scope="col">
             {{ column.label }}
           </th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="row in items" :key="row.id">
-          <td v-for="column in columns" :key="column.key">
+          <td
+            v-for="column in columns"
+            :key="column.key"
+            :data-label="column.label"
+          >
             <slot :name="column.key" :row="row">{{ cell(row, column) }}</slot>
           </td>
         </tr>
