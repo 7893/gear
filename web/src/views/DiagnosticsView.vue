@@ -43,7 +43,11 @@ async function run() {
     supabase.value = "failure";
   } finally {
     busy.value = false;
-    checkedAt.value = `检测时间（UTC）：${new Date().toISOString()}`;
+    checkedAt.value = `检测时间：${new Intl.DateTimeFormat("zh-CN", {
+      timeZone: "Asia/Shanghai",
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date())}`;
   }
 }
 onMounted(() => void run());

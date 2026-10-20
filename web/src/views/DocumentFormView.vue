@@ -507,7 +507,7 @@ async function confirm() {
       {{ draft ? "编辑" : "新建" }}{{ flowKinds[form.kind] }}单
     </h1>
     <p class="hint">
-      东八区业务日期。保存草稿不占库存；实际交接后才确认。刷新前先保存，确认响应不明时先查单据记录。
+      保存草稿不占库存；实际交接后才确认。刷新前先保存，确认响应不明时先查单据记录。
     </p>
     <QueryState
       :loading="loading"

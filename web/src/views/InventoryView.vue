@@ -105,9 +105,7 @@ const { data, loading, error, load } = useAuthorizedQuery(
           >
           <span>在管故障：{{ data.summary.managed_faulty }}（交叉统计）</span>
         </div>
-        <p class="muted">
-          符合当前条件：{{ data.matched }} 件。日期按东八区显示。
-        </p>
+        <p class="muted">符合当前条件：{{ data.matched }} 件。</p>
       </template>
       <template #default="{ items }"><AssetTable :items="items" /></template>
     </ListResults>

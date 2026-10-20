@@ -125,9 +125,7 @@ function label(key: Key, value: unknown, snapshot?: Party) {
               : "修改人员或团队"
           }}</strong>
           <p>
-            {{ timestamp(event.recorded_at) }}（东八区）；经办人：{{
-              event.actor_label
-            }}
+            {{ timestamp(event.recorded_at) }}；经办人：{{ event.actor_label }}
           </p>
           <p v-if="event.reason">原因：{{ event.reason }}</p>
           <ul v-if="event.before_data">

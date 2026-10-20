@@ -60,9 +60,8 @@ const { data, error, loading, load } = useAuthorizedQuery(allowed, query, [
     >
       <template #summary v-if="data">
         <p>
-          核对对象：{{ data.party.name }}；业务日期：{{
-            data.business_on
-          }}（东八区）；共 {{ data.matched }} 台。
+          核对对象：{{ data.party.name }}；业务日期：{{ data.business_on }}；共
+          {{ data.matched }} 台。
         </p>
       </template>
       <template #default="{ items }"

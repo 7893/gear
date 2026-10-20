@@ -44,7 +44,7 @@ async function save() {
     <h2>到期邮件提醒</h2>
     <p>
       提前提醒一次，到期当天提醒一次；逾期仍未处理的，从逾期第 3 天起每隔 3
-      天提醒一次。同一天需要提醒的设备合并为一封，发给当前跟进经办人；经办人已停用或无法接收时转给有效管理员。日期和发送时间按东八区计算。
+      天提醒一次。同一天需要提醒的设备合并为一封，发给当前跟进经办人；经办人已停用或无法接收时转给有效管理员。
     </p>
     <form class="stack" @submit.prevent="save">
       <p v-if="!settings.mail_enabled" class="notice">
@@ -65,7 +65,7 @@ async function save() {
           required
           :disabled="disabled" /></label
       ><FormField
-        label="发送时间（东八区）"
+        label="发送时间"
         v-model="time"
         type="time"
         required

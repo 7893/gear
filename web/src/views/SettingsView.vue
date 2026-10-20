@@ -57,7 +57,7 @@ const {
         <ol v-if="data.header.history.length" class="asset-history">
           <li v-for="entry in data.header.history" :key="entry.id">
             <p>
-              {{ timestamp(entry.recorded_at) }}（东八区）；经办人：{{
+              {{ timestamp(entry.recorded_at) }}；经办人：{{
                 entry.actor_label
               }}
             </p>

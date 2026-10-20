@@ -71,8 +71,7 @@ const { data, error, loading, load } = useAuthorizedQuery(
     >
       <template #summary v-if="data">
         <p>
-          业务日期：{{ data.business_on }}（东八区）；提前
-          {{ data.notice_days }} 天提示。
+          业务日期：{{ data.business_on }}；提前 {{ data.notice_days }} 天提示。
         </p>
         <div class="inventory-summary" aria-label="临时使用统计">
           <span>临时使用总数：{{ data.summary.total }}</span>

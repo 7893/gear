@@ -1181,10 +1181,10 @@ test("admin configures digest explicitly with East-eight time; other settings re
   });
   await expect(region).toContainText("提前提醒一次，到期当天提醒一次");
   await expect(region).toContainText("从逾期第 3 天起每隔 3 天提醒一次");
-  await expect(region.getByLabel("发送时间（东八区）")).toHaveValue("09:00");
+  await expect(region.getByLabel("发送时间")).toHaveValue("09:00");
   await region.getByLabel("启用到期提醒邮件").check();
   await region.getByLabel("提前提醒天数").fill("5");
-  await region.getByLabel("发送时间（东八区）").fill("10:30");
+  await region.getByLabel("发送时间").fill("10:30");
   await region.getByLabel("调整原因").fill("示例跟进时间调整");
   await region
     .getByRole("button", { name: "保存到期提醒规则", exact: true })

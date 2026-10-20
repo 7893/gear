@@ -385,7 +385,7 @@ async function remove() {
         <span v-if="data.header_snapshot?.operator_name"
           >经办人：{{ data.header_snapshot.operator_name }}；</span
         >
-        系统确认时间：{{ timestamp(data.confirmed_at) }}（东八区）。
+        系统确认时间：{{ timestamp(data.confirmed_at) }}。
       </p>
     </article>
   </section>

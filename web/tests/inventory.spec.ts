@@ -1934,7 +1934,7 @@ test("due ledger uses server business date, pages and filters without conflating
   ).toBeVisible();
   await page.getByRole("link", { name: "临时使用与到期", exact: true }).click();
   await expect(
-    page.getByText("业务日期：2030-01-01（东八区）；提前 3 天提示。", {
+    page.getByText("业务日期：2030-01-01；提前 3 天提示。", {
       exact: false,
     }),
   ).toBeVisible();
@@ -2036,9 +2036,7 @@ test("viewer lands on ledger, sends fixed filters, reads history and cannot open
     .getByRole("combobox", { name: "持有情况", exact: true })
     .selectOption("team");
   await page.getByRole("button", { name: "查询", exact: true }).click();
-  await expect(
-    page.getByText("符合当前条件：1 件。日期按东八区显示。"),
-  ).toBeVisible();
+  await expect(page.getByText("符合当前条件：1 件。")).toBeVisible();
   expect(
     state.calls.filter((c) => c.name === "list_assets").at(-1)?.body,
   ).toEqual({

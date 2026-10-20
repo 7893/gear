@@ -142,7 +142,7 @@ export function renderGearNotification(
       )
         throw new Error("invalid_due_summary");
       lines = [
-        `业务日期：${notification.businessDate}（东八区）`,
+        `业务日期：${notification.businessDate}`,
         "以下仅统计本次到达提醒节点的设备，完整清单请登录查看。",
         `即将到期：${notification.dueSoon} 件`,
         `今日到期：${notification.dueToday} 件`,

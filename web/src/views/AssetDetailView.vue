@@ -279,9 +279,7 @@ watch(
           }}</strong>
           <p>
             历史日期：{{ event.occurred_on || "未知，未补造日期" }}；记录于
-            {{ timestamp(event.recorded_at) }}（东八区）；经办人：{{
-              event.actor_label
-            }}
+            {{ timestamp(event.recorded_at) }}；经办人：{{ event.actor_label }}
           </p>
           <p v-if="event.after_data.holder_name">
             当时持有方：{{ event.after_data.holder_name }}；负责人：{{

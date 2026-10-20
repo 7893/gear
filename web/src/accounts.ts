@@ -177,11 +177,11 @@ const messages: Record<string, string> = {
   invalid_extension: "请填写延期原因，长度不超过两千字。",
   invalid_condition_change: "请填写故障说明或维修结果，长度不超过两千字。",
   invalid_condition_date:
-    "实际日期须有效，不能晚于东八区今天，也不能早于最近交接或状况变更日期。",
+    "实际日期须有效，不能晚于今天，也不能早于最近交接或状况变更日期。",
   asset_condition_conflict: "设备情况已变化，请刷新设备情况后重新核对。",
   asset_condition_transition:
     "仅可为在管有效设备登记故障或恢复正常，请刷新核对当前状况。",
-  invalid_extension_date: "新期限须晚于原期限，且不能早于东八区今天。",
+  invalid_extension_date: "新期限须晚于原期限，且不能早于今天。",
   assignment_not_temporary: "设备已不属于当前临时领用，请重新读取设备情况。",
   assignment_conflict: "设备或期限已变化，请刷新设备情况后重新核对延期。",
   invalid_party_asset_filter: "请选择适用于当前个人或团队的清单范围。",

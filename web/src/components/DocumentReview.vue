@@ -206,9 +206,7 @@ async function submit() {
           change.event_type === "document_voided" ? "整单作废" : "更正说明"
         }}</strong>
         <p>
-          {{ timestamp(change.recorded_at) }}（东八区）；管理员：{{
-            change.actor_label
-          }}
+          {{ timestamp(change.recorded_at) }}；管理员：{{ change.actor_label }}
         </p>
         <p class="preserve-text">原因：{{ change.reason }}</p>
         <p v-if="change.correction_text" class="preserve-text">
