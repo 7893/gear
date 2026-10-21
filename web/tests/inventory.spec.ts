@@ -1600,6 +1600,27 @@ test("responsive navigation preserves routes, closes on selection and supports k
   await page.screenshot({ path: testInfo.outputPath("mobile.png") });
 });
 
+test("returning to a ledger shows recent data before its refresh completes", async ({
+  page,
+}) => {
+  const state = await fixture(page, "viewer");
+  await loginReady(page);
+  await page.waitForTimeout(250);
+  await page.getByRole("link", { name: "人员与团队", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "人员与团队", exact: true }),
+  ).toBeVisible();
+  state.holdNextList();
+  await page.getByRole("link", { name: "设备台账", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "设备台账", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".inventory-table tbody tr")).toHaveCount(1);
+  await expect(page.getByText("正在更新…", { exact: true })).toBeVisible();
+  state.releaseList();
+  await expect(page.getByText("正在更新…", { exact: true })).toHaveCount(0);
+});
+
 test("a filtered ledger resets its page and keeps global counts for single and empty results", async ({
   page,
 }) => {

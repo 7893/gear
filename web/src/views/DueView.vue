@@ -36,6 +36,8 @@ const query = () => listDueAssets(state.value || null);
 const { data, error, loading, load } = useAuthorizedQuery(
   inventoryAccess,
   query,
+  [],
+  "due-assets",
 );
 </script>
 <template>

@@ -37,6 +37,8 @@ const query = () =>
 const { data, loading, error, load } = useAuthorizedQuery(
   inventoryAccess,
   query,
+  [],
+  "assets",
 );
 </script>
 <template>

@@ -53,6 +53,8 @@ const columns: TableColumn<PartyRecord>[] = [
 const { data, error, loading, load } = useAuthorizedQuery(
   inventoryAccess,
   listPartyRecords,
+  [],
+  "parties",
 );
 const search = ref("");
 const kind = ref("");
