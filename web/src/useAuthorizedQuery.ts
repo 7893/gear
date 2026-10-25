@@ -1,5 +1,7 @@
 import {
   onBeforeUnmount,
+  onActivated,
+  onDeactivated,
   ref,
   shallowRef,
   watch,
@@ -39,6 +41,7 @@ export function useAuthorizedQuery<T>(
 
   async function execute(retain: boolean, showRecent = false) {
     const current = ++generation;
+    if (!account.profile?.membership?.id) recentResults.clear();
     if (!retain || !access.value) data.value = null;
     error.value = "";
     loading.value = false;
@@ -92,6 +95,35 @@ export function useAuthorizedQuery<T>(
     },
     { immediate: true, flush: "sync" },
   );
+  watch(
+    () => account.profile,
+    (profile, previous) => {
+      // A successful same-identity permission check refreshes visible data
+      // without clearing the view. Identity/role changes use load() above.
+      if (
+        active &&
+        profile &&
+        previous &&
+        profile.email === previous.email &&
+        profile.email_verified === previous.email_verified &&
+        profile.membership?.id === previous.membership?.id &&
+        profile.membership?.status === previous.membership?.status &&
+        profile.membership?.role === previous.membership?.role
+      )
+        void refresh();
+    },
+    { flush: "sync" },
+  );
+  onDeactivated(() => {
+    active = false;
+    generation++;
+    loading.value = false;
+  });
+  onActivated(() => {
+    if (active) return; // First activation already loaded via the watcher.
+    active = true;
+    void refresh();
+  });
   onBeforeUnmount(() => {
     active = false;
     generation++;
