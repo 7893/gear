@@ -56,7 +56,7 @@ export function useAuthorizedQuery<T>(
       const result = await query(isCurrent);
       if (isCurrent()) {
         data.value = result;
-        if (id && showRecent)
+        if (id)
           recentResults.set(id, {
             value: result,
             expiresAt: Date.now() + recentResultLifetime,

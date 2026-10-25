@@ -84,7 +84,8 @@ BEGIN
     IF event_date>today OR event_date<earliest OR (action='invalidate' AND event_date<>today) THEN
         RAISE EXCEPTION 'invalid_lifecycle_date' USING ERRCODE='22023'; END IF;
     IF action='invalidate' AND (NOT EXISTS(SELECT 1 FROM gear_2026.events e WHERE e.asset_id=asset.id AND e.event_type='asset_initialized')
-        OR EXISTS(SELECT 1 FROM gear_2026.events e WHERE e.asset_id=asset.id AND e.affects_asset_state)
+        OR EXISTS(SELECT 1 FROM gear_2026.events e WHERE e.asset_id=asset.id AND e.affects_asset_state
+            AND e.reverses_event_id IS NULL AND NOT EXISTS(SELECT 1 FROM gear_2026.events r WHERE r.reverses_event_id=e.id))
         OR EXISTS(SELECT 1 FROM gear_2026.document_items i WHERE i.asset_id=asset.id)) THEN
         RAISE EXCEPTION 'asset_invalidation_dependency' USING ERRCODE='22023'; END IF;
     IF action='found' AND holder IS NOT NULL THEN

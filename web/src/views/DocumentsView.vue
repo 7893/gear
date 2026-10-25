@@ -47,6 +47,7 @@ const filters = reactive({
 watch(
   [() => props.manage, () => route.query.evidence],
   () => {
+    if (route.path !== (props.manage ? "/flows" : "/documents")) return;
     filters.evidence = evidenceTask(route.query.evidence);
     filters.state = filters.evidence
       ? "confirmed"
@@ -72,10 +73,12 @@ const query = async () => {
   });
   return filterEvidenceTask(documents, task);
 };
-const { data, loading, error, load } = useAuthorizedQuery(flowAccess, query, [
-  () => props.manage,
-  () => filters.evidence,
-]);
+const { data, loading, error, load } = useAuthorizedQuery(
+  flowAccess,
+  query,
+  [() => props.manage, () => filters.evidence],
+  "documents",
+);
 </script>
 <template>
   <section v-if="flowAccess" class="card">

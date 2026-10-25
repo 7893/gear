@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import FormField from "../components/FormField.vue";
 import { ref } from "vue";
+import { recordPath } from "../references";
 import { useAuthorizedQuery } from "../useAuthorizedQuery";
 import {
   inventoryAccess,
@@ -85,14 +86,16 @@ const { data, error, loading, load } = useAuthorizedQuery(
       <template #default="{ items }">
         <DataTable :items="items" :columns="columns">
           <template #asset_code="{ row: asset }"
-            ><RouterLink :to="'/assets/' + asset.id"
+            ><RouterLink :to="recordPath('asset', asset)"
               >{{ asset.asset_code }} · {{ asset.name }}</RouterLink
             ></template
           >
         </DataTable>
       </template>
       <template #footer
-        ><p class="muted">本页提供站内查询，归还提醒邮件尚未启用。</p></template
+        ><p class="muted">
+          本页提供站内查询；到期提醒邮件可在单位设置中由管理员开启。
+        </p></template
       >
     </ListResults>
   </section>

@@ -23,6 +23,7 @@ const target = computed(() =>
 );
 const access = computed(() => adminAccess.value && !!target.value);
 const { busy, error, run } = useAuthorizedAction(access, [
+  () => props.asset.id,
   () => props.asset.version,
 ]);
 function save() {

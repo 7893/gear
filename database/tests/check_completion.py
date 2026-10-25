@@ -75,6 +75,7 @@ def main():
     restored=correct(db,again,lost_event);assert restored['holder_party_id']==team['id']
     empty=get(db,initialize(db))['asset'];invalid=lifecycle(db,empty,'invalidate',today)
     valid=correct(db,invalid,get(db,invalid)['history'][0]['id']);assert valid['invalidated_at'] is None
+    reinvalid=lifecycle(db,valid,'invalidate',today);assert reinvalid['invalidated_at'] is not None
     print('PASS admin reversal restores original assignment/status; dependent events rejected, reason/reversal/idempotency retained; lost/scrapped/found/invalidation covered')
 
     row={'details':{'name':'示例批量电脑','category':'computer','condition':'normal','legacy_code':'00008'},'placement':{}}

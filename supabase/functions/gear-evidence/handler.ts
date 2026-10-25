@@ -294,7 +294,11 @@ export async function handle(
           ? 403
           : code === "evidence_unavailable"
             ? 503
-            : ["document_conflict", "attachment_conflict"].includes(code)
+            : [
+                  "document_conflict",
+                  "attachment_conflict",
+                  "asset_lifecycle_conflict",
+                ].includes(code)
               ? 409
               : 400,
     );

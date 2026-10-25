@@ -7,7 +7,7 @@ pnpm -C supabase/functions/gear-evidence install --frozen-lockfile
 pnpm -C supabase/functions/gear-evidence run check
 ```
 
-`POST` 接收 multipart：`file`、`document_id`、`expected_version`、`request_id`，可选 `recognition`、`source_kind`、`external_reference`、`correction_reason`。读取原件使用 `GET` 与 `attachment_id`，传同一用户的授权头；不接受桶名或对象路径参数。响应错误只有固定代码，不输出内部诊断、原件内容或凭据。
+`POST` 接收 multipart：`file`、`document_id`（或 `event_id`）、`expected_version`、`request_id`，可选 `recognition`、`source_kind`、`external_reference`、`correction_reason`。读取原件使用 `GET` 与 `attachment_id`（或 `action=originals` 导出原件 ZIP），传同一用户的授权头；不接受桶名或对象路径参数。响应错误只有固定代码，不输出内部诊断、原件内容或凭据。
 
 运行环境需要统一的 `GEAR_DB_SCHEMA`、`GEAR_STORAGE_BUCKET`、`GEAR_EVIDENCE_APP_URL` 及字面 `true` 的 `GEAR_EVIDENCE_ENABLED`；项目内置 `SUPABASE_URL`、`SUPABASE_PUBLISHABLE_KEYS` 和 `SUPABASE_SECRET_KEYS` 留在函数运行环境，不复制到浏览器或公开仓库。本轮新增项目级设置、创建私有桶及安装隔离策略已获授权；后续变更仍按其范围授权。
 

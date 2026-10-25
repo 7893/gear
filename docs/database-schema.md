@@ -66,9 +66,11 @@ erDiagram
 | `id` | `uuid`，主键 | 设备簿内部成员标识，历史操作引用它 |
 | `auth_user_id` | `uuid`，可空、唯一，引用 `auth.users.id` | 共享认证身份；外部删除身份时 `SET NULL`，保留成员和历史 |
 | `display_name` | `text`，必填 | 操作账号的显示姓名 |
+| `contact_phone` | `text`，可空 | 申请时登记的 11 位联系手机号（迁移 024 新增，历史成员可空） |
 | `status` | `pending / active / rejected / disabled` | 本应用访问状态 |
 | `role` | `admin / operator / viewer`，可空 | 仅 `active` 时非空，其他状态清空；原角色保留在审计中 |
 | `party_id` | `uuid`，可空、唯一，引用 `parties` | 可选关联人员名单，只能关联个人 |
+| `due_mail_enabled` | `boolean`，默认真 | 到期提醒邮件个人接收开关（迁移 021 新增） |
 | `reviewed_by / reviewed_at / review_note` | 成员外键、时间点、文本，均可空 | 最近一次审核或停用处理 |
 | `version` | 正整数 | 审核和角色修改的并发检查 |
 
@@ -83,6 +85,7 @@ erDiagram
 | 字段 | 类型与约束 | 含义 |
 | --- | --- | --- |
 | `id` | `uuid`，主键 | 稳定的接收或交出对象 |
+| `reference_code` | `text`，必填、唯一，生成后不可修改 | 可读对象编码（`RY-`/`TD-`/`DW-` 前缀，迁移 023 新增） |
 | `kind` | `person / team / organization` | 个人、团队、上游单位；上游单位不作为内部使用分配对象 |
 | `name` | `text`，必填，不唯一 | 同名人员、同名团队允许存在，由单位或备注区分 |
 | `person_type` | `staff / seconded / attached / temporary / other`，可空 | 个人的在编、借调、挂职、临时或其他类型；非个人为空 |
@@ -100,7 +103,8 @@ erDiagram
 | 字段 | 类型与约束 | 含义 |
 | --- | --- | --- |
 | `id` | `uuid`，主键 | 永久实物身份 |
-| `asset_code` | `text`，必填、唯一、生成后不可修改 | 设备簿内部展示编号 |
+| `asset_code` | `text`，必填、唯一、生成后不可修改 | 设备簿内部编号（`SB-000001`） |
+| `reference_code` | `text`，必填、唯一、生成后不可修改 | 设备可读展示编码（`EQ-000001`，迁移 023 新增） |
 | `legacy_code / serial_number` | `text`，可空、不唯一 | 保留旧编号和序列号，重复仅提示核对 |
 | `name / category` | `text`，必填 | 设备名称与分类 |
 | `brand / model / location / note` | `text`，可空 | 基本资料和当前位置 |
@@ -120,6 +124,7 @@ erDiagram
 | --- | --- | --- |
 | `id / asset_id` | `uuid` 主键、设备外键，必填 | 一件设备的一段持有关系 |
 | `holder_party_id / responsible_person_id` | 名单外键，必填 | 持有个人或团队及当次负责个人 |
+| `actual_user_id` | 名单外键，可空 | 团队持有时登记的具体使用个人（迁移 017 新增） |
 | `usage_kind` | `long_term / temporary` | 长期或临时使用 |
 | `started_on / due_on / ended_on` | `date`，可空 | 实际开始、预计归还及实际结束日期 |
 | `closed_at` | `timestamptz`，可空 | 系统关闭分配的时间；为空才是当前有效分配 |
@@ -144,6 +149,7 @@ erDiagram
 | 字段 | 类型与约束 | 含义 |
 | --- | --- | --- |
 | `id` | `uuid`，主键 | 草稿阶段就有的稳定单据标识 |
+| `reference_code` | `text`，必填、唯一 | 单据可读编码，草稿阶段为 `CG-000001`，确认后与 `document_no` 一致（迁移 023 新增） |
 | `create_request_id` | `uuid`，必填，与 `created_by` 联合唯一 | 防止重复保存产生两张草稿 |
 | `kind` | `receipt / issue / transfer / return` | 领入、分发、转交、退回 |
 | `transfer_mode` | `holder / responsibility`，可空 | 转交时区分持有方变化与同团队责任交接 |
@@ -228,6 +234,7 @@ erDiagram
 | 字段 | 类型与约束 | 含义 |
 | --- | --- | --- |
 | `id` | `uuid`，主键 | 每个文件的稳定标识 |
+| `reference_code` | `text`，必填、唯一，生成后不可修改 | 附件可读引用编码（`FJ-000001`，迁移 023 新增） |
 | `document_id / event_id` | 可空外键，必须且只能有一个非空 | 单据签字件或建账、故障等设备事件证明 |
 | `storage_key` | `text`，必填、唯一 | 专属私有桶内随机对象名，不保存长期公开 URL |
 | `original_name / media_type` | 必填文本、可空文本 | 原文件名及服务端验证后的文件类型；待上传时类型可空 |

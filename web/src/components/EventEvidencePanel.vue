@@ -147,7 +147,7 @@ async function download(item: Attachment, signal: AbortSignal) {
         @retry="load"
       />
       <p v-if="error" role="alert" class="notice error">{{ error }}</p>
-      <p v-if="note" role="status">{{ note }}</p>
+      <p v-if="note && !loading" role="status">{{ note }}</p>
       <template v-if="data"
         ><p v-if="!data.items.length">尚未上传凭证。</p>
         <ul>

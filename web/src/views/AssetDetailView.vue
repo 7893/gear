@@ -64,6 +64,28 @@ const conditionEarliestOn = computed(
       .sort()
       .at(-1) || "",
 );
+const lifecycleEarliestOn = computed(
+  () =>
+    [
+      conditionEarliestOn.value,
+      ...(data.value?.history || [])
+        .filter(
+          (event) =>
+            !(data.value?.history || []).some(
+              (r) => r.reverses_event_id === event.id,
+            ),
+        )
+        .filter((event) =>
+          ["assignment_extended", "assignment_user_changed"].includes(
+            event.event_type,
+          ),
+        )
+        .map((event) => event.occurred_on),
+    ]
+      .filter((date): date is string => !!date)
+      .sort()
+      .at(-1) || "",
+);
 function conditionChanged(condition: Asset["condition"]) {
   message.value =
     condition === "faulty"
@@ -85,6 +107,10 @@ function detailsUpdated() {
 }
 function userUpdated() {
   message.value = "具体使用人已记录，团队持有方、负责人、期限和原单快照保持。";
+  void load();
+}
+function lifecycleCorrected() {
+  message.value = "误登记处置已撤销，原记录和设备编号保留。";
   void load();
 }
 watch(
@@ -237,14 +263,14 @@ watch(
       <AssetLifecycleForm
         :key="'lifecycle:' + data.asset.id + ':' + data.asset.version"
         :asset="data.asset"
-        :earliest-on="conditionEarliestOn"
+        :earliest-on="lifecycleEarliestOn"
         @updated="lifecycleUpdated"
       />
       <LifecycleCorrectionForm
-        :key="'correction:' + data.asset.version"
+        :key="'correction:' + data.asset.id + ':' + data.asset.version"
         :asset="data.asset"
         :history="data.history"
-        @updated="load"
+        @updated="lifecycleCorrected"
       />
       <h3>历史记录</h3>
       <ol v-if="data.history.length" class="asset-history">

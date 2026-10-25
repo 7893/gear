@@ -368,10 +368,14 @@ def restore_backup(archive_path, web_root, confirm, storage):
                     raise BackupError('恢复原件回读校验失败。')
             command([program('psql'), '-X', '-q', '-v', 'ON_ERROR_STOP=1', '--file=' + str(sql_path)])
             root = Path(web_root)
-            root.mkdir(parents=True, exist_ok=True, mode=0o700)
+            root.mkdir(parents=True, exist_ok=True, mode=0o755)
             for source in (base / 'website').rglob('*'):
                 if source.is_file():
-                    private_write(root / source.relative_to(base / 'website'), source.read_bytes())
+                    target_file = root / source.relative_to(base / 'website')
+                    target_file.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
+                    with target_file.open('xb') as stream:
+                        os.chmod(target_file, 0o644)
+                        stream.write(source.read_bytes())
         except BaseException as error:
             raise BackupError('恢复未完成；不会删除已有对象。新增原件可能保留，请根据私有备份清单核对后重试。') from error
     return {'restored': True, 'mail_enabled': False, 'new_originals': len(pending)}
