@@ -40,6 +40,44 @@ const { data, loading, error, load } = useAuthorizedQuery(
   [],
   "assets",
 );
+const primaryStats = computed(() => {
+  const summary = data.value?.summary;
+  if (!summary) return [];
+  return [
+    { key: "", label: "有效设备总数", value: summary.total, tone: "primary" },
+    {
+      key: "inventory_available",
+      label: "在库可用",
+      value: summary.inventory_available,
+      tone: "success",
+    },
+    { key: "in_use", label: "使用中", value: summary.in_use, tone: "info" },
+    {
+      key: "managed_faulty",
+      label: "在管故障",
+      value: summary.managed_faulty,
+      tone: "warning",
+    },
+  ];
+});
+const secondaryStats = computed(() => {
+  const summary = data.value?.summary;
+  if (!summary) return [];
+  return [
+    {
+      key: "inventory_faulty",
+      label: "在库故障",
+      value: summary.inventory_faulty,
+    },
+    {
+      key: "returned_upstream",
+      label: "已退上游",
+      value: summary.returned_upstream,
+    },
+    { key: "lost", label: "遗失", value: summary.lost },
+    { key: "scrapped", label: "已报废", value: summary.scrapped },
+  ];
+});
 function selectState(target: string) {
   if (loading.value) return;
   filters.state = filters.state === target ? "" : target;
@@ -65,64 +103,28 @@ function selectState(target: string) {
     <div v-if="data" class="inventory-summary" aria-label="设备统计">
       <div class="stats-overview">
         <div
-          class="stat-card stat-card-primary"
-          :class="{ 'is-active': filters.state === '' }"
-          @click="selectState('')"
+          v-for="stat in primaryStats"
+          :key="stat.key"
+          class="stat-card"
+          :class="[
+            'stat-card-' + stat.tone,
+            { 'is-active': filters.state === stat.key },
+          ]"
+          @click="selectState(stat.key)"
         >
-          <span>有效设备总数：</span><strong>{{ data.summary.total }}</strong
-          ><AppIcon name="assets" />
-        </div>
-        <div
-          class="stat-card stat-card-success"
-          :class="{ 'is-active': filters.state === 'inventory_available' }"
-          @click="selectState('inventory_available')"
-        >
-          <span>在库可用：</span
-          ><strong>{{ data.summary.inventory_available }}</strong
-          ><AppIcon name="check" />
-        </div>
-        <div
-          class="stat-card stat-card-info"
-          :class="{ 'is-active': filters.state === 'in_use' }"
-          @click="selectState('in_use')"
-        >
-          <span>使用中：</span><strong>{{ data.summary.in_use }}</strong
-          ><AppIcon name="transfer" />
-        </div>
-        <div
-          class="stat-card stat-card-warning"
-          :class="{ 'is-active': filters.state === 'managed_faulty' }"
-          @click="selectState('managed_faulty')"
-        >
-          <span>在管故障：</span
-          ><strong>{{ data.summary.managed_faulty }}</strong
-          ><AppIcon name="alert" />
+          <span>{{ stat.label }}<i class="visually-hidden">：</i></span
+          ><strong>{{ stat.value }}</strong>
         </div>
       </div>
       <div class="inventory-breakdown">
         <span
+          v-for="stat in secondaryStats"
+          :key="stat.key"
           class="breakdown-pill"
-          :class="{ 'is-active': filters.state === 'inventory_faulty' }"
-          @click="selectState('inventory_faulty')"
-          >在库故障：{{ data.summary.inventory_faulty }}</span
-        >
-        <span
-          class="breakdown-pill"
-          :class="{ 'is-active': filters.state === 'returned_upstream' }"
-          @click="selectState('returned_upstream')"
-          >已退上游：{{ data.summary.returned_upstream }}</span
-        >
-        <span
-          class="breakdown-pill"
-          :class="{ 'is-active': filters.state === 'lost' }"
-          @click="selectState('lost')"
-          >遗失：{{ data.summary.lost }}</span
-        >
-        <span
-          class="breakdown-pill"
-          :class="{ 'is-active': filters.state === 'scrapped' }"
-          @click="selectState('scrapped')"
-          >已报废：{{ data.summary.scrapped }}</span
+          :class="{ 'is-active': filters.state === stat.key }"
+          @click="selectState(stat.key)"
+          >{{ stat.label }}<i class="visually-hidden">：</i
+          ><b>{{ stat.value }}</b></span
         >
       </div>
     </div>

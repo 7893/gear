@@ -88,6 +88,13 @@ const navigation = computed(() =>
     }))
     .filter((group) => group.items.length),
 );
+const primaryNavigation = computed(() =>
+  navigation.value.filter((group) => group.label !== "系统与权限"),
+);
+const systemNavigation = computed(
+  () =>
+    navigation.value.find((group) => group.label === "系统与权限")?.items ?? [],
+);
 function activeLink(to: string) {
   const path = route.path;
   if (to.includes("?")) return path === "/documents" && !!route.query.evidence;
@@ -191,10 +198,8 @@ async function logout() {
         aria-label="主导航"
       >
         <div class="nav-links-cluster">
-          <template v-for="group in navigation" :key="group.label">
-            <span class="navigation-caption mobile-only">{{
-              group.label
-            }}</span>
+          <template v-for="group in primaryNavigation" :key="group.label">
+            <span class="navigation-caption">{{ group.label }}</span>
             <RouterLink
               v-for="item in group.items"
               :key="item.to"
@@ -202,23 +207,42 @@ async function logout() {
               :class="{ 'is-current': activeLink(item.to) }"
               :aria-current="activeLink(item.to) ? 'page' : undefined"
               @click="closeMenu()"
-              ><AppIcon :name="item.icon" />{{ item.label }}</RouterLink
+              ><AppIcon :name="item.icon" /><span class="nav-label">{{
+                item.label
+              }}</span></RouterLink
             >
           </template>
         </div>
 
         <div class="nav-user-cluster">
+          <span class="navigation-caption">系统与权限</span>
+          <div class="nav-system-links">
+            <RouterLink
+              v-for="item in systemNavigation"
+              :key="item.to"
+              :to="item.to"
+              :title="item.label"
+              :class="{ 'is-current': activeLink(item.to) }"
+              :aria-current="activeLink(item.to) ? 'page' : undefined"
+              @click="closeMenu()"
+              ><AppIcon :name="item.icon" /><span class="nav-label">{{
+                item.label
+              }}</span></RouterLink
+            >
+          </div>
           <div class="user-meta-pill">
-            <span v-if="roleBadge" class="topbar-role-badge">{{
-              roleBadge
-            }}</span>
             <span class="user-avatar" aria-hidden="true">{{
               displayName.slice(0, 1)
             }}</span>
-            <span class="user-name">{{ displayName }}</span>
+            <span class="user-meta-text">
+              <span class="user-name">{{ displayName }}</span>
+              <span v-if="roleBadge" class="topbar-role-badge">{{
+                roleBadge
+              }}</span>
+            </span>
           </div>
           <button class="quiet sign-out-compact" type="button" @click="logout">
-            <AppIcon name="logout" />退出登录
+            <AppIcon name="logout" /><span class="nav-label">退出登录</span>
           </button>
         </div>
       </nav>
