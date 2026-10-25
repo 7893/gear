@@ -1264,7 +1264,7 @@ test("fifty-line A4 PDF uses repeated header, page counters, preserved codes and
   await expect(page.getByRole("article", { name: "交接单据" })).toBeVisible();
   await page.emulateMedia({ media: "print" });
   await expect(page.locator(".site-header")).toBeHidden();
-  await expect(page.locator(".print-table thead")).toHaveCSS(
+  await expect(page.locator(".sheet-items-header")).toHaveCSS(
     "display",
     "table-header-group",
   );
@@ -1282,7 +1282,9 @@ test("fifty-line A4 PDF uses repeated header, page counters, preserved codes and
   expect(pages).toBeGreaterThan(1);
   expect(pages).toBeLessThan(12);
   expect(pdf.length).toBeGreaterThan(10000);
-  await expect(page.locator(".print-table tbody tr")).toHaveCount(50);
+  await expect(page.locator(".sheet-items-body .sheet-item-row")).toHaveCount(
+    50,
+  );
 });
 
 test("document scan opens a mobile summary, retains its target across login and uses readable links", async ({

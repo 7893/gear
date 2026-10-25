@@ -962,7 +962,7 @@ test("attachment CSV retains visible inactive and pending records with associati
   ]);
   await login(page);
   await page.goto("/#/documents");
-  await expect(page.locator("tbody tr")).toHaveCount(2);
+  await expect(page.locator(".data-card-row")).toHaveCount(2);
   const before = f.calls.length;
   const csv = await csvDownload(page, "导出附件关联 CSV");
   expect(csv.name).toMatch(/^附件关联清单-\d{4}-\d{2}-\d{2}\.csv$/);
@@ -997,7 +997,7 @@ test("one denied attachment read, version drift or mismatched association fails 
   f.setExportItems(id(11), []);
   await login(page);
   await page.goto("/#/documents");
-  await expect(page.locator("tbody tr")).toHaveCount(2);
+  await expect(page.locator(".data-card-row")).toHaveCount(2);
   let downloads = 0;
   page.on("download", () => downloads++);
   f.failExport(id(11));
@@ -1065,7 +1065,7 @@ for (const reason of ["revoked", "route changed"]) {
     f.setExportItems(id(11), []);
     await login(page);
     await page.goto("/#/documents");
-    await expect(page.locator("tbody tr")).toHaveCount(2);
+    await expect(page.locator(".data-card-row")).toHaveCount(2);
     let downloads = 0;
     page.on("download", () => downloads++);
     f.hold();

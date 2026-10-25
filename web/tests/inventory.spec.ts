@@ -1306,7 +1306,7 @@ for (const role of ["admin", "operator", "viewer"]) {
     state.assets[0].legacy_code = "00007";
     state.assets[0].note = '=HYPERLINK("https://example.invalid")';
     await login(page);
-    await expect(page.locator("tbody tr")).toHaveCount(20);
+    await expect(page.locator(".data-card-row")).toHaveCount(20);
     await page.getByRole("button", { name: "下一页", exact: true }).click();
     const before = state.calls.filter((c) => c.name === "list_assets").length;
     const downloadPromise = page.waitForEvent("download");
@@ -1377,7 +1377,7 @@ test("due export uses server business date and the selected state, including an 
   );
   await login(page);
   await page.getByRole("link", { name: "临时使用与到期", exact: true }).click();
-  await expect(page.locator("tbody tr")).toHaveCount(20);
+  await expect(page.locator(".data-card-row")).toHaveCount(20);
   await page
     .getByRole("combobox", { name: "到期情况", exact: true })
     .selectOption("today");
@@ -1415,7 +1415,7 @@ test("failed exports show safe errors and revoked access discards a late export 
   let downloads = 0;
   page.on("download", () => downloads++);
   await login(page);
-  await expect(page.locator("tbody tr")).toHaveCount(1);
+  await expect(page.locator(".data-card-row")).toHaveCount(1);
   state.failList(true);
   await page.getByRole("button", { name: "导出 CSV", exact: true }).click();
   await expect(page.getByLabel("清单导出").getByRole("alert")).toContainText(
@@ -1456,7 +1456,7 @@ test("leaving a page discards its pending export", async ({ page }) => {
   let downloads = 0;
   page.on("download", () => downloads++);
   await login(page);
-  await expect(page.locator("tbody tr")).toHaveCount(1);
+  await expect(page.locator(".data-card-row")).toHaveCount(1);
   state.holdNextList();
   await page.getByRole("button", { name: "导出 CSV", exact: true }).click();
   await expect(
@@ -1487,7 +1487,7 @@ test("ledger pages all fifty-one devices and supports each page size without ref
   state.assets.splice(0, state.assets.length, ...paginationAssets());
   await login(page);
   const nav = page.getByRole("navigation", { name: "设备分页" });
-  const rows = page.locator(".inventory-table tbody tr");
+  const rows = page.locator(".data-card-row");
   const size = nav.getByRole("combobox", { name: "每页显示", exact: true });
   await expect(rows).toHaveCount(20);
   await expect(size).toHaveValue("20");
@@ -1615,7 +1615,7 @@ test("returning to a ledger shows recent data before its refresh completes", asy
   await expect(
     page.getByRole("heading", { name: "设备台账", exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".inventory-table tbody tr")).toHaveCount(1);
+  await expect(page.locator(".data-card-row")).toHaveCount(1);
   await expect(page.getByText("正在更新…", { exact: true })).toBeVisible();
   state.releaseList();
   await expect(page.getByText("正在更新…", { exact: true })).toHaveCount(0);
@@ -1628,7 +1628,7 @@ test("a filtered ledger resets its page and keeps global counts for single and e
   state.assets.splice(0, state.assets.length, ...paginationAssets());
   await login(page);
   const nav = page.getByRole("navigation", { name: "设备分页" });
-  const rows = page.locator(".inventory-table tbody tr");
+  const rows = page.locator(".data-card-row");
   await nav.getByRole("button", { name: "末页", exact: true }).click();
   await expect(nav.getByRole("status")).toContainText("第 3 / 3 页");
   state.filterResults([state.assets[50]]);
@@ -2025,7 +2025,7 @@ test("due ledger uses server business date, pages and filters without conflating
       exact: false,
     }),
   ).toBeVisible();
-  const rows = page.locator("tbody tr");
+  const rows = page.locator(".data-card-row");
   await expect(rows).toHaveCount(20);
   await expect(page.getByLabel("临时使用统计")).toContainText("已逾期：1");
   await expect(page.getByLabel("临时使用统计")).toContainText("今天到期：50");
@@ -2944,7 +2944,7 @@ test("same-account focus checks coalesce without blanking the ledger", async ({
   expect(
     state.calls.filter((c) => c.name === "get_my_membership"),
   ).toHaveLength(1);
-  const rows = page.locator("tbody tr");
+  const rows = page.locator(".data-card-row");
   let checked = 0;
   let release!: () => void;
   const held = new Promise<void>((resolve) => (release = resolve));
@@ -2983,16 +2983,16 @@ test("returning to a ledger retains filters, size and page while refreshing chan
   await loginReady(page);
   await page.getByRole("link", { name: "设备台账", exact: true }).click();
   const nav = page.getByRole("navigation", { name: "设备分页" });
-  await expect(page.locator("tbody tr")).toHaveCount(20);
+  await expect(page.locator(".data-card-row")).toHaveCount(20);
   await page.getByLabel("搜索设备", { exact: true }).fill("示例");
   await page.getByRole("button", { name: "查询", exact: true }).click();
-  await expect(page.locator("tbody tr")).toHaveCount(20);
+  await expect(page.locator(".data-card-row")).toHaveCount(20);
   await nav
     .getByRole("combobox", { name: "每页显示", exact: true })
     .selectOption("10");
   await nav.getByRole("button", { name: "下一页", exact: true }).click();
   await expect(nav.getByRole("status")).toContainText("第 2 / 6 页");
-  await page.locator("tbody tr a").first().click();
+  await page.locator(".data-card-row a").first().click();
   await expect(
     page.getByRole("heading", { name: "设备详情", exact: true }),
   ).toBeVisible();
@@ -3006,12 +3006,12 @@ test("returning to a ledger retains filters, size and page while refreshing chan
     nav.getByRole("combobox", { name: "每页显示", exact: true }),
   ).toHaveValue("10");
   await expect(nav.getByRole("status")).toContainText("第 2 / 6 页");
-  await expect(page.locator("tbody tr")).toHaveCount(10);
+  await expect(page.locator(".data-card-row")).toHaveCount(10);
   await expect(page.getByText("正在更新…", { exact: true })).toBeVisible();
   state.releaseList();
   await expect(page.getByText("正在更新…", { exact: true })).toHaveCount(0);
   await expect(nav.getByRole("status")).toContainText("第 2 / 6 页");
-  await expect(page.locator("tbody tr").first()).toContainText(
+  await expect(page.locator(".data-card-row").first()).toContainText(
     "示例后台更新设备",
   );
   expect(
@@ -3025,7 +3025,7 @@ test("permission failure destroys inactive page caches and late refreshes", asyn
   const state = await fixture(page, "viewer");
   await loginReady(page);
   await page.getByRole("link", { name: "设备台账", exact: true }).click();
-  await expect(page.locator("tbody tr")).toHaveCount(1);
+  await expect(page.locator(".data-card-row")).toHaveCount(1);
   await page.getByRole("link", { name: "我的账号", exact: true }).click();
   await page.route(api + "/rest/v1/rpc/get_my_membership", (route) =>
     route.fulfill({
@@ -3039,7 +3039,7 @@ test("permission failure destroys inactive page caches and late refreshes", asyn
   ).toHaveCount(0);
   const reads = state.calls.filter((c) => c.name === "list_assets").length;
   await page.goto("/#/assets");
-  await expect(page.locator("tbody tr")).toHaveCount(0);
+  await expect(page.locator(".data-card-row")).toHaveCount(0);
   await expect(
     page.getByText("当前账号无法执行此操作，请登录或查看账号状态。", {
       exact: true,
@@ -3055,10 +3055,10 @@ test("logout clears list state before the next login", async ({ page }) => {
   const state = await fixture(page, "viewer");
   await loginReady(page);
   await page.getByRole("link", { name: "设备台账", exact: true }).click();
-  await expect(page.locator("tbody tr")).toHaveCount(1);
+  await expect(page.locator(".data-card-row")).toHaveCount(1);
   await page.getByLabel("搜索设备", { exact: true }).fill("旧账号筛选");
   await page.getByRole("button", { name: "退出登录", exact: true }).click();
-  await expect(page.locator("tbody tr")).toHaveCount(0);
+  await expect(page.locator(".data-card-row")).toHaveCount(0);
   state.assets[0].name = "示例重新登录后设备";
   await page.getByRole("link", { name: "登录", exact: true }).click();
   await page
@@ -3068,8 +3068,10 @@ test("logout clears list state before the next login", async ({ page }) => {
     .getByLabel("密码", { exact: true })
     .fill("example-only-" + "x".repeat(16));
   await page.getByRole("button", { name: "登录", exact: true }).click();
-  await expect(page.locator("tbody tr")).toHaveCount(1);
+  await expect(page.locator(".data-card-row")).toHaveCount(1);
   await page.getByRole("link", { name: "设备台账", exact: true }).click();
   await expect(page.getByLabel("搜索设备", { exact: true })).toHaveValue("");
-  await expect(page.locator("tbody tr")).toContainText("示例重新登录后设备");
+  await expect(page.locator(".data-card-row")).toContainText(
+    "示例重新登录后设备",
+  );
 });

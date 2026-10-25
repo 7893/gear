@@ -91,8 +91,13 @@ function created(party: Party) {
 </script>
 <template>
   <section v-if="inventoryAccess" class="card">
-    <h1>人员与团队</h1>
-    <p>
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">内部领用人与团队名录</p>
+        <h1>人员与团队</h1>
+      </div>
+    </div>
+    <p class="muted">
       接收对象无需注册账号。修改默认负责人不改变已有设备的责任人，停用不代表设备已归还。
     </p>
     <PartyQuickCreate
@@ -102,7 +107,7 @@ function created(party: Party) {
       :disabled="loading"
       @created="created"
     />
-    <p v-if="notice" role="status">{{ notice }}</p>
+    <p v-if="notice" class="notice" role="status">{{ notice }}</p>
     <form class="inventory-filters" @submit.prevent="load">
       <FormField label="搜索人员或团队" v-model="search" maxlength="200" />
       <FormField
@@ -135,6 +140,31 @@ function created(party: Party) {
             <small class="reference-code" v-if="party.reference_code">{{
               party.reference_code
             }}</small>
+          </template>
+          <template #kind="{ row: party }">
+            <span
+              class="party-kind-badge"
+              :class="'party-kind-' + party.kind"
+              >{{
+                party.kind === "team"
+                  ? "团队"
+                  : personTypes[party.person_type || "other"]
+              }}</span
+            >
+          </template>
+          <template #current_asset_count="{ row: party }">
+            <span
+              class="holding-count-badge"
+              :class="{ 'has-holdings': party.current_asset_count > 0 }"
+              >{{ party.current_asset_count }} 台</span
+            >
+          </template>
+          <template #is_active="{ row: party }">
+            <span
+              class="active-badge"
+              :class="party.is_active ? 'is-enabled' : 'is-disabled'"
+              >{{ party.is_active ? "启用" : "停用" }}</span
+            >
           </template>
         </DataTable>
       </template>

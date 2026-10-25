@@ -180,55 +180,73 @@ function apply() {
         label="导入预览分页"
         v-model:page-size="pageSize"
         v-slot="page"
-        ><div class="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>行</th>
-                <th>设备</th>
-                <th>分类</th>
-                <th>状况</th>
-                <th>原编号</th>
-                <th>持有方</th>
-                <th>负责人</th>
-                <th>具体使用人</th>
-                <th>起始日期</th>
-                <th>归还日期</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="{ row, line } in page.items" :key="line">
-                <td>{{ line }}</td>
-                <td>{{ row.details.name }}</td>
-                <td>{{ categories[row.details.category] }}</td>
-                <td>
-                  {{ row.details.condition === "faulty" ? "故障" : "正常" }}
-                </td>
-                <td>{{ row.details.legacy_code || "未填写" }}</td>
-                <td>
-                  {{
-                    parties?.find((p) => p.id === row.placement.holder_party_id)
-                      ?.name || "库存"
-                  }}
-                </td>
-                <td>
-                  {{
-                    parties?.find(
-                      (p) => p.id === row.placement.responsible_person_id,
-                    )?.name || "不适用"
-                  }}
-                </td>
-                <td>
-                  {{
-                    parties?.find((p) => p.id === row.actual_user_id)?.name ||
-                    "未填写"
-                  }}
-                </td>
-                <td>{{ row.placement.known_on || "未知" }}</td>
-                <td>{{ row.placement.due_on || "不适用" }}</td>
-              </tr>
-            </tbody>
-          </table>
+        ><div class="data-list" role="table">
+          <div class="data-list-header" role="rowgroup">
+            <div class="data-header-row" role="row" style="--col-count: 10">
+              <span class="data-header-cell" role="columnheader">行</span>
+              <span class="data-header-cell" role="columnheader">设备</span>
+              <span class="data-header-cell" role="columnheader">分类</span>
+              <span class="data-header-cell" role="columnheader">状况</span>
+              <span class="data-header-cell" role="columnheader">原编号</span>
+              <span class="data-header-cell" role="columnheader">持有方</span>
+              <span class="data-header-cell" role="columnheader">负责人</span>
+              <span class="data-header-cell" role="columnheader"
+                >具体使用人</span
+              >
+              <span class="data-header-cell" role="columnheader">起始日期</span>
+              <span class="data-header-cell" role="columnheader">归还日期</span>
+            </div>
+          </div>
+          <div class="data-list-body" role="rowgroup">
+            <article
+              v-for="{ row, line } in page.items"
+              :key="line"
+              class="data-card-row"
+              role="row"
+              style="--col-count: 10"
+            >
+              <div class="data-cell" role="cell" data-label="行">
+                {{ line }}
+              </div>
+              <div class="data-cell" role="cell" data-label="设备">
+                {{ row.details.name }}
+              </div>
+              <div class="data-cell" role="cell" data-label="分类">
+                {{ categories[row.details.category] }}
+              </div>
+              <div class="data-cell" role="cell" data-label="状况">
+                {{ row.details.condition === "faulty" ? "故障" : "正常" }}
+              </div>
+              <div class="data-cell" role="cell" data-label="原编号">
+                {{ row.details.legacy_code || "未填写" }}
+              </div>
+              <div class="data-cell" role="cell" data-label="持有方">
+                {{
+                  parties?.find((p) => p.id === row.placement.holder_party_id)
+                    ?.name || "库存"
+                }}
+              </div>
+              <div class="data-cell" role="cell" data-label="负责人">
+                {{
+                  parties?.find(
+                    (p) => p.id === row.placement.responsible_person_id,
+                  )?.name || "不适用"
+                }}
+              </div>
+              <div class="data-cell" role="cell" data-label="具体使用人">
+                {{
+                  parties?.find((p) => p.id === row.actual_user_id)?.name ||
+                  "未填写"
+                }}
+              </div>
+              <div class="data-cell" role="cell" data-label="起始日期">
+                {{ row.placement.known_on || "未知" }}
+              </div>
+              <div class="data-cell" role="cell" data-label="归还日期">
+                {{ row.placement.due_on || "不适用" }}
+              </div>
+            </article>
+          </div>
         </div></ListPagination
       >
       <form class="stack" @submit.prevent="apply">

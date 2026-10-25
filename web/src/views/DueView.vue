@@ -40,11 +40,21 @@ const { data, error, loading, load } = useAuthorizedQuery(
   [],
   "due-assets",
 );
+function selectDue(target: DueState | "") {
+  if (loading.value) return;
+  state.value = state.value === target ? "" : target;
+  void load();
+}
 </script>
 <template>
   <section v-if="inventoryAccess" class="card">
-    <h1>临时使用与到期</h1>
-    <p>
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">期限跟踪与预警</p>
+        <h1>临时使用与到期</h1>
+      </div>
+    </div>
+    <p class="muted">
       只列当前仍在管的临时领用设备。到期当天不算逾期；点击设备可查看详情或办理延期。
     </p>
     <form class="inventory-filters" @submit.prevent="load">
@@ -73,12 +83,22 @@ const { data, error, loading, load } = useAuthorizedQuery(
       @retry="load"
     >
       <template #summary v-if="data">
-        <p>
+        <p class="muted">
           业务日期：{{ data.business_on }}；提前 {{ data.notice_days }} 天提示。
         </p>
-        <div class="inventory-summary" aria-label="临时使用统计">
-          <span>临时使用总数：{{ data.summary.total }}</span>
-          <span v-for="(label, key) in dueStates" :key="key"
+        <div class="inventory-summary due-kpi-strip" aria-label="临时使用统计">
+          <span
+            class="due-kpi-pill"
+            :class="{ 'is-active': state === '' }"
+            @click="selectDue('')"
+            >临时使用总数：{{ data.summary.total }}</span
+          >
+          <span
+            v-for="(label, key) in dueStates"
+            :key="key"
+            class="due-kpi-pill"
+            :class="['due-kpi-' + key, { 'is-active': state === key }]"
+            @click="selectDue(key)"
             >{{ label }}：{{ data.summary[key] }}</span
           >
         </div>
@@ -89,6 +109,11 @@ const { data, error, loading, load } = useAuthorizedQuery(
             ><RouterLink :to="recordPath('asset', asset)"
               >{{ asset.asset_code }} · {{ asset.name }}</RouterLink
             ></template
+          >
+          <template #due_state="{ row: asset }"
+            ><span class="due-badge" :class="'due-badge-' + asset.due_state">{{
+              dueStates[asset.due_state]
+            }}</span></template
           >
         </DataTable>
       </template>

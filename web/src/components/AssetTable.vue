@@ -54,26 +54,45 @@ const columns = computed<TableColumn<Asset>[]>(() => [
 <template>
   <DataTable :items="items" :columns="columns">
     <template #asset_code="{ row: asset }">
-      <RouterLink :to="recordPath('asset', asset)"
-        >{{ asset.asset_code }} · {{ asset.name }}</RouterLink
-      >
-      <small>旧编号：{{ asset.legacy_code || "未填写" }}</small>
+      <div class="asset-primary-cell">
+        <RouterLink class="asset-title-link" :to="recordPath('asset', asset)"
+          >{{ asset.asset_code }} · {{ asset.name }}</RouterLink
+        >
+        <div class="asset-submeta">
+          <span v-if="asset.reference_code" class="reference-pill">{{
+            asset.reference_code
+          }}</span>
+          <small :class="{ 'is-empty-meta': !asset.legacy_code }"
+            >旧编号：{{ asset.legacy_code || "未填写" }}</small
+          >
+        </div>
+      </div>
     </template>
     <template #category="{ row: asset }">
-      {{
+      <span class="category-tag">{{
         categories[asset.category as keyof typeof categories] || asset.category
-      }}
-      <small>{{ asset.model || "型号未填写" }}</small>
+      }}</span>
+      <small :class="{ 'is-empty-meta': !asset.model }">{{
+        asset.model || "型号未填写"
+      }}</small>
     </template>
     <template #display_status="{ row: asset }">
-      <span
-        class="asset-status"
-        :class="'asset-status-' + asset.display_status"
-        >{{ assetStates[asset.display_status] }}</span
-      >
-      <small :class="{ 'condition-faulty': asset.condition === 'faulty' }">{{
-        asset.condition === "faulty" ? "故障" : "正常"
-      }}</small>
+      <div class="status-stack">
+        <span
+          class="asset-status"
+          :class="'asset-status-' + asset.display_status"
+          >{{ assetStates[asset.display_status] }}</span
+        >
+        <small
+          class="condition-pill"
+          :class="
+            asset.condition === 'faulty'
+              ? 'condition-faulty'
+              : 'condition-normal'
+          "
+          >{{ asset.condition === "faulty" ? "故障" : "正常" }}</small
+        >
+      </div>
     </template>
   </DataTable>
 </template>

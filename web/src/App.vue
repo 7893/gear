@@ -2,7 +2,14 @@
 import { computed, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import AppIcon from "./components/AppIcon.vue";
-import { account, adminAccess, signOut, safeError } from "./accounts";
+import {
+  account,
+  adminAccess,
+  roleLabels,
+  statusLabels,
+  signOut,
+  safeError,
+} from "./accounts";
 import { inventoryAccess } from "./inventory";
 import { flowAccess, flowWriteAccess } from "./flows";
 const route = useRoute();
@@ -11,7 +18,7 @@ const menuButton = ref<HTMLButtonElement>();
 const navigation = computed(() =>
   [
     {
-      label: "设备管理",
+      label: "资产与台账",
       items: [
         {
           to: "/assets",
@@ -34,7 +41,7 @@ const navigation = computed(() =>
       ],
     },
     {
-      label: "交接与凭证",
+      label: "流转与归档",
       items: [
         {
           to: "/flows",
@@ -57,7 +64,7 @@ const navigation = computed(() =>
       ],
     },
     {
-      label: "账号与设置",
+      label: "系统与权限",
       items: [
         { to: "/account", label: "我的账号", icon: "account", show: true },
         {
@@ -111,6 +118,13 @@ const currentNavigation = computed(() => {
 const displayName = computed(
   () => account.profile?.membership?.display_name || "我的账号",
 );
+const roleBadge = computed(() => {
+  const membership = account.profile?.membership;
+  if (!membership) return "";
+  if (membership.status === "active" && membership.role)
+    return roleLabels[membership.role];
+  return statusLabels[membership.status] || "";
+});
 function closeMenu(focus = false) {
   if (!menuOpen.value) return;
   menuOpen.value = false;
@@ -217,6 +231,9 @@ async function logout() {
           ><strong>{{ currentNavigation.label }}</strong>
         </div>
         <div class="workspace-user">
+          <span v-if="roleBadge" class="topbar-role-badge">{{
+            roleBadge
+          }}</span>
           <span class="user-avatar" aria-hidden="true">{{
             displayName.slice(0, 1)
           }}</span

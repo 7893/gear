@@ -40,11 +40,17 @@ const { data, loading, error, load } = useAuthorizedQuery(
   [],
   "assets",
 );
+function selectState(target: string) {
+  if (loading.value) return;
+  filters.state = filters.state === target ? "" : target;
+  void load();
+}
 </script>
 <template>
   <section v-if="inventoryAccess" class="card">
     <div class="section-heading">
       <div>
+        <p class="eyebrow">资产总览与检索</p>
         <h1>设备台账</h1>
       </div>
       <div v-if="inventoryWriteAccess" class="action-group page-actions">
@@ -58,30 +64,66 @@ const { data, loading, error, load } = useAuthorizedQuery(
     </div>
     <div v-if="data" class="inventory-summary" aria-label="设备统计">
       <div class="stats-overview">
-        <div class="stat-card">
+        <div
+          class="stat-card stat-card-primary"
+          :class="{ 'is-active': filters.state === '' }"
+          @click="selectState('')"
+        >
           <span>有效设备总数：</span><strong>{{ data.summary.total }}</strong
           ><AppIcon name="assets" />
         </div>
-        <div class="stat-card">
+        <div
+          class="stat-card stat-card-success"
+          :class="{ 'is-active': filters.state === 'inventory_available' }"
+          @click="selectState('inventory_available')"
+        >
           <span>在库可用：</span
           ><strong>{{ data.summary.inventory_available }}</strong
           ><AppIcon name="check" />
         </div>
-        <div class="stat-card">
+        <div
+          class="stat-card stat-card-info"
+          :class="{ 'is-active': filters.state === 'in_use' }"
+          @click="selectState('in_use')"
+        >
           <span>使用中：</span><strong>{{ data.summary.in_use }}</strong
           ><AppIcon name="transfer" />
         </div>
-        <div class="stat-card stat-card-warning">
+        <div
+          class="stat-card stat-card-warning"
+          :class="{ 'is-active': filters.state === 'managed_faulty' }"
+          @click="selectState('managed_faulty')"
+        >
           <span>在管故障：</span
           ><strong>{{ data.summary.managed_faulty }}</strong
-          ><AppIcon name="settings" />
+          ><AppIcon name="alert" />
         </div>
       </div>
       <div class="inventory-breakdown">
-        <span>在库故障：{{ data.summary.inventory_faulty }}</span>
-        <span>已退上游：{{ data.summary.returned_upstream }}</span>
-        <span>遗失：{{ data.summary.lost }}</span>
-        <span>已报废：{{ data.summary.scrapped }}</span>
+        <span
+          class="breakdown-pill"
+          :class="{ 'is-active': filters.state === 'inventory_faulty' }"
+          @click="selectState('inventory_faulty')"
+          >在库故障：{{ data.summary.inventory_faulty }}</span
+        >
+        <span
+          class="breakdown-pill"
+          :class="{ 'is-active': filters.state === 'returned_upstream' }"
+          @click="selectState('returned_upstream')"
+          >已退上游：{{ data.summary.returned_upstream }}</span
+        >
+        <span
+          class="breakdown-pill"
+          :class="{ 'is-active': filters.state === 'lost' }"
+          @click="selectState('lost')"
+          >遗失：{{ data.summary.lost }}</span
+        >
+        <span
+          class="breakdown-pill"
+          :class="{ 'is-active': filters.state === 'scrapped' }"
+          @click="selectState('scrapped')"
+          >已报废：{{ data.summary.scrapped }}</span
+        >
       </div>
     </div>
     <form class="inventory-filters" @submit.prevent="load">

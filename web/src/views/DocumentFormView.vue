@@ -501,11 +501,21 @@ async function confirm() {
 }
 </script>
 <template>
-  <section v-if="flowWriteAccess" class="card">
-    <RouterLink to="/flows">返回流转办理</RouterLink>
-    <h1 class="refresh">
-      {{ draft ? "编辑" : "新建" }}{{ flowKinds[form.kind] }}单
-    </h1>
+  <section v-if="flowWriteAccess" class="card document-form-view">
+    <div class="detail-top-bar">
+      <RouterLink to="/flows" class="back-link">返回流转办理</RouterLink>
+      <span class="doc-kind-badge" :class="'doc-kind-' + form.kind">
+        {{ flowKinds[form.kind] }}业务
+      </span>
+    </div>
+    <div class="section-header-row">
+      <div>
+        <p class="eyebrow">HANDOVER WORKFLOW</p>
+        <h1 class="refresh">
+          {{ draft ? "编辑" : "新建" }}{{ flowKinds[form.kind] }}单
+        </h1>
+      </div>
+    </div>
     <p class="hint">
       保存草稿不占库存；实际交接后才确认。刷新前先保存，确认响应不明时先查单据记录。
     </p>
@@ -528,166 +538,183 @@ async function confirm() {
     <fieldset
       v-if="!loading && ready"
       :disabled="busy || reviewing || partyBusy"
+      class="flow-form-fieldset"
     >
-      <div class="flow-grid">
-        <FormField
-          label="办理类型"
-          v-model="form.kind"
-          :disabled="items.length > 0 || !!draft"
-          @change="Object.assign(form, blankDetails(form.kind))"
-          :options="flowKinds"
-        />
-        <FormField
-          label="实际交接日期"
-          v-model="form.handover_on"
-          type="date"
-          :max="businessToday()"
-        />
-        <FormField
-          label="实际移交人"
-          v-model="form.sender_name"
-          maxlength="120"
-        /><FormField
-          label="实际接收人"
-          v-model="form.receiver_name"
-          maxlength="120"
-        />
-      </div>
-      <FormField
-        label="转交方式"
-        v-model="form.transfer_mode"
-        :disabled="items.length > 0"
-        :options="transferModes"
-        v-if="form.kind === 'transfer'"
-      />
-      <FormField
-        label="来源单位或交付方"
-        v-model="form.from_label"
-        maxlength="120"
-        v-if="form.kind === 'receipt'"
-      />
-      <div
-        v-if="form.kind === 'return' || form.kind === 'transfer'"
-        class="flow-grid"
-      >
-        <FormField
-          label="交出方类型"
-          v-model="form.from_kind"
-          :disabled="items.length > 0"
-          :options="{ party: '个人或团队', inventory: '经办人库存' }"
-          v-if="form.kind === 'return'"
-        />
-        <template v-if="form.from_kind === 'party'"
-          ><label
-            >当前持有方<select
-              v-model="form.from_party_id"
-              :disabled="items.length > 0"
-            >
-              <option :value="null">请选择持有方</option>
-              <option
-                v-for="source in sources"
-                :key="source.id"
-                :value="source.id"
-              >
-                {{ source.name }}
-              </option>
-            </select></label
-          >
-          <label
-            >交出负责人<select
-              v-model="form.from_person_id"
-              :disabled="items.length > 0"
-            >
-              <option :value="null">请选择负责人</option>
-              <option
-                v-for="person in sourcePeople"
-                :key="person.id"
-                :value="person.id"
-              >
-                {{ person.name }}
-              </option>
-            </select></label
-          ></template
-        >
-        <label v-if="form.kind === 'return'"
-          >退回去向<select v-model="form.to_kind">
-            <option v-if="form.from_kind === 'party'" value="inventory">
-              经办人库存
-            </option>
-            <option value="external">上游单位或交付方</option>
-          </select></label
-        >
-        <FormField
-          label="上游接收单位"
-          v-model="form.to_label"
-          maxlength="120"
-          v-if="form.kind === 'return' && form.to_kind === 'external'"
-        />
-      </div>
-      <template v-if="form.kind === 'issue' || form.kind === 'transfer'">
+      <div class="form-section-card">
+        <div class="form-step-header">
+          <span class="step-index">01</span>
+          <div>
+            <h2>交接双方与期限</h2>
+            <p class="hint">填写实际交接日期、移交/接收经手人及责任归属</p>
+          </div>
+        </div>
         <div class="flow-grid">
-          <label
-            >接收对象<select
-              v-model="form.to_party_id"
-              :disabled="responsibility"
-            >
-              <option :value="null">请选择个人或团队</option>
-              <option
-                v-for="party in parties"
-                :key="party.id"
-                :value="party.id"
-              >
-                {{ partyLabel(party) }}
-              </option>
-            </select></label
-          >
-          <label
-            >接收负责人<select
-              v-model="form.to_person_id"
-              :disabled="target?.kind === 'person'"
-            >
-              <option :value="null">请选择个人</option>
-              <option
-                v-for="person in people"
-                :key="person.id"
-                :value="person.id"
-              >
-                {{ partyLabel(person) }}
-              </option>
-            </select></label
-          >
           <FormField
-            label="使用方式"
-            v-model="form.usage_kind"
-            :options="{ long_term: '长期使用', temporary: '临时使用' }"
-            v-if="assignsUsage"
+            label="办理类型"
+            v-model="form.kind"
+            :disabled="items.length > 0 || !!draft"
+            @change="Object.assign(form, blankDetails(form.kind))"
+            :options="flowKinds"
           />
           <FormField
-            label="预计归还日期"
-            v-model="form.due_on"
+            label="实际交接日期"
+            v-model="form.handover_on"
             type="date"
-            :min="form.handover_on || undefined"
-            v-if="assignsUsage && form.usage_kind === 'temporary'"
+            :max="businessToday()"
+          />
+          <FormField
+            label="实际移交人"
+            v-model="form.sender_name"
+            maxlength="120"
+          /><FormField
+            label="实际接收人"
+            v-model="form.receiver_name"
+            maxlength="120"
           />
         </div>
-        <PartyQuickCreate
-          v-if="!responsibility"
-          v-model:busy="partyBusy"
-          :people="people"
-          :allowed="flowWriteAccess"
-          :disabled="busy || reviewing"
-          @created="createdParty"
+        <FormField
+          label="转交方式"
+          v-model="form.transfer_mode"
+          :disabled="items.length > 0"
+          :options="transferModes"
+          v-if="form.kind === 'transfer'"
         />
-      </template>
-      <label
-        >{{ form.kind === "return" ? "退回原因（必填）" : "用途或备注"
-        }}<textarea v-model="form.remarks" maxlength="2000" />
-      </label>
-      <p v-if="form.kind === 'transfer'" class="hint">
-        普通转交重新确定使用期限；同团队负责人交接保留当前分配和逐件期限，不处理或清除故障。
-      </p>
-      <template v-if="form.kind === 'receipt'">
-        <h2>添加新领入设备</h2>
+        <FormField
+          label="来源单位或交付方"
+          v-model="form.from_label"
+          maxlength="120"
+          v-if="form.kind === 'receipt'"
+        />
+        <div
+          v-if="form.kind === 'return' || form.kind === 'transfer'"
+          class="flow-grid"
+        >
+          <FormField
+            label="交出方类型"
+            v-model="form.from_kind"
+            :disabled="items.length > 0"
+            :options="{ party: '个人或团队', inventory: '经办人库存' }"
+            v-if="form.kind === 'return'"
+          />
+          <template v-if="form.from_kind === 'party'"
+            ><label
+              >当前持有方<select
+                v-model="form.from_party_id"
+                :disabled="items.length > 0"
+              >
+                <option :value="null">请选择持有方</option>
+                <option
+                  v-for="source in sources"
+                  :key="source.id"
+                  :value="source.id"
+                >
+                  {{ source.name }}
+                </option>
+              </select></label
+            >
+            <label
+              >交出负责人<select
+                v-model="form.from_person_id"
+                :disabled="items.length > 0"
+              >
+                <option :value="null">请选择负责人</option>
+                <option
+                  v-for="person in sourcePeople"
+                  :key="person.id"
+                  :value="person.id"
+                >
+                  {{ person.name }}
+                </option>
+              </select></label
+            ></template
+          >
+          <label v-if="form.kind === 'return'"
+            >退回去向<select v-model="form.to_kind">
+              <option v-if="form.from_kind === 'party'" value="inventory">
+                经办人库存
+              </option>
+              <option value="external">上游单位或交付方</option>
+            </select></label
+          >
+          <FormField
+            label="上游接收单位"
+            v-model="form.to_label"
+            maxlength="120"
+            v-if="form.kind === 'return' && form.to_kind === 'external'"
+          />
+        </div>
+        <template v-if="form.kind === 'issue' || form.kind === 'transfer'">
+          <div class="flow-grid">
+            <label
+              >接收对象<select
+                v-model="form.to_party_id"
+                :disabled="responsibility"
+              >
+                <option :value="null">请选择个人或团队</option>
+                <option
+                  v-for="party in parties"
+                  :key="party.id"
+                  :value="party.id"
+                >
+                  {{ partyLabel(party) }}
+                </option>
+              </select></label
+            >
+            <label
+              >接收负责人<select
+                v-model="form.to_person_id"
+                :disabled="target?.kind === 'person'"
+              >
+                <option :value="null">请选择个人</option>
+                <option
+                  v-for="person in people"
+                  :key="person.id"
+                  :value="person.id"
+                >
+                  {{ partyLabel(person) }}
+                </option>
+              </select></label
+            >
+            <FormField
+              label="使用方式"
+              v-model="form.usage_kind"
+              :options="{ long_term: '长期使用', temporary: '临时使用' }"
+              v-if="assignsUsage"
+            />
+            <FormField
+              label="预计归还日期"
+              v-model="form.due_on"
+              type="date"
+              :min="form.handover_on || undefined"
+              v-if="assignsUsage && form.usage_kind === 'temporary'"
+            />
+          </div>
+          <PartyQuickCreate
+            v-if="!responsibility"
+            v-model:busy="partyBusy"
+            :people="people"
+            :allowed="flowWriteAccess"
+            :disabled="busy || reviewing"
+            @created="createdParty"
+          />
+        </template>
+        <label
+          >{{ form.kind === "return" ? "退回原因（必填）" : "用途或备注"
+          }}<textarea v-model="form.remarks" maxlength="2000" />
+        </label>
+        <p v-if="form.kind === 'transfer'" class="hint">
+          普通转交重新确定使用期限；同团队负责人交接保留当前分配和逐件期限，不处理或清除故障。
+        </p>
+      </div>
+
+      <div v-if="form.kind === 'receipt'" class="form-section-card">
+        <div class="form-step-header">
+          <span class="step-index">02</span>
+          <div>
+            <h2>添加新领入设备</h2>
+            <p class="hint">可按同批次批量展开后逐件补充序列号或旧编号</p>
+          </div>
+        </div>
         <div class="flow-grid">
           <FormField
             label="批量设备名称"
@@ -732,114 +759,159 @@ async function confirm() {
         <button type="button" class="quiet" @click="expand">
           展开为逐件明细
         </button>
-      </template>
-      <h2 class="refresh">
-        {{
-          form.kind === "receipt" ? "或选择已退上游的原设备领回" : "选择设备"
-        }}
-      </h2>
-      <div class="flow-grid">
-        <FormField
-          label="搜索可选设备"
-          v-model="search"
-          maxlength="120"
-        /><button type="button" class="quiet" @click="refreshAssets">
-          刷新设备清单
-        </button>
       </div>
-      <div class="asset-picker">
-        <label v-for="asset in available" :key="asset.id" class="checkbox-row"
-          ><input
-            type="checkbox"
-            :checked="selectedIds.has(asset.id)"
-            @change="toggle(asset)"
-          /><span
-            >{{ asset.asset_code }} · {{ asset.name }}
-            {{
-              asset.legacy_code ? "（旧号：" + asset.legacy_code + "）" : ""
-            }}</span
-          ></label
-        >
-        <p v-if="!available.length">暂无符合条件的可选设备。</p>
-      </div>
-      <h2 class="refresh">已选 {{ items.length }} 件设备</h2>
-      <article v-for="(item, index) in items" :key="item.key" class="flow-item">
-        <h3>第 {{ index + 1 }} 件 · {{ itemLabel(item) }}</h3>
-        <p v-if="responsibility && selectedAsset(item)" class="hint">
-          保留原起始日期：{{
-            selectedAsset(item)?.started_on || "未知"
-          }}；预计归还：{{ dueLabel(selectedAsset(item)!) }}。
-        </p>
-        <div v-if="item.new_asset_data" class="flow-grid">
-          <FormField
-            label="名称"
-            v-model="item.new_asset_data.name"
-            maxlength="120"
-          /><FormField
-            label="分类"
-            v-model="item.new_asset_data.category"
-            :options="categories"
-          />
-          <FormField
-            label="原资产编号"
-            v-model="item.new_asset_data.legacy_code"
-            maxlength="120"
-          /><FormField
-            label="出厂序列号"
-            v-model="item.new_asset_data.serial_number"
-            maxlength="120"
-          />
-          <FormField
-            label="品牌"
-            v-model="item.new_asset_data.brand"
-            maxlength="120"
-          /><FormField
-            label="型号"
-            v-model="item.new_asset_data.model"
-            maxlength="120"
-          />
-          <FormField
-            label="设备备注"
-            v-model="item.new_asset_data.note"
-            maxlength="2000"
-            type="textarea"
-          />
-        </div>
-        <div class="flow-grid">
-          <label
-            >实际交接状况<select
-              v-model="item.condition_on_handover"
-              :disabled="form.kind === 'issue' || form.kind === 'transfer'"
+
+      <div class="picker-workspace">
+        <div class="form-section-card asset-picker-panel">
+          <div class="form-step-header">
+            <span class="step-index">{{
+              form.kind === "receipt" ? "03" : "02"
+            }}</span>
+            <div>
+              <h2 class="refresh">
+                {{
+                  form.kind === "receipt"
+                    ? "或选择已退上游的原设备领回"
+                    : "选择设备"
+                }}
+              </h2>
+              <p class="hint">从符合条件的可选台账中勾选加入本单</p>
+            </div>
+          </div>
+          <div class="picker-toolbar">
+            <FormField
+              label="搜索可选设备"
+              v-model="search"
+              maxlength="120"
+            /><button type="button" class="quiet" @click="refreshAssets">
+              刷新设备清单
+            </button>
+          </div>
+          <div class="asset-picker">
+            <label
+              v-for="asset in available"
+              :key="asset.id"
+              class="checkbox-row"
+              :class="{ 'is-selected': selectedIds.has(asset.id) }"
+              ><input
+                type="checkbox"
+                :checked="selectedIds.has(asset.id)"
+                @change="toggle(asset)"
+              /><span class="picker-asset-label"
+                ><strong>{{ asset.asset_code }}</strong> · {{ asset.name }}
+                <small v-if="asset.legacy_code" class="picker-legacy"
+                  >（旧号：{{ asset.legacy_code }}）</small
+                ></span
+              ></label
             >
-              <option :value="null">请核对状况</option>
-              <option value="normal">正常</option>
-              <option value="faulty">故障</option>
-            </select></label
-          ><FormField
-            label="交接后位置"
-            v-model="item.location"
-            maxlength="120"
-          /><FormField
-            label="交接说明"
-            v-model="item.note"
-            maxlength="2000"
-            type="textarea"
-          />
+            <p v-if="!available.length" class="empty-picker-hint">
+              暂无符合条件的可选设备。
+            </p>
+          </div>
         </div>
-        <label v-if="item.new_asset_data" class="checkbox-row"
-          ><input v-model="item.allow_legacy_duplicate" type="checkbox" /><span
-            >已核对：如旧编号重复，本件为另一件实物，允许单独建账。</span
-          ></label
-        >
-        <button
-          type="button"
-          class="quiet danger"
-          @click="items.splice(index, 1)"
-        >
-          移除第 {{ index + 1 }} 件
-        </button>
-      </article>
-      <ActionGroup class="links">
+
+        <div class="form-section-card selected-items-panel">
+          <div class="form-step-header">
+            <span class="step-index">{{
+              form.kind === "receipt" ? "04" : "03"
+            }}</span>
+            <div>
+              <h2 class="refresh">已选 {{ items.length }} 件设备</h2>
+              <p class="hint">核对每件设备的交接状况、位置与说明</p>
+            </div>
+          </div>
+          <p v-if="!items.length" class="empty-picker-hint">
+            尚未加入设备，请从左侧勾选或上方批量展开。
+          </p>
+          <article
+            v-for="(item, index) in items"
+            :key="item.key"
+            class="flow-item"
+          >
+            <div class="flow-item-header">
+              <h3>第 {{ index + 1 }} 件 · {{ itemLabel(item) }}</h3>
+              <button
+                type="button"
+                class="quiet danger"
+                @click="items.splice(index, 1)"
+              >
+                移除第 {{ index + 1 }} 件
+              </button>
+            </div>
+            <p v-if="responsibility && selectedAsset(item)" class="hint">
+              保留原起始日期：{{
+                selectedAsset(item)?.started_on || "未知"
+              }}；预计归还：{{ dueLabel(selectedAsset(item)!) }}。
+            </p>
+            <div v-if="item.new_asset_data" class="flow-grid">
+              <FormField
+                label="名称"
+                v-model="item.new_asset_data.name"
+                maxlength="120"
+              /><FormField
+                label="分类"
+                v-model="item.new_asset_data.category"
+                :options="categories"
+              />
+              <FormField
+                label="原资产编号"
+                v-model="item.new_asset_data.legacy_code"
+                maxlength="120"
+              /><FormField
+                label="出厂序列号"
+                v-model="item.new_asset_data.serial_number"
+                maxlength="120"
+              />
+              <FormField
+                label="品牌"
+                v-model="item.new_asset_data.brand"
+                maxlength="120"
+              /><FormField
+                label="型号"
+                v-model="item.new_asset_data.model"
+                maxlength="120"
+              />
+              <FormField
+                label="设备备注"
+                v-model="item.new_asset_data.note"
+                maxlength="2000"
+                type="textarea"
+              />
+            </div>
+            <div class="flow-grid">
+              <label
+                >实际交接状况<select
+                  v-model="item.condition_on_handover"
+                  :disabled="form.kind === 'issue' || form.kind === 'transfer'"
+                >
+                  <option :value="null">请核对状况</option>
+                  <option value="normal">正常</option>
+                  <option value="faulty">故障</option>
+                </select></label
+              ><FormField
+                label="交接后位置"
+                v-model="item.location"
+                maxlength="120"
+              /><FormField
+                label="交接说明"
+                v-model="item.note"
+                maxlength="2000"
+                type="textarea"
+              />
+            </div>
+            <label v-if="item.new_asset_data" class="checkbox-row"
+              ><input
+                v-model="item.allow_legacy_duplicate"
+                type="checkbox"
+              /><span
+                >已核对：如旧编号重复，本件为另一件实物，允许单独建账。</span
+              ></label
+            >
+          </article>
+        </div>
+      </div>
+
+      <ActionGroup class="links form-submit-bar">
         <button type="button" @click="save(false)">保存草稿</button
         ><button type="button" @click="save(true)">保存并核对交接</button>
       </ActionGroup>

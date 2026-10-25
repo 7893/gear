@@ -82,22 +82,37 @@ const { data, loading, error, load } = useAuthorizedQuery(
 </script>
 <template>
   <section v-if="flowAccess" class="card">
-    <h1>{{ manage ? "流转办理" : "单据记录" }}</h1>
-    <ActionGroup v-if="flowWriteAccess" class="links">
-      <RouterLink
-        v-for="(label, kind) in flowKinds"
-        :key="kind"
-        class="button"
-        :to="'/documents/new?kind=' + kind"
-        >新建{{ label }}单</RouterLink
-      >
-    </ActionGroup>
-    <ActionGroup class="links"
-      ><RouterLink to="/documents?evidence=awaiting_upload"
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">
+          {{ manage ? "交接单据开立与草稿" : "正式单据与凭证核对" }}
+        </p>
+        <h1>{{ manage ? "流转办理" : "单据记录" }}</h1>
+      </div>
+      <ActionGroup v-if="flowWriteAccess" class="links page-actions">
+        <RouterLink
+          v-for="(label, kind) in flowKinds"
+          :key="kind"
+          class="button"
+          :to="'/documents/new?kind=' + kind"
+          >新建{{ label }}单</RouterLink
+        >
+      </ActionGroup>
+    </div>
+    <ActionGroup class="links segmented-tabs"
+      ><RouterLink
+        :class="{ 'is-active-tab': filters.evidence === 'awaiting_upload' }"
+        to="/documents?evidence=awaiting_upload"
         >待回传签字件</RouterLink
-      ><RouterLink to="/documents?evidence=awaiting_review"
+      ><RouterLink
+        :class="{ 'is-active-tab': filters.evidence === 'awaiting_review' }"
+        to="/documents?evidence=awaiting_review"
         >待核对签字件</RouterLink
-      ><RouterLink to="/documents">全部单据</RouterLink></ActionGroup
+      ><RouterLink
+        :class="{ 'is-active-tab': !filters.evidence && !manage }"
+        to="/documents"
+        >全部单据</RouterLink
+      ></ActionGroup
     >
     <p class="hint">
       草稿不占库存；请在实际交接时确认。打印和签字件回传不改变设备去向。
@@ -133,29 +148,31 @@ const { data, loading, error, load } = useAuthorizedQuery(
     <p v-if="filters.evidence" class="hint">
       凭证筛选只列有效的已确认单据，草稿和作废单不进入待办。点击单号可查看、上传或核对签字件。
     </p>
-    <DownloadAction
-      :allowed="evidenceAccess"
-      label="批量下载全部凭证原件"
-      description="全部已上传原件，包括历史事件凭证和不采用的原件；不受单据筛选影响，最多 25 MB。"
-      :query="originalsZip"
-    />
-    <ListExport
-      :key="'documents-' + !!manage + ':' + filters.evidence"
-      :allowed="flowAccess"
-      :disabled="loading"
-      filename="单据清单"
-      label="导出单据 CSV"
-      :query="async () => documentCsv(await query())"
-    />
-    <ListExport
-      :key="'attachments-' + !!manage + ':' + filters.evidence"
-      :allowed="evidenceAccess"
-      :disabled="loading"
-      filename="附件关联清单"
-      label="导出附件关联 CSV"
-      description="按当前单据筛选导出可见附件的关联与核对状态，不含原件。"
-      :query="(signal) => attachmentCsv(query, signal)"
-    />
+    <div class="export-toolbar-grid">
+      <DownloadAction
+        :allowed="evidenceAccess"
+        label="批量下载全部凭证原件"
+        description="全部已上传原件，包括历史事件凭证和不采用的原件；不受单据筛选影响，最多 25 MB。"
+        :query="originalsZip"
+      />
+      <ListExport
+        :key="'documents-' + !!manage + ':' + filters.evidence"
+        :allowed="flowAccess"
+        :disabled="loading"
+        filename="单据清单"
+        label="导出单据 CSV"
+        :query="async () => documentCsv(await query())"
+      />
+      <ListExport
+        :key="'attachments-' + !!manage + ':' + filters.evidence"
+        :allowed="evidenceAccess"
+        :disabled="loading"
+        filename="附件关联清单"
+        label="导出附件关联 CSV"
+        description="按当前单据筛选导出可见附件的关联与核对状态，不含原件。"
+        :query="(signal) => attachmentCsv(query, signal)"
+      />
+    </div>
     <ListResults
       :items="data"
       :loading="loading"
@@ -168,27 +185,47 @@ const { data, loading, error, load } = useAuthorizedQuery(
       <template #default="{ items }"
         ><DataTable :items="items" :columns="columns"
           ><template #document_no="{ row }">
-            <RouterLink :to="recordPath('document', row)">{{
-              row.document_no || row.reference_code || "尚未编号的草稿"
-            }}</RouterLink
-            ><br />{{ flowKinds[row.kind] || "转交" }}
+            <div class="doc-primary-cell">
+              <RouterLink
+                class="doc-title-link"
+                :to="recordPath('document', row)"
+                >{{
+                  row.document_no || row.reference_code || "尚未编号的草稿"
+                }}</RouterLink
+              >
+              <span class="doc-kind-badge">{{
+                flowKinds[row.kind] || "转交"
+              }}</span>
+            </div>
           </template>
           <template #status="{ row }">
-            {{ documentStates[row.status] }}<br /><span
-              v-if="row.status === 'confirmed' && row.evidence_state"
-              class="hint"
-              >{{
-                evidenceStates[
-                  row.evidence_state as keyof typeof evidenceStates
-                ] || "待核对"
-              }}签字件</span
-            >
+            <div class="status-stack">
+              <span
+                class="doc-status-badge"
+                :class="'doc-status-' + row.status"
+                >{{ documentStates[row.status] }}</span
+              ><span
+                v-if="row.status === 'confirmed' && row.evidence_state"
+                class="hint doc-evidence-badge"
+                :class="'doc-evidence-' + row.evidence_state"
+                >{{
+                  evidenceStates[
+                    row.evidence_state as keyof typeof evidenceStates
+                  ] || "待核对"
+                }}签字件</span
+              >
+            </div>
           </template>
           <template #handover_on="{ row }">
-            {{ row.handover_on || "未填写" }}<br />{{
-              row.from_label || "未填写"
-            }}
-            → {{ row.to_label || "未填写" }}
+            <div class="handover-flow-cell">
+              <span class="handover-date">{{
+                row.handover_on || "未填写"
+              }}</span>
+              <small class="handover-parties"
+                >{{ row.from_label || "未填写" }} →
+                {{ row.to_label || "未填写" }}</small
+              >
+            </div>
           </template></DataTable
         ></template
       >

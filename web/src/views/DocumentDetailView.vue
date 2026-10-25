@@ -127,34 +127,22 @@ async function remove() {
 <template>
   <section v-if="flowAccess" class="card document-detail">
     <div class="print-controls">
-      <RouterLink to="/documents">返回单据记录</RouterLink>
-      <h1 class="refresh">单据详情</h1>
-      <QueryState
-        :loading="loading"
-        :error="error"
-        loading-text="正在读取单据…"
-        retry-label="重新读取"
-        @retry="load"
-      />
-      <template v-if="data"
-        ><p>
-          状态：{{ documentStates[data.status] }}；{{
-            data.evidence_state === "awaiting_upload"
-              ? "待回传签字件"
-              : data.evidence_state === "archived"
-                ? "已归档"
-                : data.evidence_state === "awaiting_review"
-                  ? "待核对签字件"
-                  : data.status === "draft"
-                    ? "尚未实际交接"
-                    : "凭证待核对"
-          }}。
-        </p>
-        <p class="hint">
-          打印或另存 PDF 不会再次办理交接。默认 A4 横向。建议使用桌面 Chrome 或
-          Edge；关闭浏览器自带页眉页脚，页码由单据提供。
-        </p>
-        <ActionGroup class="links">
+      <div class="detail-top-bar">
+        <RouterLink to="/documents" class="back-link">返回单据记录</RouterLink>
+        <span
+          v-if="data"
+          class="doc-status-badge"
+          :class="'doc-status-' + data.status"
+        >
+          {{ documentStates[data.status] }}
+        </span>
+      </div>
+      <div class="section-header-row">
+        <div>
+          <p class="eyebrow">HANDOVER VOUCHER</p>
+          <h1 class="refresh">单据详情</h1>
+        </div>
+        <ActionGroup v-if="data" class="links">
           <button
             type="button"
             :disabled="busy || !snapshotComplete || !!error"
@@ -178,6 +166,34 @@ async function remove() {
             删除草稿
           </button>
         </ActionGroup>
+      </div>
+      <QueryState
+        :loading="loading"
+        :error="error"
+        loading-text="正在读取单据…"
+        retry-label="重新读取"
+        @retry="load"
+      />
+      <template v-if="data">
+        <div class="voucher-status-strip">
+          <p class="voucher-state-summary">
+            状态：{{ documentStates[data.status] }}；{{
+              data.evidence_state === "awaiting_upload"
+                ? "待回传签字件"
+                : data.evidence_state === "archived"
+                  ? "已归档"
+                  : data.evidence_state === "awaiting_review"
+                    ? "待核对签字件"
+                    : data.status === "draft"
+                      ? "尚未实际交接"
+                      : "凭证待核对"
+            }}。
+          </p>
+          <p class="hint">
+            打印或另存 PDF 不会再次办理交接。默认 A4 横向。建议使用桌面 Chrome
+            或 Edge；关闭浏览器自带页眉页脚，页码由单据提供。
+          </p>
+        </div>
         <div v-if="deleting" class="notice">
           <p>确认删除此草稿？审计记录会保留。</p>
           <ActionGroup>
@@ -199,140 +215,176 @@ async function remove() {
         </p>
       </template>
     </div>
-    <DocumentReview
-      v-if="data && data.status !== 'draft'"
-      :key="data.id + ':' + data.version"
-      :document="data"
-      @changed="load"
-    />
-    <EvidencePanel
-      v-if="data && data.status !== 'draft'"
-      :document="data"
-      @changed="load"
-    />
+    <div v-if="data && data.status !== 'draft'" class="document-panels-grid">
+      <DocumentReview
+        :key="data.id + ':' + data.version"
+        :document="data"
+        @changed="load"
+      />
+      <EvidencePanel :document="data" @changed="load" />
+    </div>
     <article
       v-if="data && snapshotComplete"
       class="print-sheet"
       aria-label="交接单据"
     >
-      <table class="print-table">
-        <colgroup>
-          <col v-for="index in 8" :key="index" />
-        </colgroup>
-        <thead>
-          <tr>
-            <th colspan="8">
-              <div class="document-heading">
-                <div>
-                  <p>{{ data.header_snapshot?.title || "设备簿" }}</p>
-                  <h2>{{ flowKinds[data.kind] || "转交" }}单</h2>
-                  <p class="document-number">
-                    {{ data.document_no || "草稿 · 尚未编号" }}
-                  </p>
-                  <strong
-                    v-if="data.status === 'voided'"
-                    class="document-watermark"
-                    >已作废</strong
-                  ><strong
-                    v-else-if="data.status === 'draft'"
-                    class="document-watermark"
-                    >草稿 · 不作为正式交接凭证</strong
-                  >
-                </div>
-                <RecordQr
-                  v-if="data.status !== 'draft' && data.document_no"
-                  kind="document"
-                  :reference="data.document_no"
-                />
-              </div>
-            </th>
-          </tr>
-          <tr>
-            <th colspan="8" class="print-parties">
-              <p>实际交接日期：{{ data.handover_on || "未填写" }}</p>
-              <p v-if="data.kind === 'transfer'">
-                转交方式：{{ transferModes[data.transfer_mode || "holder"] }}
-              </p>
-              <p>
-                交出方：{{
-                  parties?.from_label ||
-                  (data.from_kind === "inventory" ? "经办人库存" : "未填写")
-                }}；接收方：{{
-                  parties?.to_label ||
-                  (data.to_kind === "inventory" ? "经办人库存" : "未填写")
-                }}
-              </p>
-              <p>
-                实际移交人：{{
-                  parties?.sender_name || "未填写"
-                }}；实际接收人：{{ parties?.receiver_name || "未填写" }}
-              </p>
-              <p
-                v-if="
-                  data.parties_snapshot?.from_responsible_name ||
-                  data.parties_snapshot?.to_responsible_name
-                "
+      <header class="sheet-header document-heading">
+        <div class="sheet-title-block">
+          <p class="sheet-org-title">
+            {{ data.header_snapshot?.title || "设备簿" }}
+          </p>
+          <div class="sheet-title-line">
+            <h2>{{ flowKinds[data.kind] || "转交" }}单</h2>
+            <strong v-if="data.status === 'voided'" class="document-watermark"
+              >已作废</strong
+            ><strong
+              v-else-if="data.status === 'draft'"
+              class="document-watermark"
+              >草稿 · 不作为正式交接凭证</strong
+            >
+          </div>
+          <p class="document-number">
+            {{ data.document_no || "草稿 · 尚未编号" }}
+          </p>
+        </div>
+        <RecordQr
+          v-if="data.status !== 'draft' && data.document_no"
+          kind="document"
+          :reference="data.document_no"
+        />
+      </header>
+
+      <section class="sheet-parties print-parties" aria-label="交接双方信息">
+        <div class="sheet-flow-cards">
+          <div class="sheet-party-card">
+            <span class="sheet-party-role">交出方</span>
+            <p class="sheet-party-main">
+              交出方：{{
+                parties?.from_label ||
+                (data.from_kind === "inventory" ? "经办人库存" : "未填写")
+              }}；接收方：{{
+                parties?.to_label ||
+                (data.to_kind === "inventory" ? "经办人库存" : "未填写")
+              }}
+            </p>
+            <p class="sheet-party-sub">
+              实际移交人：{{ parties?.sender_name || "未填写" }}；实际接收人：{{
+                parties?.receiver_name || "未填写"
+              }}
+            </p>
+            <p
+              v-if="
+                data.parties_snapshot?.from_responsible_name ||
+                data.parties_snapshot?.to_responsible_name
+              "
+              class="sheet-party-sub"
+            >
+              交出负责人：{{
+                data.parties_snapshot.from_responsible_name || "不适用"
+              }}；接收负责人：{{
+                data.parties_snapshot.to_responsible_name || "不适用"
+              }}
+            </p>
+          </div>
+          <div class="sheet-meta-card">
+            <p>实际交接日期：{{ data.handover_on || "未填写" }}</p>
+            <p v-if="data.kind === 'transfer'">
+              转交方式：{{ transferModes[data.transfer_mode || "holder"] }}
+            </p>
+            <p v-if="data.usage_kind">
+              使用方式：{{ data.usage_kind === "temporary" ? "临时" : "长期"
+              }}<span v-if="data.due_on"
+                >；预计归还日期：{{ data.due_on }}</span
               >
-                交出负责人：{{
-                  data.parties_snapshot.from_responsible_name || "不适用"
-                }}；接收负责人：{{
-                  data.parties_snapshot.to_responsible_name || "不适用"
-                }}
-              </p>
-              <p v-if="data.usage_kind">
-                使用方式：{{ data.usage_kind === "temporary" ? "临时" : "长期"
-                }}<span v-if="data.due_on"
-                  >；预计归还日期：{{ data.due_on }}</span
-                >
-              </p>
-            </th>
-          </tr>
-          <tr>
-            <th>序号</th>
-            <th>内部 / 原编号</th>
-            <th>设备名称 / 分类</th>
-            <th>品牌型号 / 序列号</th>
-            <th>数量</th>
-            <th>交接状况</th>
-            <th>交接后位置</th>
-            <th>备注 / 说明</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="(item, index) in data.items" :key="item.id">
-            <td>{{ index + 1 }}</td>
-            <td>
-              {{
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="sheet-items" role="table" aria-label="交接设备明细">
+        <div class="sheet-items-header" role="rowgroup">
+          <div class="sheet-item-row is-header" role="row">
+            <div class="sheet-cell" role="columnheader">序号</div>
+            <div class="sheet-cell" role="columnheader">内部 / 原编号</div>
+            <div class="sheet-cell" role="columnheader">设备名称 / 分类</div>
+            <div class="sheet-cell" role="columnheader">品牌型号 / 序列号</div>
+            <div class="sheet-cell" role="columnheader">数量</div>
+            <div class="sheet-cell" role="columnheader">交接状况</div>
+            <div class="sheet-cell" role="columnheader">交接后位置</div>
+            <div class="sheet-cell" role="columnheader">备注 / 说明</div>
+          </div>
+        </div>
+        <div class="sheet-items-body" role="rowgroup">
+          <article
+            v-for="(item, index) in data.items"
+            :key="item.id"
+            class="sheet-item-row"
+            role="row"
+          >
+            <div class="sheet-cell is-index" role="cell" data-label="序号">
+              {{ index + 1 }}
+            </div>
+            <div class="sheet-cell" role="cell" data-label="内部 / 原编号">
+              <strong class="sheet-code">{{
                 asset(item).reference_code ||
                 asset(item).asset_code ||
                 "确认后生成"
-              }}<br />{{ asset(item).legacy_code || "无原编号" }}
-            </td>
-            <td>
-              {{ asset(item).name || "未填写" }}<br />{{
+              }}</strong>
+              <span
+                class="sheet-sub"
+                :class="{ 'is-empty-meta': !asset(item).legacy_code }"
+                >{{ asset(item).legacy_code || "无原编号" }}</span
+              >
+            </div>
+            <div class="sheet-cell" role="cell" data-label="设备名称 / 分类">
+              <strong>{{ asset(item).name || "未填写" }}</strong>
+              <span class="sheet-sub">{{
                 categories[asset(item).category as keyof typeof categories] ||
                 asset(item).category ||
                 "未填写"
-              }}
-            </td>
-            <td>
-              {{ asset(item).brand || "未填写品牌" }} /
-              {{ asset(item).model || "未填写型号" }}<br />{{
-                asset(item).serial_number || "无序列号"
-              }}
-            </td>
-            <td>1</td>
-            <td>
-              {{
-                item.condition_on_handover === "normal"
-                  ? "正常"
-                  : item.condition_on_handover === "faulty"
-                    ? "故障"
-                    : "未核对"
-              }}
-            </td>
-            <td>{{ item.location || "未填写" }}</td>
-            <td>
+              }}</span>
+            </div>
+            <div class="sheet-cell" role="cell" data-label="品牌型号 / 序列号">
+              <span
+                :class="{
+                  'is-empty-meta': !asset(item).brand && !asset(item).model,
+                }"
+              >
+                {{ asset(item).brand || "未填写品牌" }} /
+                {{ asset(item).model || "未填写型号" }}
+              </span>
+              <span
+                class="sheet-sub"
+                :class="{ 'is-empty-meta': !asset(item).serial_number }"
+                >{{ asset(item).serial_number || "无序列号" }}</span
+              >
+            </div>
+            <div class="sheet-cell" role="cell" data-label="数量">1</div>
+            <div class="sheet-cell" role="cell" data-label="交接状况">
+              <span
+                class="condition-pill"
+                :class="
+                  'condition-' + (item.condition_on_handover || 'pending')
+                "
+              >
+                {{
+                  item.condition_on_handover === "normal"
+                    ? "正常"
+                    : item.condition_on_handover === "faulty"
+                      ? "故障"
+                      : "未核对"
+                }}
+              </span>
+            </div>
+            <div
+              class="sheet-cell"
+              :class="{ 'is-empty-meta': !item.location }"
+              role="cell"
+              data-label="交接后位置"
+            >
+              {{ item.location || "未填写" }}
+            </div>
+            <div class="sheet-cell" role="cell" data-label="备注 / 说明">
               <p
                 v-if="
                   data.kind === 'transfer' &&
@@ -353,21 +405,22 @@ async function remove() {
                   !asset(item).note &&
                   data.transfer_mode !== 'responsibility'
                 "
+                class="is-empty-meta"
                 >—</span
               >
-            </td>
-          </tr>
-        </tbody>
-        <tfoot>
-          <tr>
-            <td colspan="8">
-              单号：{{ data.document_no || "草稿 · 尚未编号"
-              }}<span v-if="data.status === 'voided'"> · 已作废</span
-              ><span v-if="data.status === 'draft'"> · 草稿</span>
-            </td>
-          </tr>
-        </tfoot>
-      </table>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <footer class="sheet-footer">
+        <p class="sheet-footer-no">
+          单号：{{ data.document_no || "草稿 · 尚未编号"
+          }}<span v-if="data.status === 'voided'"> · 已作废</span
+          ><span v-if="data.status === 'draft'"> · 草稿</span>
+        </p>
+      </footer>
+
       <div class="print-summary">
         <p>合计：{{ data.items.length }} 件设备。</p>
         <p v-if="data.remarks" class="preserve-text">
