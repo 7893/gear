@@ -96,11 +96,11 @@ async function submit() {
           >
           <RouterLink
             v-if="account.profile.membership.role === 'admin'"
-            class="button"
+            class="button quiet"
             to="/members"
             >管理使用申请</RouterLink
           >
-          <RouterLink class="button" to="/account/password"
+          <RouterLink class="button quiet" to="/account/password"
             >修改密码</RouterLink
           >
         </template>
