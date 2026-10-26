@@ -413,8 +413,7 @@ a:hover {
 }
 
 .card > * + *,
-section > * + *,
-.stack > * + *,
+section:not([class]) > * + *,
 .print-controls > * + *,
 .evidence-upload > * + *,
 .evidence-preview > * + *,
@@ -436,6 +435,16 @@ details > * + * {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
+}
+
+.card > section:not([class]),
+.detail-primary > section:not([class]) {
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.card > section:not([class]) {
+  margin-top: 28px;
 }
 
 .notice {
@@ -712,6 +721,7 @@ label .hint {
 .due-kpi-strip {
   display: flex;
   flex-wrap: wrap;
+  gap: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
@@ -747,8 +757,12 @@ label .hint {
   color: var(--danger);
 }
 
-.due-kpi-soon {
+.due-kpi-today {
   color: var(--warning);
+}
+
+.due-kpi-upcoming {
+  color: var(--info);
 }
 
 .party-kpi-summary {
@@ -777,6 +791,11 @@ label .hint {
 .inventory-filters > label:first-child,
 .flow-filters > label:first-child {
   flex: 2 1 260px;
+}
+
+.inventory-filters > label:only-of-type,
+.flow-filters > label:only-of-type {
+  flex: 0 1 360px;
 }
 
 .filter-toggle {
@@ -1041,12 +1060,16 @@ label .hint {
   font-weight: 500;
   line-height: 1;
   white-space: nowrap;
+  justify-self: start;
+  align-self: center;
+  width: max-content;
 }
 
 .asset-status::before,
 .due-badge::before,
 .doc-status-badge::before,
 .doc-evidence-badge::before,
+.active-badge::before,
 .status-badge::before {
   content: "";
   width: 6px;
@@ -1060,7 +1083,9 @@ label .hint {
 .doc-status-confirmed,
 .doc-evidence-archived,
 .active-badge.is-active,
+.active-badge.is-enabled,
 .status-badge.is-enabled,
+.status-badge.status-active,
 .holding-count-badge.has-holdings {
   border-color: var(--accent-line);
   background: var(--accent-soft);
@@ -1077,8 +1102,7 @@ label .hint {
 .doc-kind-issue,
 .doc-kind-transfer,
 .party-kind-team,
-.due-badge-upcoming,
-.due-badge-due_soon {
+.due-badge-upcoming {
   border-color: var(--info-line);
   background: var(--info-soft);
   color: var(--info);
@@ -1087,11 +1111,11 @@ label .hint {
 .asset-status-inventory_faulty,
 .asset-status-managed_faulty,
 .condition-faulty,
-.due-badge-soon,
-.due-badge-due_today,
+.due-badge-today,
 .doc-status-draft,
 .doc-evidence-awaiting_upload,
-.doc-evidence-awaiting_review {
+.doc-evidence-awaiting_review,
+.status-badge.status-pending {
   border-color: var(--warning-line);
   background: var(--warning-soft);
   color: var(--warning);
@@ -1099,7 +1123,8 @@ label .hint {
 
 .asset-status-lost,
 .due-badge-overdue,
-.doc-status-voided {
+.doc-status-voided,
+.status-badge.status-rejected {
   border-color: var(--danger-line);
   background: var(--danger-soft);
   color: var(--danger);
@@ -1110,8 +1135,11 @@ label .hint {
 .doc-kind-receipt,
 .doc-kind-return,
 .party-kind-person,
+.due-badge-later,
 .active-badge.is-inactive,
-.status-badge.is-disabled {
+.active-badge.is-disabled,
+.status-badge.is-disabled,
+.status-badge.status-disabled {
   color: var(--text-3);
 }
 
@@ -1379,6 +1407,8 @@ label {
   font-weight: 500;
 }
 
+label.check,
+label:has(> input[type="checkbox"]),
 .checkbox-row {
   display: flex;
   align-items: flex-start;
@@ -1389,6 +1419,8 @@ label {
   cursor: pointer;
 }
 
+label.check > input,
+label:has(> input[type="checkbox"]) > input,
 .checkbox-row input {
   width: 15px;
   height: 15px;
@@ -1473,8 +1505,26 @@ input[type="date"] {
 }
 
 input[type="file"] {
-  color: var(--text-2);
+  max-width: 100%;
+  color: var(--text-3);
   font-size: 13px;
+}
+
+input[type="file"]::file-selector-button {
+  height: 32px;
+  margin-right: 12px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+input[type="file"]::file-selector-button:hover {
+  background: var(--surface-3);
 }
 
 textarea {
@@ -1530,6 +1580,21 @@ details > :not(summary) {
 
 .flow-form-fieldset {
   gap: 20px;
+}
+
+.form-section-card {
+  display: grid;
+  gap: 16px;
+}
+
+.form-step-header h2,
+.form-step-header h3 {
+  font-size: 15px;
+}
+
+.form-step-header p {
+  color: var(--text-3);
+  font-size: 12.5px;
 }
 
 .form-step-header {
@@ -1600,7 +1665,8 @@ details > :not(summary) {
 
 .picker-asset-label {
   display: grid;
-  gap: 2px;
+  gap: 1px;
+  min-width: 0;
 }
 
 .picker-legacy {
@@ -1668,6 +1734,7 @@ button,
   text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
+  justify-self: start;
   transition:
     background-color 0.12s ease,
     border-color 0.12s ease,
@@ -1884,6 +1951,7 @@ button.danger:hover:not(:disabled) {
   border-radius: var(--radius);
   background: var(--bg);
   font-size: 13px;
+  align-content: start;
 }
 
 .sheet-party-role {
@@ -1986,9 +2054,16 @@ button.danger:hover:not(:disabled) {
 }
 
 .record-qr figcaption {
+  display: grid;
   color: #334155;
   font-size: 11px;
+  line-height: 1.35;
   text-align: center;
+}
+
+.record-qr figcaption small {
+  color: #64748b;
+  font-size: 10px;
 }
 
 /* ==========================================================================
@@ -2195,7 +2270,10 @@ button.danger:hover:not(:disabled) {
     padding: 12px 14px;
   }
 
-  .sheet-item-row,
+  .asset-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .picker-toolbar {
     grid-template-columns: 1fr;
   }

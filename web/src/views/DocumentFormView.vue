@@ -510,7 +510,7 @@ async function confirm() {
     </div>
     <div class="section-header-row">
       <div>
-        <p class="eyebrow">HANDOVER WORKFLOW</p>
+        <p class="eyebrow">交接办理</p>
         <h1 class="refresh">
           {{ draft ? "编辑" : "新建" }}{{ flowKinds[form.kind] }}单
         </h1>
@@ -798,7 +798,10 @@ async function confirm() {
                 :checked="selectedIds.has(asset.id)"
                 @change="toggle(asset)"
               /><span class="picker-asset-label"
-                ><strong>{{ asset.asset_code }}</strong> · {{ asset.name }}
+                ><span
+                  ><strong>{{ asset.asset_code }}</strong> ·
+                  {{ asset.name }}</span
+                >
                 <small v-if="asset.legacy_code" class="picker-legacy"
                   >（旧号：{{ asset.legacy_code }}）</small
                 ></span
@@ -912,7 +915,8 @@ async function confirm() {
       </div>
 
       <ActionGroup class="links form-submit-bar">
-        <button type="button" @click="save(false)">保存草稿</button
+        <button class="quiet" type="button" @click="save(false)">
+          保存草稿</button
         ><button type="button" @click="save(true)">保存并核对交接</button>
       </ActionGroup>
     </fieldset>
@@ -930,13 +934,15 @@ async function confirm() {
             ? "经办人库存"
             : draft.from_kind === "external"
               ? draft.from_label
-              : sources.find((p) => p.id === draft?.from_party_id)?.name
+              : sources.find((p) => p.id === draft?.from_party_id)?.name ||
+                draft.from_label
         }}；接收方：{{
           draft.to_kind === "inventory"
             ? "经办人库存"
             : draft.to_kind === "external"
               ? draft.to_label
-              : parties.find((p) => p.id === draft?.to_party_id)?.name
+              : parties.find((p) => p.id === draft?.to_party_id)?.name ||
+                draft.to_label
         }}。
       </p>
       <p v-if="draft.usage_kind">

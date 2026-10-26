@@ -177,8 +177,12 @@ async function save() {
       />
       <label
         >{{ holderMode === "inventory" ? "已知到手日期" : "已知领用起始日期"
-        }}<input v-model="knownOn" type="date" :max="businessToday()" /><span
-          class="hint"
+        }}<input
+          v-model="knownOn"
+          type="date"
+          :max="businessToday()"
+          :disabled="busy || partyBusy"
+        /><span class="hint"
           >历史日期不知道就留空，不使用今天代填。</span
         ></label
       >
@@ -188,6 +192,7 @@ async function save() {
           ><input
             v-model="acknowledged"
             type="checkbox"
+            :disabled="busy || partyBusy"
           />已核对重复旧编号，确认是不同实物，继续独立建账</label
         >
         <p class="hint">

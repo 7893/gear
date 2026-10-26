@@ -51,7 +51,10 @@ async function submit() {
         <button type="submit" :disabled="busy">提交使用申请</button>
       </form>
       <template v-else>
-        <p class="status-badge">
+        <p
+          class="status-badge"
+          :class="'status-' + account.profile.membership.status"
+        >
           {{ statusLabels[account.profile.membership.status] }}
         </p>
         <h2>{{ account.profile.membership.display_name }}</h2>

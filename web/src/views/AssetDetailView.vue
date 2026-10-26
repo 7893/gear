@@ -422,7 +422,10 @@ watch(
           <p v-else>暂无设备事件记录。</p>
         </div>
       </div>
-      <RouterLink v-if="inventoryWriteAccess" class="button" to="/assets/new"
+      <RouterLink
+        v-if="inventoryWriteAccess"
+        class="button quiet"
+        to="/assets/new"
         >继续登记已有设备</RouterLink
       >
     </template>

@@ -79,7 +79,7 @@ function label(key: Key, value: unknown, snapshot?: Party) {
         刷新资料
       </button>
     </div>
-    <p class="eyebrow">RECIPIENT PROFILE</p>
+    <p class="eyebrow">接收对象资料</p>
     <h1>人员或团队详情</h1>
     <p v-if="notice && data" role="status">{{ notice }}</p>
     <QueryState
@@ -109,7 +109,7 @@ function label(key: Key, value: unknown, snapshot?: Party) {
             </span>
           </div>
           <h2>
-            {{ data.party.name }} · {{ data.party.is_active ? "启用" : "停用" }}
+            {{ data.party.name }}
           </h2>
           <p class="party-kpi-summary">
             当前持有或负责设备：{{

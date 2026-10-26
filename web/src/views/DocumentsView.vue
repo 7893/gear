@@ -93,7 +93,7 @@ const { data, loading, error, load } = useAuthorizedQuery(
         <RouterLink
           v-for="(label, kind) in flowKinds"
           :key="kind"
-          class="button"
+          class="button quiet"
           :to="'/documents/new?kind=' + kind"
           >新建{{ label }}单</RouterLink
         >
@@ -193,7 +193,7 @@ const { data, loading, error, load } = useAuthorizedQuery(
                   row.document_no || row.reference_code || "尚未编号的草稿"
                 }}</RouterLink
               >
-              <span class="doc-kind-badge">{{
+              <span class="doc-kind-badge" :class="'doc-kind-' + row.kind">{{
                 flowKinds[row.kind] || "转交"
               }}</span>
             </div>

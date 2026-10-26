@@ -139,7 +139,7 @@ async function remove() {
       </div>
       <div class="section-header-row">
         <div>
-          <p class="eyebrow">HANDOVER VOUCHER</p>
+          <p class="eyebrow">交接单据</p>
           <h1 class="refresh">单据详情</h1>
         </div>
         <ActionGroup v-if="data" class="links">
@@ -257,7 +257,7 @@ async function remove() {
       <section class="sheet-parties print-parties" aria-label="交接双方信息">
         <div class="sheet-flow-cards">
           <div class="sheet-party-card">
-            <span class="sheet-party-role">交出方</span>
+            <span class="sheet-party-role">交接双方</span>
             <p class="sheet-party-main">
               交出方：{{
                 parties?.from_label ||

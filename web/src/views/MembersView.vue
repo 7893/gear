@@ -216,7 +216,9 @@ async function review(member: Member, status: MemberStatus) {
         <p v-if="member.contact_phone" class="muted">
           联系手机号：{{ member.contact_phone }}（未验证）
         </p>
-        <span class="status-badge">{{ statusLabels[member.status] }}</span>
+        <span class="status-badge" :class="'status-' + member.status">{{
+          statusLabels[member.status]
+        }}</span>
       </div>
       <FormField
         label="角色"
