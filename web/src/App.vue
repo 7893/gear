@@ -198,7 +198,11 @@ async function logout() {
         aria-label="主导航"
       >
         <div class="nav-links-cluster">
-          <template v-for="group in primaryNavigation" :key="group.label">
+          <div
+            v-for="group in primaryNavigation"
+            :key="group.label"
+            class="nav-group"
+          >
             <span class="navigation-caption">{{ group.label }}</span>
             <RouterLink
               v-for="item in group.items"
@@ -211,7 +215,7 @@ async function logout() {
                 item.label
               }}</span></RouterLink
             >
-          </template>
+          </div>
         </div>
 
         <div class="nav-user-cluster">
@@ -241,7 +245,12 @@ async function logout() {
               }}</span>
             </span>
           </div>
-          <button class="quiet sign-out-compact" type="button" @click="logout">
+          <button
+            class="quiet sign-out-compact"
+            type="button"
+            title="退出登录"
+            @click="logout"
+          >
             <AppIcon name="logout" /><span class="nav-label">退出登录</span>
           </button>
         </div>
