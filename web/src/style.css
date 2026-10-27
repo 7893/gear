@@ -1,37 +1,38 @@
 /* ==========================================================================
    设备簿 · Design System
-   Quiet dark workspace: one canvas, hairline structure, restrained accent.
+   Supabase Studio light workspace: crisp canvas, hairline structure, emerald accent.
    ========================================================================== */
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
-  --bg: #0e0e10;
-  --surface: #141417;
-  --surface-2: #1a1a1e;
-  --surface-3: #222227;
-  --border: #25252b;
-  --border-strong: #33333a;
+  --bg: #f8f9fa;
+  --surface: #ffffff;
+  --surface-2: #f3f4f6;
+  --surface-3: #e5e7eb;
+  --border: #e4e7ec;
+  --border-strong: #d1d5db;
 
-  --text: #ededef;
-  --text-2: #b6b6bd;
-  --text-3: #8b8b94;
-  --text-4: #62626b;
+  --text: #11181c;
+  --text-2: #4b5563;
+  --text-3: #6b7280;
+  --text-4: #9ca3af;
 
-  --accent: #3ecf8e;
-  --accent-strong: #34b97d;
-  --accent-ink: #052e1c;
-  --accent-soft: rgba(62, 207, 142, 0.1);
-  --accent-line: rgba(62, 207, 142, 0.32);
+  --accent: #059669;
+  --accent-strong: #047857;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(16, 185, 129, 0.1);
+  --accent-line: rgba(16, 185, 129, 0.35);
 
-  --info: #6ea8fe;
-  --info-soft: rgba(110, 168, 254, 0.1);
-  --info-line: rgba(110, 168, 254, 0.3);
-  --warning: #f2b04a;
-  --warning-soft: rgba(242, 176, 74, 0.1);
-  --warning-line: rgba(242, 176, 74, 0.3);
-  --danger: #f26b7a;
-  --danger-soft: rgba(242, 107, 122, 0.1);
-  --danger-line: rgba(242, 107, 122, 0.32);
+  --info: #0284c7;
+  --info-soft: rgba(2, 132, 199, 0.08);
+  --info-line: rgba(2, 132, 199, 0.28);
+  --warning: #b45309;
+  --warning-soft: rgba(217, 119, 6, 0.1);
+  --warning-line: rgba(217, 119, 6, 0.32);
+  --danger: #dc2626;
+  --danger-soft: rgba(220, 38, 38, 0.08);
+  --danger-line: rgba(220, 38, 38, 0.28);
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
 
   --radius-sm: 5px;
   --radius: 7px;
@@ -75,7 +76,7 @@ body {
 }
 
 ::selection {
-  background: rgba(62, 207, 142, 0.28);
+  background: rgba(16, 185, 129, 0.2);
 }
 
 /* Icons: always text-sized. */
@@ -160,8 +161,8 @@ a:hover {
   gap: 24px;
   min-height: var(--header-h);
   padding: 0 24px;
-  background: rgba(14, 14, 16, 0.86);
-  backdrop-filter: saturate(160%) blur(14px);
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: saturate(180%) blur(12px);
   border-bottom: 1px solid var(--border);
 }
 
@@ -195,8 +196,9 @@ a:hover {
   width: 26px;
   height: 26px;
   border-radius: 7px;
-  background: var(--accent);
+  background: #10b981;
   color: var(--accent-ink);
+  box-shadow: 0 1px 2px rgba(16, 185, 129, 0.24);
 }
 
 .brand-mark .app-icon {
@@ -207,8 +209,9 @@ a:hover {
 
 .brand-wordmark {
   padding: 1px 6px;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border);
   border-radius: 4px;
+  background: var(--surface-2);
   color: var(--text-3);
   font-family: var(--mono);
   font-size: 10.5px;
@@ -267,7 +270,8 @@ a:hover {
 
 .app-nav a.is-current {
   color: var(--text);
-  background: var(--surface-3);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--border);
 }
 
 .app-nav a.is-current .app-icon {
@@ -352,6 +356,7 @@ a:hover {
   border-color: transparent;
   background: transparent;
   color: var(--text-3);
+  box-shadow: none;
 }
 
 .sign-out-compact.quiet:hover:not(:disabled) {
@@ -435,6 +440,7 @@ details > * + * {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
+  box-shadow: var(--shadow-xs);
 }
 
 .card > section:not([class]),
@@ -453,7 +459,7 @@ details > * + * {
   border: 1px solid var(--info-line);
   border-radius: var(--radius);
   background: var(--info-soft);
-  color: #cfe0ff;
+  color: var(--info);
   font-size: 13px;
 }
 
@@ -467,7 +473,7 @@ div.notice {
 p.error {
   border-color: var(--danger-line);
   background: var(--danger-soft);
-  color: #ffc9cf;
+  color: var(--danger);
 }
 
 .field-error {
@@ -607,6 +613,7 @@ label .hint {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
+  box-shadow: var(--shadow-xs);
   overflow: hidden;
 }
 
@@ -725,6 +732,7 @@ label .hint {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
+  box-shadow: var(--shadow-xs);
   overflow: hidden;
 }
 
@@ -913,6 +921,7 @@ label .hint {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
+  box-shadow: var(--shadow-xs);
   overflow: hidden;
 }
 
@@ -1171,6 +1180,7 @@ label .hint {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
+  box-shadow: var(--shadow-xs);
 }
 
 .asset-identity > div:first-child,
@@ -1220,6 +1230,7 @@ label .hint {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
+  box-shadow: var(--shadow-xs);
   overflow: hidden;
 }
 
@@ -1270,6 +1281,7 @@ label .hint {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
+  box-shadow: var(--shadow-xs);
 }
 
 .timeline-header {
@@ -1340,6 +1352,7 @@ label .hint {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
+  box-shadow: var(--shadow-xs);
 }
 
 .member-row + .member-row {
@@ -1397,6 +1410,7 @@ legend {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
+  box-shadow: var(--shadow-xs);
 }
 
 @media (max-width: 640px) {
@@ -1512,9 +1526,10 @@ textarea {
   padding: 7px 11px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
-  background: var(--surface-2);
+  background: var(--surface);
   color: var(--text);
   font-size: 13.5px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
   transition:
     border-color 0.12s ease,
     box-shadow 0.12s ease;
@@ -1543,7 +1558,7 @@ select {
 input:hover:not(:disabled),
 select:hover:not(:disabled),
 textarea:hover:not(:disabled) {
-  border-color: #44444c;
+  border-color: #9ca3af;
 }
 
 input:not([type="checkbox"]):focus,
@@ -1551,7 +1566,7 @@ select:focus,
 textarea:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(62, 207, 142, 0.16);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.16);
 }
 
 input[aria-invalid="true"],
@@ -1563,12 +1578,13 @@ textarea[aria-invalid="true"] {
 input:disabled,
 select:disabled,
 textarea:disabled {
-  opacity: 0.55;
+  background: var(--surface-2);
+  opacity: 0.65;
   cursor: not-allowed;
 }
 
 input[type="date"] {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 input[type="file"] {
@@ -1792,7 +1808,7 @@ button,
   padding: 0 14px;
   border: 1px solid var(--accent);
   border-radius: var(--radius);
-  background: var(--accent);
+  background: #10b981;
   color: var(--accent-ink);
   font-size: 13px;
   font-weight: 600;
@@ -1802,6 +1818,7 @@ button,
   white-space: nowrap;
   cursor: pointer;
   justify-self: start;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
   transition:
     background-color 0.12s ease,
     border-color 0.12s ease,
@@ -1827,15 +1844,16 @@ button:disabled {
 button.quiet,
 .button.quiet {
   border-color: var(--border-strong);
-  background: var(--surface-2);
+  background: var(--surface);
   color: var(--text);
   font-weight: 500;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
 }
 
 button.quiet:hover:not(:disabled),
 .button.quiet:hover {
-  border-color: #46464e;
-  background: var(--surface-3);
+  border-color: #9ca3af;
+  background: var(--surface-2);
   color: var(--text);
 }
 
@@ -1843,12 +1861,13 @@ button.danger {
   border-color: var(--danger-line);
   background: var(--danger-soft);
   color: var(--danger);
+  box-shadow: none;
 }
 
 button.danger:hover:not(:disabled) {
   border-color: var(--danger);
-  background: rgba(242, 107, 122, 0.18);
-  color: #ffd0d5;
+  background: rgba(220, 38, 38, 0.14);
+  color: var(--danger);
 }
 
 .action-group,
@@ -1867,16 +1886,18 @@ button.danger:hover:not(:disabled) {
   padding: 0 12px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
-  background: var(--surface-2);
+  background: var(--surface);
   color: var(--text);
   font-size: 13px;
   font-weight: 500;
   text-decoration: none;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
 }
 
 .action-group > a:not(.button):hover,
 .links > a:not(.button):hover {
-  background: var(--surface-3);
+  border-color: #9ca3af;
+  background: var(--surface-2);
   color: var(--text);
 }
 
@@ -1950,6 +1971,7 @@ button.danger:hover:not(:disabled) {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
+  box-shadow: var(--shadow-xs);
 }
 
 .sheet-header {
@@ -2111,6 +2133,7 @@ button.danger:hover:not(:disabled) {
   gap: 4px;
   margin: 0;
   padding: 8px;
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   background: #ffffff;
 }
