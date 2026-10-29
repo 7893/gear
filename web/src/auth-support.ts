@@ -54,24 +54,32 @@ export function hasValidStoredSession(now = Date.now()): boolean {
   try {
     const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
     if (!raw) return false;
-    const activeAt = Number(window.localStorage.getItem(SESSION_ACTIVE_AT_KEY));
-    if (
-      !Number.isFinite(activeAt) ||
-      activeAt <= 0 ||
-      now - activeAt > SESSION_IDLE_TIMEOUT_MS
-    ) {
-      clearGearAuthStorage();
-      return false;
-    }
     const parsed = JSON.parse(raw) as {
       access_token?: unknown;
       refresh_token?: unknown;
+      expires_at?: unknown;
     } | null;
     if (
       !parsed ||
       typeof parsed.access_token !== "string" ||
       !parsed.access_token
     ) {
+      clearGearAuthStorage();
+      return false;
+    }
+    const activeAt = Number(window.localStorage.getItem(SESSION_ACTIVE_AT_KEY));
+    if (!Number.isFinite(activeAt) || activeAt <= 0) {
+      if (
+        typeof parsed.expires_at === "number" &&
+        parsed.expires_at * 1000 > now
+      ) {
+        touchSessionActivity(now);
+        return true;
+      }
+      clearGearAuthStorage();
+      return false;
+    }
+    if (now - activeAt > SESSION_IDLE_TIMEOUT_MS) {
       clearGearAuthStorage();
       return false;
     }
