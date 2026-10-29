@@ -270,10 +270,14 @@ async function logout() {
         <p v-if="account.error" class="notice error" role="alert">
           {{ account.error }}
         </p>
-        <p v-if="account.initializing" class="notice" role="status">
+        <p
+          v-if="account.initializing && account.restoringSession"
+          class="notice"
+          role="status"
+        >
           正在连接账号服务…
         </p>
-        <p v-else-if="!account.enabled" class="notice">
+        <p v-else-if="!account.initializing && !account.enabled" class="notice">
           账号服务尚未开放，暂不能注册或登录。
         </p>
         <RouterView v-slot="{ Component, route }">

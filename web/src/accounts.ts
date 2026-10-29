@@ -1,5 +1,10 @@
 import { computed, reactive } from "vue";
-import { clearGearAuthStorage } from "./auth-support";
+import {
+  clearGearAuthStorage,
+  hasValidStoredSession,
+  isSessionIdleExpired,
+  touchSessionActivity,
+} from "./auth-support";
 import { createClient } from "@supabase/supabase-js";
 import { configuration } from "./configuration";
 import {
@@ -38,6 +43,8 @@ export const account = reactive({
   flowsEnabled: false,
   evidenceEnabled: false,
   initializing: true,
+  restoringSession: false,
+  callbackPending: false,
   loading: false,
   signedIn: false,
   profile: null as Profile | null,
@@ -75,6 +82,7 @@ let client: ReturnType<typeof makeClient> | undefined;
 let refreshSequence = 0;
 let profileIdentity: string | undefined;
 let profileRefresh: Promise<void> | undefined;
+let lastActivityTouch = 0;
 
 function clearProfile() {
   ++refreshSequence;
@@ -82,7 +90,16 @@ function clearProfile() {
   profileIdentity = undefined;
   account.profile = null;
   account.signedIn = false;
+  account.restoringSession = false;
   account.loading = false;
+}
+
+function expireIdleSession() {
+  clearProfile();
+  clearGearAuthStorage();
+  if (client)
+    void client.auth.signOut({ scope: "local" }).catch(() => undefined);
+  account.message = "登录会话已超时，请重新登录。";
 }
 const messages: Record<string, string> = {
   evidence_unavailable: "签字件功能尚未开放。",
@@ -328,25 +345,35 @@ export function refreshProfile(): Promise<void> {
 
 async function readProfile(): Promise<void> {
   if (!client) return;
+  if (account.signedIn && isSessionIdleExpired()) {
+    expireIdleSession();
+    return;
+  }
   const sequence = ++refreshSequence;
   account.loading = true;
   // Keep a verified same-session view during revalidation. Clear on identity
   // changes or failures; every backend operation still checks current permissions.
   try {
-    const { data: session, error: sessionError } =
-      await client.auth.getSession();
+    const { data: session, error: sessionError } = await Promise.race([
+      client.auth.getSession(),
+      new Promise<never>((_, reject) =>
+        window.setTimeout(() => reject(new Error("session_timeout")), 8000),
+      ),
+    ]);
     if (sequence !== refreshSequence) return;
     if (sessionError) throw sessionError;
     account.signedIn = !!session.session;
     if (!session.session) {
       account.profile = null;
       profileIdentity = undefined;
+      account.restoringSession = false;
+      clearGearAuthStorage();
       return;
     }
     if (profileIdentity !== session.session.user.id) account.profile = null;
     const { data, error } = await client
       .rpc("get_my_membership")
-      .abortSignal(AbortSignal.timeout(15000));
+      .abortSignal(AbortSignal.timeout(10000));
     if (sequence !== refreshSequence) return;
     if (error) throw error;
     const profile = data as Profile;
@@ -369,19 +396,29 @@ async function readProfile(): Promise<void> {
           display_name: applicationName.trim(),
           contact_phone: applicationPhone,
         })
-        .abortSignal(AbortSignal.timeout(15000));
+        .abortSignal(AbortSignal.timeout(10000));
       if (sequence !== refreshSequence) return;
       if (applied.error) throw applied.error;
       profile.membership = applied.data as Membership;
     }
     profileIdentity = session.session.user.id;
     account.profile = profile;
+    account.restoringSession = false;
     account.error = "";
+    touchSessionActivity();
   } catch (error) {
     if (sequence === refreshSequence) {
+      const hadVerifiedIdentity = Boolean(profileIdentity);
       account.profile = null;
       profileIdentity = undefined;
-      account.error = safeError(error);
+      account.restoringSession = false;
+      if (!hadVerifiedIdentity) {
+        account.signedIn = false;
+        clearGearAuthStorage();
+        void client.auth.signOut({ scope: "local" }).catch(() => undefined);
+      } else {
+        account.error = safeError(error);
+      }
     }
   } finally {
     if (sequence === refreshSequence) account.loading = false;
@@ -393,6 +430,9 @@ export async function initializeAccounts(): Promise<void> {
   const callbackError =
     callback.searchParams.has("error") ||
     callback.hash.includes("access_token=");
+  const hasStoredSession = hasValidStoredSession();
+  account.callbackPending = Boolean(code || callbackError);
+  account.restoringSession = Boolean(code || hasStoredSession);
   if (code || callbackError) {
     for (const key of ["code", "error", "error_code", "error_description"])
       callback.searchParams.delete(key);
@@ -418,6 +458,7 @@ export async function initializeAccounts(): Promise<void> {
     );
     if (code) {
       const { error } = await client.auth.exchangeCodeForSession(code);
+      if (!error) touchSessionActivity();
       account.message = error
         ? "验证链接未能完成，请尝试登录或重新验证邮箱。"
         : "邮箱验证已完成。";
@@ -438,11 +479,35 @@ export async function initializeAccounts(): Promise<void> {
         void refreshProfile();
       }, 0);
     });
-    await refreshProfile();
-    window.addEventListener("focus", () => void refreshProfile());
+    if (code || hasStoredSession) {
+      await refreshProfile();
+    }
+    const recordActivity = () => {
+      if (!account.signedIn) return;
+      const now = Date.now();
+      if (isSessionIdleExpired(now)) {
+        expireIdleSession();
+        return;
+      }
+      if (now - lastActivityTouch > 30000) {
+        lastActivityTouch = now;
+        touchSessionActivity(now);
+      }
+    };
+    window.addEventListener("pointerdown", recordActivity, { passive: true });
+    window.addEventListener("keydown", recordActivity, { passive: true });
+    window.addEventListener("focus", () => {
+      if (!account.signedIn && !hasValidStoredSession()) return;
+      if (account.signedIn && isSessionIdleExpired()) {
+        expireIdleSession();
+        return;
+      }
+      void refreshProfile();
+    });
   } catch {
     account.error = "暂时无法连接服务，请稍后刷新。";
   } finally {
+    account.restoringSession = false;
     account.initializing = false;
   }
 }
@@ -452,6 +517,7 @@ export async function signIn(email: string, password: string): Promise<void> {
     password,
   });
   if (error) throw error;
+  touchSessionActivity();
   await refreshProfile();
 }
 export async function register(
@@ -487,6 +553,7 @@ export async function verifyEmail(email: string, token: string): Promise<void> {
     type: "signup",
   });
   if (error) throw error;
+  touchSessionActivity();
   await refreshProfile();
 }
 export async function resendVerification(email: string): Promise<void> {
@@ -508,6 +575,7 @@ export async function apply(
 }
 export async function signOut(): Promise<void> {
   clearProfile();
+  clearGearAuthStorage();
   const { error } = await service().auth.signOut({ scope: "local" });
   if (error) throw error;
 }

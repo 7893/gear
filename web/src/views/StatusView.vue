@@ -30,7 +30,12 @@ async function submit() {
   <section class="card narrow">
     <p class="eyebrow">设备簿</p>
     <h1>我的账号</h1>
-    <p v-if="account.initializing || (account.loading && !account.profile)">
+    <p
+      v-if="
+        (account.initializing && account.restoringSession) ||
+        (account.loading && !account.profile)
+      "
+    >
       正在核对账号状态…
     </p>
     <template v-else-if="!account.signedIn"
