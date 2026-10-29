@@ -255,11 +255,9 @@ a:hover {
 
 .brand-wordmark {
   padding: 1px 7px;
-  border: 1px solid transparent;
+  border: 1px solid var(--border);
   border-radius: 999px;
-  background:
-    linear-gradient(var(--surface), var(--surface)) padding-box,
-    var(--g1-ring-soft) border-box;
+  background: var(--surface-2);
   color: var(--text-3);
   font-family: var(--mono);
   font-size: 10px;
@@ -341,18 +339,28 @@ a:hover {
   color: var(--text-3);
 }
 
-.app-nav a:hover {
+.app-nav a:hover,
+.app-nav a:focus-visible {
   color: var(--text);
-  background: var(--surface-2);
-}
-
-.app-nav a.is-current {
-  color: var(--text);
+  border-color: transparent;
   background:
     linear-gradient(var(--surface), var(--surface)) padding-box,
     var(--g1-ring-pill) border-box;
-  font-weight: 600;
   box-shadow: 0 2px 6px rgba(66, 133, 244, 0.12);
+}
+
+.app-nav a.is-current {
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+
+.app-nav a.is-current:hover,
+.app-nav a.is-current:focus-visible {
+  color: var(--accent);
+  background:
+    linear-gradient(var(--surface), var(--surface)) padding-box,
+    var(--g1-ring-pill) border-box;
 }
 
 .navigation-caption {
@@ -394,30 +402,43 @@ a:hover {
   align-items: center;
   gap: 7px;
   height: 34px;
-  padding: 0 10px 0 4px;
+  padding: 0 6px 0 2px;
   border: 1.5px solid transparent;
   border-radius: 999px;
-  background:
-    linear-gradient(var(--surface), var(--surface)) padding-box,
-    var(--g1-ring-soft) border-box;
-  box-shadow: var(--shadow-xs);
+  background: transparent;
   min-width: 0;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .user-avatar {
   display: inline-grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   flex: none;
   border-radius: 50%;
-  border: 2px solid transparent;
+  border: 2px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 650;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.user-meta-pill:hover .user-avatar,
+.user-avatar:hover {
+  border-color: transparent;
   background:
     linear-gradient(var(--surface), var(--surface)) padding-box,
     var(--g1-ring-conic) border-box;
   color: var(--text);
-  font-size: 11px;
-  font-weight: 650;
+  box-shadow: 0 1px 4px rgba(66, 133, 244, 0.18);
 }
 
 .user-meta-text {
@@ -449,15 +470,15 @@ a:hover {
 }
 
 .sign-out-compact.quiet {
-  height: 34px;
-  min-height: 34px;
-  width: 34px;
+  height: 32px;
+  min-height: 32px;
+  width: 32px;
   padding: 0;
   border-radius: 50%;
-  border-color: var(--border);
-  background: var(--surface);
+  border-color: transparent;
+  background: transparent;
   color: var(--text-3);
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
 }
 
 .sign-out-compact.quiet:hover:not(:disabled) {
@@ -2396,12 +2417,6 @@ button.danger:hover:not(:disabled) {
 
   .app-nav a .app-icon {
     display: inline-block;
-  }
-
-  .app-nav a.is-current {
-    background:
-      linear-gradient(var(--surface), var(--surface)) padding-box,
-      var(--g1-ring-pill) border-box;
   }
 
   .sign-out-compact .nav-label {
